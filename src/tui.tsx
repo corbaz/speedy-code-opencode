@@ -678,9 +678,10 @@ export default Plugin.define({
     })
 
     const disposeFooter = context.ui.slot({
-      // A bar of its own, above the composer: the status row belongs to the host
-      // and a replace there is suppressed by any ancestor that replaces it.
-      append: "session.composer.top",
+      // The one footer placement this runtime renders: a replacement here is
+      // suppressed by the host's own claim on the prompt footer, so the row is
+      // appended to instead.
+      append: "prompt.footer.status",
       render: () => {
         const columns = context.renderer?.terminalWidth ?? 80
         const model = context.ui.model.current()
@@ -709,7 +710,12 @@ export default Plugin.define({
         // element on its own, and the footer broke into several lines.
         const chunks = shown.map((control) => coloredText(control.color)(control.text))
         if (hidden.length > 0) chunks.push(coloredText(DISABLED_COLOR)(" ⋯ "))
-        return <text content={new StyledText(chunks)} wrapMode="none" />
+        // Inside a box: a bare text at a slot root takes no room of its own.
+        return (
+          <box flexDirection="row" flexShrink={0}>
+            <text content={new StyledText(chunks)} wrapMode="none" />
+          </box>
+        )
       },
     })
 
