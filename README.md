@@ -6,40 +6,62 @@ Claude Code plugin and is discovered automatically when cloned into:
 - Windows: `%USERPROFILE%\.config\opencode\plugins\speedy-code`
 - macOS: `~/.config/opencode/plugins/speedy-code`
 
-The port is under active development. The current scaffold verifies global
-plugin discovery, server storage, TUI slots, and the boundary around composer
-draft insertion, which OpenCode 2.3.0 does not expose as a public plugin API.
+The narration, playback, dictation, polishing, history and setup engine is the
+original one, unchanged: the same PowerShell and Python scripts, run by the
+same commands, with the same output contract.
 
-## Current status
+## Commands
 
-The OpenCode package loads today, and the portable narration, playback,
-dictation, polishing, history, and setup engine has been imported. Persistent
-settings, the adaptive footer, and the settings menus are wired to OpenCode's
-native storage, slots, keymap, and dialogs.
+Everything the original footer reached by clicking is reached here by name,
+through `/speedy <word>` or the palette. Both Spanish and English words work.
 
-Available now:
+| Command | What it does |
+| --- | --- |
+| `/speedy` or `/speedy ajustes` | Settings menu: narrator, voice, status bar, reset |
+| `/speedy on` / `/speedy off` | Turns narration on or off |
+| `/speedy stop` | Stops whatever is playing and ends a dictation |
+| `/speedy pausa` / `/speedy seguir` | Pauses and resumes the sound under way |
+| `/speedy voces` | Chooses the language, and with it the voice |
+| `/speedy historial` | Plays back one of the narrations kept on disk |
+| `/speedy dictado` | Starts and closes the microphone |
+| `/speedy copiar` | Copies the last reply |
+| `/speedy pulir` | Cleans up the last reply with Groq |
+| `/speedy modelo` | Picks a variant of the selected model |
+| `/speedy sesiones` | Switches to another session |
+| `/speedy redes` | Copies the link of one of your social profiles |
 
-- A `speedy-code` status footer above the prompt, which shortens and sheds its
-  controls as the terminal narrows and shows the narration state.
-- Narration of the reply of the session on screen when the narrator is on,
-  through the imported engine, with pause and resume.
-- `/speedy on`, `/speedy off`, `/speedy stop`, `/speedy pausa`,
-  `/speedy seguir`, and `/speedy voces`, plus the `speedy-code: ajustes`,
-  `speedy-code: alternar narrador`, and `speedy-code: detener la narración`
-  palette commands.
-- Preferences that survive a restart in one durable store entry, and every new
-  narration kept under `~/.config/opencode/speedy-code/audio`.
+Palette commands mirror them: `speedy-code: ajustes`, `alternar narrador`,
+`detener la narración`, `historial de narraciones`, `copiar la respuesta`,
+`pulir la respuesta`, `variante del modelo`, `sesiones`, `redes` and `dictado`.
 
-Narration playback from the history menu, dictation, polishing, image actions,
-and the status line installer are still being ported, so those controls are not
-in the footer yet. Replies longer than the original's short-answer limit, or in
-another language, are read as written instead of being rewritten by a model
-first; that rewrite is a pending port.
+## What the port does
 
-The original footer is click-driven. OpenCode's documented TUI plugin API
-exposes keyboard commands, slots, and dialogs but no pointer surface, so the
-same controls are reached through the slash command and the palette instead of
-by clicking.
+- A `speedy-code` footer above the prompt shows the narration state, the model,
+  the language, the narrator switch, the microphone and the settings entry. It
+  shortens and sheds its controls as the terminal narrows.
+- The reply of the session on screen is read aloud when the narrator is on,
+  through the original engine, with pause and resume. Every narration is kept
+  under `~/.config/opencode/speedy-code/audio` and can be played back later.
+- Every language offered ships a voice, so choosing one is never silently mute.
+- Preferences survive a restart in one durable store entry.
+- Dictation runs the original streaming model on this machine: nothing is sent
+  anywhere. What it hears is copied to the terminal's clipboard.
+
+## Known limitations
+
+- **OpenCode 2.3.0 exposes no API to write into the prompt**, so the port cannot
+  append dictated words into the composer the way the original did. It copies
+  the transcript to the clipboard instead, and shows it in a dialog when the
+  terminal has no clipboard.
+- The original footer is click-driven. The documented TUI plugin API exposes
+  slots, keymaps and dialogs but no pointer surface, so the controls live in the
+  slash command and the palette.
+- Paste, image actions, send, clear, compact, exit and reload stay OpenCode's own
+  controls; the plugin does not duplicate what the host already offers.
+- A long reply is read as written; the original's model rewrite before narrating
+  is not ported.
+- The status-bar thresholds are stored and editable, but the bar itself is drawn
+  by the host, so the plugin does not paint it.
 
 ## Install on Windows
 
@@ -56,7 +78,7 @@ opencode
 ```
 
 The setup script installs its Python environment and model under
-`%USERPROFILE%\.config\opencode\speedy-code`. To enable prompt polishing, pass
+`%USERPROFILE%\.config\opencode\speedy-code`. To enable `/speedy pulir`, pass
 `-GroqKey <key>` once or define `GROQ_API_KEY` as a user environment variable.
 
 ## Install on macOS
@@ -73,7 +95,7 @@ opencode
 ```
 
 The setup script installs its Python environment and model under
-`~/.config/opencode/speedy-code`. To enable prompt polishing, export
+`~/.config/opencode/speedy-code`. To enable `/speedy pulir`, export
 `GROQ_API_KEY` in your shell before starting OpenCode.
 
 ## Update
@@ -87,6 +109,16 @@ bun install
 
 Run the platform setup script again only when engine dependencies change. An
 open OpenCode TUI can load updated plugin code with `/reload`.
+
+## Development
+
+```bash
+bun test
+bun run typecheck
+```
+
+The engine scripts under `engine/` come from the original speedy-code plugin and
+keep its MIT license; see `LICENSE`.
 
 This repository currently has no remote URL. Replace `<repository-url>` after
 the repository is published; publishing and pushing are separate maintainer
