@@ -1,0 +1,211 @@
+import { describe, expect, test } from "bun:test"
+
+import {
+  FOOTER_SHED,
+  MORE_WIDTH,
+  PLAY_GLYPHS,
+  cells,
+  fit,
+  footerControls,
+  footerFit,
+  footerRoom,
+  footerText,
+  modelFamily,
+} from "../src/footer"
+
+describe("cells", () => {
+  test("counts an ordinary character as one cell", () => {
+    expect(cells("abc")).toBe(3)
+    expect(cells("")).toBe(0)
+  })
+
+  test("counts an emoji as two cells", () => {
+    expect(cells("🔊")).toBe(2)
+    expect(cells("🎙️")).toBe(2)
+  })
+
+  test("counts a text-presentation selector as no cell", () => {
+    expect(cells("⏸︎")).toBe(1)
+    expect(cells("⏸️")).toBe(2)
+  })
+
+  test("counts a zero-width joiner as no cell", () => {
+    expect(cells("🗣️")).toBe(2)
+  })
+})
+
+describe("fit", () => {
+  test("pads a short label to the width", () => {
+    expect(fit("abc", 5)).toBe("abc  ")
+  })
+
+  test("cuts a long label with an ellipsis inside the width", () => {
+    expect(fit("abcdef", 4)).toBe("abc…")
+    expect(fit("abcdef", 4)).toHaveLength(4)
+  })
+})
+
+describe("footerRoom", () => {
+  test("reserves the margin when no mode label is drawn", () => {
+    expect(footerRoom(80)).toBe(76)
+  })
+
+  test("also reserves the mode label and its spacing", () => {
+    expect(footerRoom(80, 10)).toBe(63)
+  })
+})
+
+describe("footerFit", () => {
+  const groups = [
+    { name: "model", width: 20, compactWidth: 10 },
+    { name: "voice", width: 12, compactWidth: 6 },
+    { name: "settings", width: 4 },
+    { name: "narrator", width: 4 },
+  ]
+
+  test("draws every group whole when they fit", () => {
+    expect(footerFit(groups, 40)).toEqual({
+      shown: new Set(["model", "voice", "settings", "narrator"]),
+      compact: new Set(),
+    })
+  })
+
+  test("keeps rank zero, then adds by ascending rank without going over", () => {
+    expect(footerFit(groups, 39)).toEqual({
+      shown: new Set(["model", "voice"]),
+      compact: new Set(),
+    })
+  })
+
+  test("shortens the model before dropping anything", () => {
+    expect(footerFit(groups, 30)).toEqual({
+      shown: new Set(["model", "voice", "settings"]),
+      compact: new Set(["model"]),
+    })
+  })
+
+  test("sheds short forms in the documented order and keeps the model", () => {
+    expect(footerFit(groups, 8)).toEqual({
+      shown: new Set(["model"]),
+      compact: new Set(["model"]),
+    })
+  })
+
+  test("sheds the same groups in the same order regardless of input order", () => {
+    const shed = ["voice", "compact", "clear", "image", "copy", "polish"].map((name) => ({ name, width: 4 }))
+    const forward = footerFit([{ name: "model", width: 4 }, ...shed], 4)
+    const backward = footerFit([...shed].reverse().concat({ name: "model", width: 4 }), 4)
+
+    expect(forward.shown).toEqual(new Set(["model"]))
+    expect(backward.shown).toEqual(new Set(["model"]))
+  })
+
+  test("pins the shed order constant", () => {
+    expect(FOOTER_SHED).toEqual(["voice", "compact", "clear", "image", "copy", "polish"])
+  })
+
+  test("reserves the more button width", () => {
+    expect(MORE_WIDTH).toBe(4)
+    expect(footerFit([{ name: "model", width: 2 }], 1).shown).toEqual(new Set(["model"]))
+  })
+})
+
+describe("PLAY_GLYPHS", () => {
+  test("names every speech state with its glyph and color", () => {
+    expect(PLAY_GLYPHS).toEqual({
+      idle: { glyph: "⏵", color: "#51cf66" },
+      thinking: { glyph: "⧗", color: "#748ffc" },
+      playing: { glyph: "⏸︎", color: "#ffd43b" },
+      paused: { glyph: "⏵", color: "#51cf66" },
+    })
+  })
+})
+
+describe("modelFamily", () => {
+  test("takes the family of a provider model id", () => {
+    expect(modelFamily("claude-sonnet-4-5")).toBe("sonnet")
+    expect(modelFamily("anthropic/claude-opus-4")).toBe("claude")
+  })
+
+  test("keeps an id without segments", () => {
+    expect(modelFamily("local")).toBe("local")
+  })
+})
+
+describe("footerControls", () => {
+  const base = { narrator: false, speech: "idle", listening: "off" } as const
+
+  test("draws the controls in their documented order", () => {
+    const controls = footerControls({ ...base, model: "claude-sonnet-4-5", voice: "Español" })
+    expect(controls.map((control) => control.name)).toEqual([
+      "play",
+      "model",
+      "voice",
+      "narrator",
+      "mic",
+      "settings",
+    ])
+  })
+
+  test("omits the model when none is selected", () => {
+    expect(footerControls(base).map((control) => control.name)).toEqual([
+      "play",
+      "voice",
+      "narrator",
+      "mic",
+      "settings",
+    ])
+  })
+
+  test("flips the narrator glyph and color", () => {
+    const off = footerControls(base).find((control) => control.name === "narrator")
+    const on = footerControls({ ...base, narrator: true }).find((control) => control.name === "narrator")
+    expect(off?.text).toBe(" 🔊 ")
+    expect(on?.text).toBe(" 🔇 ")
+    expect(on?.color).not.toBe(off?.color)
+  })
+
+  test("follows the speech state on the play control", () => {
+    expect(footerControls({ ...base, speech: "playing" })[0]?.text).toBe(" ⏸︎ ")
+    expect(footerControls({ ...base, speech: "thinking" })[0]?.text).toBe(" ⧗ ")
+  })
+
+  test("follows the listening state on the microphone", () => {
+    expect(footerControls({ ...base, listening: "on" }).find((control) => control.name === "mic")?.text).toBe(" 🔴 ")
+  })
+
+  test("measures every control in the cells it takes", () => {
+    for (const control of footerControls({ ...base, model: "claude-sonnet-4-5", voice: "Español" })) {
+      expect(control.width).toBe(cells(control.text))
+      if (control.compactText) expect(control.compactWidth).toBe(cells(control.compactText))
+    }
+  })
+})
+
+describe("footerText", () => {
+  const controls = footerControls({
+    narrator: false,
+    speech: "idle",
+    listening: "off",
+    model: "claude-sonnet-4-5",
+    voice: "Español",
+  })
+
+  test("joins the shown controls in order", () => {
+    const text = footerText(controls, footerFit(controls, 200))
+    expect(text.startsWith(" ⏵  claude-sonnet-4-5 ▾  🗣")).toBe(true)
+  })
+
+  test("uses the short form the fit chose", () => {
+    const text = footerText(controls, {
+      shown: new Set(["play", "model"]),
+      compact: new Set(["model"]),
+    })
+    expect(text).toBe(" ⏵  sonnet ▾ ")
+  })
+
+  test("drops the controls the fit left out", () => {
+    const text = footerText(controls, { shown: new Set(["settings"]), compact: new Set() })
+    expect(text).toBe(" ⚙️ ")
+  })
+})

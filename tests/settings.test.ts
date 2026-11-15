@@ -1,0 +1,165 @@
+import { describe, expect, test } from "bun:test"
+
+import {
+  BAR_PARTS,
+  DEFAULT_LEVELS,
+  DEFAULT_ORDER,
+  DEFAULT_SETTINGS,
+  SPEEDY_STORE_KEY,
+  adjustLevel,
+  barOrderOf,
+  movePart,
+  normalizeLevels,
+  normalizeOrder,
+  resetSettings,
+  settingsFromSaved,
+  type SpeedySettings,
+} from "../src/settings"
+
+describe("settings defaults", () => {
+  test("keeps the level thresholds the original ships", () => {
+    expect(DEFAULT_LEVELS).toEqual({ contextYellow: 60, contextRed: 80, limitYellow: 75, limitRed: 90 })
+  })
+
+  test("keeps every status line part in its default priority", () => {
+    expect(DEFAULT_ORDER).toEqual(["core", "five_hour", "seven_day", "context", "time", "cost", "tokens", "folder"])
+    expect(BAR_PARTS.map(([key]) => key)).toEqual(DEFAULT_ORDER)
+  })
+
+  test("uses one durable store key", () => {
+    expect(SPEEDY_STORE_KEY).toBe("speedy-code.settings")
+  })
+
+  test("starts with the narrator off and the Spanish voice picked", () => {
+    expect(DEFAULT_SETTINGS.narrator).toBe(false)
+    expect(DEFAULT_SETTINGS.picks.active).toBe("es")
+    expect(DEFAULT_SETTINGS.picks.es).toBe("es-AR-ElenaNeural")
+    expect(DEFAULT_SETTINGS.mic).toBe("")
+    expect(DEFAULT_SETTINGS.barLevels).toEqual(DEFAULT_LEVELS)
+    expect(DEFAULT_SETTINGS.barOrder).toEqual(DEFAULT_ORDER)
+  })
+})
+
+describe("barOrderOf", () => {
+  test("returns the default order for a missing or invalid value", () => {
+    expect(barOrderOf(undefined)).toEqual(DEFAULT_ORDER)
+    expect(barOrderOf("folder")).toEqual(DEFAULT_ORDER)
+  })
+
+  test("keeps known parts once each in the saved order then appends the rest", () => {
+    expect(barOrderOf(["folder", "folder", "bogus", "core"])).toEqual([
+      "folder",
+      "core",
+      "five_hour",
+      "seven_day",
+      "context",
+      "time",
+      "cost",
+      "tokens",
+    ])
+  })
+
+  test("never drops a part", () => {
+    expect(barOrderOf([]).sort()).toEqual([...DEFAULT_ORDER].sort())
+  })
+})
+
+describe("normalizeOrder", () => {
+  test("delegates to the same repair", () => {
+    expect(normalizeOrder(["time"])).toEqual(barOrderOf(["time"]))
+  })
+})
+
+describe("normalizeLevels", () => {
+  test("keeps a complete saved value", () => {
+    const saved = { contextYellow: 50, contextRed: 70, limitYellow: 65, limitRed: 85 }
+    expect(normalizeLevels(saved)).toEqual(saved)
+  })
+
+  test("falls back per key for a missing or non numeric value", () => {
+    expect(normalizeLevels({ contextYellow: "high", contextRed: 70 })).toEqual({
+      contextYellow: 60,
+      contextRed: 70,
+      limitYellow: 75,
+      limitRed: 90,
+    })
+  })
+})
+
+describe("movePart", () => {
+  test("swaps a part with its neighbour", () => {
+    expect(movePart(DEFAULT_ORDER, "context", -1).slice(0, 5)).toEqual([
+      "core",
+      "five_hour",
+      "context",
+      "seven_day",
+      "time",
+    ])
+  })
+
+  test("does nothing at either end or for an unknown part", () => {
+    expect(movePart(DEFAULT_ORDER, "core", -1)).toEqual(DEFAULT_ORDER)
+    expect(movePart(DEFAULT_ORDER, "folder", 1)).toEqual(DEFAULT_ORDER)
+    expect(movePart(DEFAULT_ORDER, "missing" as never, 1)).toEqual(DEFAULT_ORDER)
+  })
+})
+
+describe("adjustLevel", () => {
+  test("moves a level by five within its bounds", () => {
+    expect(adjustLevel(DEFAULT_LEVELS, "contextYellow", 5).contextYellow).toBe(65)
+    expect(adjustLevel(DEFAULT_LEVELS, "contextRed", -5).contextRed).toBe(75)
+  })
+
+  test("keeps yellow five under its red", () => {
+    expect(adjustLevel(DEFAULT_LEVELS, "contextYellow", 100).contextYellow).toBe(75)
+  })
+
+  test("keeps red five over its yellow and at most one hundred", () => {
+    expect(adjustLevel(DEFAULT_LEVELS, "contextYellow", -100).contextYellow).toBe(5)
+    expect(adjustLevel({ ...DEFAULT_LEVELS, limitRed: 100 }, "limitRed", 5).limitRed).toBe(100)
+  })
+
+  test("returns a new value without mutating the input", () => {
+    const levels = { ...DEFAULT_LEVELS }
+    const next = adjustLevel(levels, "limitYellow", 5)
+    expect(next).not.toBe(levels)
+    expect(levels).toEqual(DEFAULT_LEVELS)
+  })
+})
+
+describe("settingsFromSaved", () => {
+  test("returns the defaults for a missing value", () => {
+    expect(settingsFromSaved(undefined)).toEqual(DEFAULT_SETTINGS)
+    expect(settingsFromSaved(42)).toEqual(DEFAULT_SETTINGS)
+  })
+
+  test("merges a partial value over the defaults", () => {
+    const merged = settingsFromSaved({ narrator: true, mic: "USB Mic", picks: { es: "es-AR-TomasNeural" } })
+    expect(merged.narrator).toBe(true)
+    expect(merged.mic).toBe("USB Mic")
+    expect(merged.picks.es).toBe("es-AR-TomasNeural")
+    expect(merged.picks.active).toBe("es")
+    expect(merged.barLevels).toEqual(DEFAULT_LEVELS)
+  })
+
+  test("repairs a saved status line order and levels", () => {
+    const merged = settingsFromSaved({ barOrder: ["folder"], barLevels: { contextYellow: 10 } })
+    expect(merged.barOrder).toEqual(barOrderOf(["folder"]))
+    expect(merged.barLevels.contextRed).toBe(80)
+  })
+
+  test("ignores a wrong narrator type", () => {
+    expect(settingsFromSaved({ narrator: "yes" }).narrator).toBe(false)
+  })
+})
+
+describe("resetSettings", () => {
+  test("restores the status line defaults", () => {
+    const broken: SpeedySettings = {
+      ...DEFAULT_SETTINGS,
+      barLevels: { ...DEFAULT_LEVELS, contextYellow: 10 },
+      barOrder: ["folder"],
+    }
+    expect(resetSettings(broken)).toEqual(DEFAULT_SETTINGS)
+  })
+})

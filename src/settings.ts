@@ -1,0 +1,211 @@
+/**
+ * The preferences speedy-code keeps between sessions.
+ *
+ * They live in one durable OpenCode store entry instead of the Claude Code
+ * preference API, and the shapes are the ones the original plugin wrote so a
+ * hand-edited or older value still loads.
+ */
+
+/** The status line parts, in the order the original declares them. */
+export type BarPart = "core" | "five_hour" | "seven_day" | "context" | "time" | "cost" | "tokens" | "folder"
+
+/** The four thresholds the status line colors. */
+export type LevelKey = "contextYellow" | "contextRed" | "limitYellow" | "limitRed"
+
+export type BarLevels = Record<LevelKey, number>
+
+/** The voice picked for each language, and the language tab last shown. */
+export interface Picks {
+  active: string
+  [language: string]: string
+}
+
+/** The one durable store key. */
+export const SPEEDY_STORE_KEY = "speedy-code.settings"
+
+/** The level thresholds as they start out, as the original ships them. */
+export const DEFAULT_LEVELS: BarLevels = {
+  contextYellow: 60,
+  contextRed: 80,
+  limitYellow: 75,
+  limitRed: 90,
+}
+
+/** The status line parts with the label the settings menu shows for each. */
+export const BAR_PARTS: ReadonlyArray<readonly [BarPart, string]> = [
+  ["core", "Versión, modelo y esfuerzo"],
+  ["five_hour", "Límite de 5 horas"],
+  ["seven_day", "Límite semanal"],
+  ["context", "Contexto"],
+  ["time", "Tiempo de sesión"],
+  ["cost", "Costo de sesión"],
+  ["tokens", "Tokens in, out y caché"],
+  ["folder", "Carpeta y rama"],
+]
+
+export const DEFAULT_ORDER: BarPart[] = BAR_PARTS.map(([key]) => key)
+
+/** The level that goes with each, in the other direction. */
+export const PAIR: Record<LevelKey, LevelKey> = {
+  contextYellow: "contextRed",
+  contextRed: "contextYellow",
+  limitYellow: "limitRed",
+  limitRed: "limitYellow",
+}
+
+export const LEVEL_KEYS: readonly LevelKey[] = ["contextYellow", "contextRed", "limitYellow", "limitRed"]
+
+/** The voices the original fills in on a fresh install. */
+export const DEFAULT_PICKS: Picks = { es: "es-AR-ElenaNeural", active: "es" }
+
+/** A language tab: its code, its Spanish name, its English name and its color. */
+export const LANGUAGES: ReadonlyArray<readonly [code: string, es: string, en: string, color: string]> = [
+  ["es", "Español", "Spanish", "#ff6b6b"],
+  ["en", "Inglés", "English", "#4dabf7"],
+  ["fr", "Francés", "French", "#748ffc"],
+  ["it", "Italiano", "Italian", "#f06595"],
+  ["pt", "Portugués", "Portuguese", "#51cf66"],
+  ["ru", "Ruso", "Russian", "#da77f2"],
+  ["zh", "Chino", "Chinese", "#ffa94d"],
+  ["ar", "Árabe", "Arabic", "#20c997"],
+  ["hi", "Hindi", "Hindi", "#ff922b"],
+  ["bn", "Bengalí", "Bengali", "#94d82d"],
+  ["ur", "Urdu", "Urdu", "#38d9a9"],
+]
+
+export const LANGUAGE_CODES: ReadonlySet<string> = new Set(LANGUAGES.map(([code]) => code))
+
+/** The Spanish name of a language code, or the code itself when unknown. */
+export function languageName(code: string): string {
+  return LANGUAGES.find(([one]) => one === code)?.[1] ?? code
+}
+
+/** The author's own profiles, as the original fills them in on a fresh install. */
+export const DEFAULT_SOCIALS: Record<string, string> = {
+  github: "corbaz",
+  linkedin: "julio-corbaz",
+  x: "chipy_corbaz",
+  youtube: "juliocorbaz",
+  instagram: "chipy_corbaz",
+  tiktok: "chipy.mdp",
+  facebook: "JulioCesarCorbazArgentina",
+  twitch: "che_argentino",
+  threads: "chipy_corbaz",
+  reddit: "corbazjcc",
+  gmail: "julio.corbaz",
+  discord: "chipy_corbaz",
+}
+
+/** What survives a restart. Everything else is session state. */
+export interface SpeedySettings {
+  narrator: boolean
+  picks: Picks
+  mic: string
+  socials: Record<string, string>
+  barLevels: BarLevels
+  barOrder: BarPart[]
+}
+
+export const DEFAULT_SETTINGS: SpeedySettings = {
+  narrator: false,
+  picks: { ...DEFAULT_PICKS },
+  mic: "",
+  socials: { ...DEFAULT_SOCIALS },
+  barLevels: { ...DEFAULT_LEVELS },
+  barOrder: [...DEFAULT_ORDER],
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const isBarPart = (value: unknown): value is BarPart =>
+  typeof value === "string" && (DEFAULT_ORDER as readonly string[]).includes(value)
+
+/**
+ * A priority list as saved, made whole: the parts it knows in its order, once
+ * each, then any it lacks in the default order. An old or hand-edited list
+ * never drops a part from the status line.
+ */
+export function barOrderOf(saved: unknown): BarPart[] {
+  const known = Array.isArray(saved) ? saved.filter(isBarPart) : []
+  const order = [...new Set(known)]
+  return [...order, ...DEFAULT_ORDER.filter((key) => !order.includes(key))]
+}
+
+/** Reads a saved priority list, ignoring anything unusable. */
+export function normalizeOrder(saved: unknown): BarPart[] {
+  return barOrderOf(saved)
+}
+
+/** Reads saved levels key by key, falling back to the default of each. */
+export function normalizeLevels(saved: unknown): BarLevels {
+  const source = isRecord(saved) ? saved : {}
+  const next = { ...DEFAULT_LEVELS }
+  for (const key of LEVEL_KEYS) {
+    const value = source[key]
+    if (typeof value === "number" && Number.isFinite(value)) next[key] = value
+  }
+  return next
+}
+
+/** One part a place up (-1) or down (+1) in the priority, swapping with the one there. */
+export function movePart(order: readonly BarPart[], key: BarPart, delta: -1 | 1): BarPart[] {
+  const next = [...order]
+  const at = next.indexOf(key)
+  const to = at + delta
+  if (at < 0 || to < 0 || to >= next.length) return next
+  ;[next[at], next[to]] = [next[to] as BarPart, key]
+  return next
+}
+
+/**
+ * One level up or down, within its bounds: yellow stays five under its red,
+ * red five over its yellow, and neither passes a hundred.
+ */
+export function adjustLevel(levels: BarLevels, key: LevelKey, delta: number): BarLevels {
+  const isYellow = key.endsWith("Yellow")
+  const other = levels[PAIR[key]]
+  const low = isYellow ? 5 : other + 5
+  const high = isYellow ? other - 5 : 100
+  return { ...levels, [key]: Math.min(high, Math.max(low, levels[key] + delta)) }
+}
+
+/** Reads a saved settings value, filling in whatever it lacks. */
+export function settingsFromSaved(saved: unknown): SpeedySettings {
+  if (!isRecord(saved)) return cloneSettings(DEFAULT_SETTINGS)
+
+  const picked: Picks = { ...DEFAULT_PICKS }
+  for (const [key, value] of Object.entries(isRecord(saved.picks) ? saved.picks : {})) {
+    if (typeof value === "string") picked[key] = value
+  }
+
+  const socials: Record<string, string> = { ...DEFAULT_SOCIALS }
+  for (const [key, value] of Object.entries(isRecord(saved.socials) ? saved.socials : {})) {
+    if (typeof value === "string") socials[key] = value
+  }
+
+  return {
+    narrator: typeof saved.narrator === "boolean" ? saved.narrator : DEFAULT_SETTINGS.narrator,
+    mic: typeof saved.mic === "string" ? saved.mic : DEFAULT_SETTINGS.mic,
+    picks: picked,
+    socials,
+    barLevels: normalizeLevels(saved.barLevels),
+    barOrder: barOrderOf(saved.barOrder),
+  }
+}
+
+/** A fresh copy, so a caller never mutates the shared defaults. */
+export function cloneSettings(settings: SpeedySettings): SpeedySettings {
+  return {
+    ...settings,
+    picks: { ...settings.picks },
+    socials: { ...settings.socials },
+    barLevels: { ...settings.barLevels },
+    barOrder: [...settings.barOrder],
+  }
+}
+
+/** The status line's levels and priority back to the defaults. */
+export function resetSettings(settings: SpeedySettings): SpeedySettings {
+  return { ...cloneSettings(settings), barLevels: { ...DEFAULT_LEVELS }, barOrder: [...DEFAULT_ORDER] }
+}

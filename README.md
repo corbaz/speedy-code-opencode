@@ -13,10 +13,25 @@ draft insertion, which OpenCode 2.3.0 does not expose as a public plugin API.
 ## Current status
 
 The OpenCode package loads today, and the portable narration, playback,
-dictation, polishing, history, and setup engine has been imported. The OpenCode
-controls that invoke those capabilities are still being implemented. Until that
-integration is complete, loading the plugin shows the `SPEEDY` footer marker
-but does not provide the complete Claude Code feature set.
+dictation, polishing, history, and setup engine has been imported. Persistent
+settings, the adaptive footer, and the settings menus are wired to OpenCode's
+native storage, slots, keymap, and dialogs.
+
+Available now:
+
+- A `speedy-code` status footer above the prompt, which shortens and sheds its
+  controls as the terminal narrows.
+- `/speedy on`, `/speedy off`, and `/speedy voces`, plus the
+  `speedy-code: ajustes` and `speedy-code: alternar narrador` palette commands.
+- Preferences that survive a restart in one durable store entry.
+
+Narration playback, dictation, polishing, image actions, and the status line
+installer are still being ported, so those controls are not in the footer yet.
+
+The original footer is click-driven. OpenCode's documented TUI plugin API
+exposes keyboard commands, slots, and dialogs but no pointer surface, so the
+same controls are reached through the slash command and the palette instead of
+by clicking.
 
 ## Install on Windows
 
