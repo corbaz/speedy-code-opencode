@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import {
+  MAX_TEXT,
   Narration,
   historyName,
   historySplit,
@@ -273,5 +274,153 @@ describe("Narration", () => {
 
     await narration.narrate({ text: "hola", voice: "x" })
     expect(narration.state).toBe("idle")
+  })
+
+  test("removes the control file once the narration ends", async () => {
+    const speaker = gatedSpeaker(["voice x\n", "."])
+    const removed: string[] = []
+    const narration = new Narration({
+      speak: speaker.speak,
+      controlPath: () => "control.txt",
+      savePath: () => undefined,
+      writeControl: async () => {},
+      removeControl: async (path) => {
+        removed.push(path)
+      },
+      onState: () => {},
+    })
+
+    await narration.narrate({ text: "hola", voice: "x" })
+
+    expect(removed).toEqual(["control.txt"])
+  })
+
+  test("removes the control file when the narration is stopped", async () => {
+    const speaker = gatedSpeaker(["voice x\n", "<gate>"])
+    const removed: string[] = []
+    const narration = new Narration({
+      speak: speaker.speak,
+      controlPath: () => "control.txt",
+      savePath: () => undefined,
+      writeControl: async () => {},
+      removeControl: async (path) => {
+        removed.push(path)
+      },
+      onState: () => {},
+    })
+
+    const running = narration.narrate({ text: "hola", voice: "x" })
+    await flush()
+    await narration.stop()
+
+    expect(removed).toEqual(["control.txt"])
+
+    speaker.state.release()
+    await running
+    expect(removed).toEqual(["control.txt"])
+  })
+
+  test("reports a control write failure instead of rejecting", async () => {
+    const speaker = gatedSpeaker(["voice x\n"])
+    const errors: string[] = []
+    const states: string[] = []
+    const narration = new Narration({
+      speak: speaker.speak,
+      controlPath: () => "control.txt",
+      savePath: () => undefined,
+      writeControl: async () => {
+        throw new Error("read-only data directory")
+      },
+      onState: (state) => states.push(state),
+      onError: (message) => errors.push(message),
+    })
+
+    await narration.narrate({ text: "hola", voice: "x" })
+
+    expect(errors).toEqual(["read-only data directory"])
+    expect(speaker.state.request).toBeUndefined()
+    expect(narration.state).toBe("idle")
+    expect(states).toEqual(["idle", "thinking", "idle"])
+  })
+
+  test("caps the narrated text so the engine environment stays bounded", async () => {
+    const speaker = gatedSpeaker(["voice x\n"])
+    const narration = new Narration({
+      speak: speaker.speak,
+      controlPath: () => "control.txt",
+      savePath: () => undefined,
+      writeControl: async () => {},
+      onState: () => {},
+    })
+
+    await narration.narrate({ text: "a".repeat(MAX_TEXT + 5000), voice: "x" })
+
+    expect(speaker.state.request?.text).toHaveLength(MAX_TEXT)
+  })
+})
+
+describe("Narration output", () => {
+  test("recognizes a voice line split across two chunks", async () => {
+    const speaker = gatedSpeaker(["vo", "ice es-AR-ElenaNeural\n"])
+    const states: string[] = []
+    const narration = new Narration({
+      speak: speaker.speak,
+      controlPath: () => "control.txt",
+      savePath: () => undefined,
+      writeControl: async () => {},
+      onState: (state) => states.push(state),
+    })
+
+    await narration.narrate({ text: "hola", voice: "x" })
+
+    expect(states).toContain("playing")
+  })
+
+  test("reports an error line split across two chunks", async () => {
+    const speaker = gatedSpeaker(["err", "or edge-tts failed\n"])
+    const errors: string[] = []
+    const narration = new Narration({
+      speak: speaker.speak,
+      controlPath: () => "control.txt",
+      savePath: () => undefined,
+      writeControl: async () => {},
+      onState: () => {},
+      onError: (message) => errors.push(message),
+    })
+
+    await narration.narrate({ text: "hola", voice: "x" })
+
+    expect(errors).toEqual(["edge-tts failed"])
+  })
+
+  test("starting a second narration while the first starts leaves one engine", async () => {
+    const speaker = gatedSpeaker(["voice x\n"])
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let spawns = 0
+    let controls = 0
+    const narration = new Narration({
+      speak: (request) => {
+        spawns += 1
+        return speaker.speak(request)
+      },
+      controlPath: () => `control-${++controls}.txt`,
+      savePath: () => undefined,
+      writeControl: async (_path, asked) => {
+        if (controls === 1 && asked === "play") await gate
+      },
+      onState: () => {},
+    })
+
+    const first = narration.narrate({ text: "uno", voice: "x" })
+    await flush()
+    const second = narration.narrate({ text: "dos", voice: "x" })
+    release()
+    await Promise.all([first, second])
+
+    expect(spawns).toBe(1)
+    expect(speaker.state.request?.text).toBe("dos")
   })
 })

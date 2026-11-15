@@ -1,15 +1,25 @@
-import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
 import { Plugin } from "@opencode/plugin/tui"
 
-import { DISABLED_COLOR, footerControls, footerFit, footerRoom, type SpeechState } from "./footer"
-import { Narration, historyName, plain, speakCommand, type SpeakRequest, type SpeakingProcess } from "./narration"
+import { COMMAND_HELP, routeCommand } from "./commands"
+import { createSpeaker } from "./engine"
+import {
+  DISABLED_COLOR,
+  footerControls,
+  footerFit,
+  footerRoom,
+  hiddenGroups,
+  visibleControls,
+  type SpeechState,
+} from "./footer"
+import { Narration, historyName, plain } from "./narration"
 import {
   DEFAULT_SETTINGS,
+  DEFAULT_VOICES,
   LANGUAGE_CODES,
   LEVEL_KEYS,
   LANGUAGES,
@@ -18,7 +28,9 @@ import {
   cloneSettings,
   languageName,
   resetSettings,
+  sameSettings,
   settingsFromSaved,
+  voiceFor,
   type LevelKey,
   type SpeedySettings,
 } from "./settings"
@@ -49,24 +61,6 @@ export function pythonPath(): string {
   return process.platform === "win32" ? "python" : "python3"
 }
 
-/** Runs one engine script and streams what it prints. */
-function engineProcess(argv: readonly string[], env: Record<string, string>): SpeakingProcess {
-  const child = spawn(argv[0] as string, argv.slice(1), {
-    env: { ...process.env, ...env },
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  })
-
-  return {
-    stop: () => {
-      child.kill()
-    },
-    output: (async function* () {
-      for await (const chunk of child.stdout) yield String(chunk)
-    })(),
-  }
-}
-
 export default Plugin.define({
   id: "speedy-code.tui",
   setup(context) {
@@ -77,7 +71,7 @@ export default Plugin.define({
 
     // Repair an older or hand-edited value once, without writing when it is already whole.
     const repaired = settingsFromSaved(settings)
-    if (JSON.stringify(repaired) !== JSON.stringify(settings)) {
+    if (!sameSettings(repaired, settings)) {
       void update((draft) => {
         Object.assign(draft, repaired)
       })
@@ -88,19 +82,22 @@ export default Plugin.define({
       await writeFile(path, asked, "utf8")
     }
 
+    const removeControl = async (path: string) => {
+      await rm(path, { force: true })
+    }
+
+    const speak = createSpeaker({
+      platform: process.platform,
+      root: PLUGIN_ROOT,
+      python: pythonPath(),
+    })
+
     const narration = new Narration({
-      speak: (request: SpeakRequest) => {
-        const command = speakCommand({
-          platform: process.platform,
-          root: PLUGIN_ROOT,
-          python: pythonPath(),
-          request,
-        })
-        return engineProcess(command.argv, command.env)
-      },
+      speak,
       controlPath: () => join(DATA_ROOT, "control", `control-${crypto.randomUUID()}.txt`),
       savePath: (input) => join(DATA_ROOT, "audio", historyName(input.text, new Date())),
       writeControl,
+      removeControl,
       onState: (state) => {
         setSpeech((draft) => {
           draft.state = state
@@ -115,7 +112,7 @@ export default Plugin.define({
     let pausedByOff = false
 
     const voiceName = () => languageName(settings.picks.active)
-    const voiceFor = (code: string) => settings.picks[code] ?? settings.picks[settings.picks.active] ?? ""
+    const voiceForCode = (code: string) => voiceFor(settings.picks, code)
 
     const setNarrator = async (on: boolean) => {
       await update((draft) => {
@@ -147,13 +144,15 @@ export default Plugin.define({
           title: `🗣  ${es}`,
           value: id,
           description: en,
-          footer: settings.picks[id],
+          footer: voiceForCode(id),
         })),
       })
       if (code === undefined) return
       if (!LANGUAGE_CODES.has(code)) return
       await update((draft) => {
         draft.picks.active = code
+        // Every language gets a voice, so a pick is never silently mute.
+        if (!draft.picks[code]) draft.picks[code] = DEFAULT_VOICES[code] ?? DEFAULT_VOICES.es ?? ""
       })
       context.ui.toast.show({ message: `speedy-code: ${languageName(code)}`, variant: "info" })
     }
@@ -226,18 +225,23 @@ export default Plugin.define({
     }
 
     const runCommand = async (input: string) => {
-      const argument = input.trim().toLowerCase()
-      if (argument === "" || argument === "ajustes" || argument === "settings") return openSettings()
-      if (argument === "on") return setNarrator(true)
-      if (argument === "off") return setNarrator(false)
-      if (argument === "voces" || argument === "voices") return openVoice()
-      if (argument === "stop") return narration.stop()
-      if (argument === "pausa" || argument === "pause") return narration.pause()
-      if (argument === "seguir" || argument === "resume") return narration.resume()
-      context.ui.toast.show({
-        message: "speedy-code: usa on, off, stop, pausa, seguir o voces",
-        variant: "warning",
-      })
+      const action = routeCommand(input)
+      switch (action.kind) {
+        case "settings":
+          return openSettings()
+        case "narrator":
+          return setNarrator(action.on)
+        case "voices":
+          return openVoice()
+        case "stop":
+          return narration.stop()
+        case "pause":
+          return narration.pause()
+        case "resume":
+          return narration.resume()
+        default:
+          context.ui.toast.show({ message: COMMAND_HELP, variant: "warning" })
+      }
     }
 
     context.keymap.layer(() => ({
@@ -281,7 +285,7 @@ export default Plugin.define({
       if (route.type !== "session" || route.sessionID !== event.data.sessionID) return
       const text = plain(event.data.text)
       if (!text.trim()) return
-      void narration.narrate({ text, voice: voiceFor(settings.picks.active) })
+      void narration.narrate({ text, voice: voiceForCode(settings.picks.active) })
     })
 
     const disposeFooter = context.ui.slot({
@@ -296,17 +300,14 @@ export default Plugin.define({
           voice: voiceName(),
         })
         const result = footerFit(controls, footerRoom(columns))
-        const hidden = controls.filter((control) => !result.shown.has(control.name))
+        const shown = visibleControls(controls, result)
+        const hidden = hiddenGroups(controls, result)
 
         return (
           <box flexDirection="row">
-            {controls
-              .filter((control) => result.shown.has(control.name))
-              .map((control) => (
-                <text fg={control.color}>
-                  {result.compact.has(control.name) && control.compactText ? control.compactText : control.text}
-                </text>
-              ))}
+            {shown.map((control) => (
+              <text fg={control.color}>{control.text}</text>
+            ))}
             {hidden.length > 0 ? <text fg={DISABLED_COLOR}> ⋯ </text> : null}
           </box>
         )

@@ -1,0 +1,48 @@
+import { describe, expect, test } from "bun:test"
+
+import { COMMAND_HELP, routeCommand } from "../src/commands"
+
+describe("routeCommand", () => {
+  test("opens the settings menu for an empty argument", () => {
+    expect(routeCommand("")).toEqual({ kind: "settings" })
+    expect(routeCommand("   ")).toEqual({ kind: "settings" })
+  })
+
+  test("opens the settings menu by either name", () => {
+    expect(routeCommand("ajustes")).toEqual({ kind: "settings" })
+    expect(routeCommand("settings")).toEqual({ kind: "settings" })
+  })
+
+  test("turns the narrator on and off", () => {
+    expect(routeCommand("on")).toEqual({ kind: "narrator", on: true })
+    expect(routeCommand("off")).toEqual({ kind: "narrator", on: false })
+  })
+
+  test("opens the voice menu by either name", () => {
+    expect(routeCommand("voces")).toEqual({ kind: "voices" })
+    expect(routeCommand("voices")).toEqual({ kind: "voices" })
+  })
+
+  test("stops, pauses and resumes", () => {
+    expect(routeCommand("stop")).toEqual({ kind: "stop" })
+    expect(routeCommand("pausa")).toEqual({ kind: "pause" })
+    expect(routeCommand("pause")).toEqual({ kind: "pause" })
+    expect(routeCommand("seguir")).toEqual({ kind: "resume" })
+    expect(routeCommand("resume")).toEqual({ kind: "resume" })
+  })
+
+  test("ignores case and surrounding spaces", () => {
+    expect(routeCommand("  ON  ")).toEqual({ kind: "narrator", on: true })
+    expect(routeCommand("Voces")).toEqual({ kind: "voices" })
+  })
+
+  test("reports anything else as unknown", () => {
+    expect(routeCommand("decir hola")).toEqual({ kind: "unknown" })
+  })
+
+  test("names every keyword in the help line", () => {
+    for (const word of ["on", "off", "stop", "pausa", "seguir", "voces"]) {
+      expect(COMMAND_HELP).toContain(word)
+    }
+  })
+})

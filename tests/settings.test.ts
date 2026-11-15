@@ -4,7 +4,10 @@ import {
   BAR_PARTS,
   DEFAULT_LEVELS,
   DEFAULT_ORDER,
+  DEFAULT_PICKS,
   DEFAULT_SETTINGS,
+  DEFAULT_VOICES,
+  LANGUAGES,
   SPEEDY_STORE_KEY,
   adjustLevel,
   barOrderOf,
@@ -12,7 +15,9 @@ import {
   normalizeLevels,
   normalizeOrder,
   resetSettings,
+  sameSettings,
   settingsFromSaved,
+  voiceFor,
   type SpeedySettings,
 } from "../src/settings"
 
@@ -161,5 +166,34 @@ describe("resetSettings", () => {
       barOrder: ["folder"],
     }
     expect(resetSettings(broken)).toEqual(DEFAULT_SETTINGS)
+  })
+})
+
+describe("default voices", () => {
+  test("gives every offered language a voice", () => {
+    for (const [code] of LANGUAGES) {
+      expect(DEFAULT_VOICES[code]).toBeTruthy()
+      expect(DEFAULT_PICKS[code]).toBe(DEFAULT_VOICES[code])
+    }
+  })
+
+  test("speaks a language with the voice stored for it", () => {
+    expect(voiceFor({ es: "es-AR-ElenaNeural", active: "es" }, "es")).toBe("es-AR-ElenaNeural")
+  })
+
+  test("falls back to the language shown, then to Spanish", () => {
+    expect(voiceFor({ en: "en-US-AriaNeural", active: "en" }, "fr")).toBe("en-US-AriaNeural")
+    expect(voiceFor({ active: "fr" }, "fr")).toBe(DEFAULT_VOICES.es ?? "")
+  })
+})
+
+describe("sameSettings", () => {
+  test("treats the same settings in another key order as unchanged", () => {
+    const stored = Object.fromEntries(Object.entries(DEFAULT_SETTINGS).reverse())
+    expect(sameSettings(DEFAULT_SETTINGS, stored)).toBe(true)
+  })
+
+  test("reports a real change", () => {
+    expect(sameSettings(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS, narrator: !DEFAULT_SETTINGS.narrator })).toBe(false)
   })
 })

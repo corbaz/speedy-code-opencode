@@ -1,97 +1,166 @@
-import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { describe, expect, test } from "bun:test"
 
-const python = Bun.which("python") ?? Bun.which("python3")
-const temporary: string[] = []
+import { createSpeaker, type ChildLike } from "../src/engine"
+import type { SpeakRequest } from "../src/narration"
 
-afterEach(async () => {
-  await Promise.all(temporary.splice(0).map((path) => rm(path, { recursive: true, force: true })))
-})
-
-async function runPython(
-  arguments_: string[],
-  options: { cwd?: string; env?: Record<string, string>; stdin?: string } = {},
-) {
-  if (!python) throw new Error("Python 3 is required to test the engine")
-  const child = Bun.spawn([python, ...arguments_], {
-    cwd: options.cwd,
-    env: { ...process.env, ...options.env },
-    stdin: options.stdin === undefined ? "ignore" : new Blob([options.stdin]),
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ])
-  return { exitCode, stdout, stderr }
+const request: SpeakRequest = {
+  text: "hola",
+  voice: "es-AR-ElenaNeural",
+  speed: 1.3,
+  controlPath: "C:/tmp/control.txt",
 }
 
-describe("portable narration engine", () => {
-  test("contains the complete cross-platform process layer", async () => {
-    const expected = [
-      "history.py",
-      "listen.py",
-      "play.ps1",
-      "play.py",
-      "player.py",
-      "polish.py",
-      "speak.ps1",
-      "speak.py",
-      "tts.py",
-    ]
+/** A child process the test drives by hand. */
+function fakeChild(options: { stdout?: readonly string[]; stderr?: readonly string[] } = {}) {
+  const listeners = new Map<string, Array<(value?: unknown) => void>>()
+  const kills: string[] = []
+  const stderrReads: number[] = [0]
+  let stdoutOpens = 0
 
-    for (const file of expected) {
-      expect(await Bun.file(join("engine", file)).exists(), file).toBe(true)
-    }
-  })
+  const child: ChildLike = {
+    pid: 4242,
+    get stdout() {
+      stdoutOpens += 1
+      const chunks = options.stdout ?? []
+      return (async function* () {
+        for (const chunk of chunks) yield chunk
+      })()
+    },
+    get stderr() {
+      stderrReads[0] = (stderrReads[0] ?? 0) + 1
+      const chunks = options.stderr ?? []
+      return (async function* () {
+        for (const chunk of chunks) yield chunk
+      })()
+    },
+    on(event: string, listener: (value?: unknown) => void) {
+      const list = listeners.get(event) ?? []
+      list.push(listener)
+      listeners.set(event, list)
+      return child
+    },
+    kill(signal?: string) {
+      kills.push(signal ?? "SIGTERM")
+      return true
+    },
+  }
 
-  test("keeps speech rate and sentence chunking behavior", async () => {
-    const result = await runPython(
-      [
-        "-c",
-        "import json; from speak import rate_of, parts_of; print(json.dumps([rate_of('1.3'), rate_of('0.5'), parts_of('One. Two. Three.')]))",
-      ],
-      { cwd: "engine" },
-    )
+  const emit = (event: string, value?: unknown) => {
+    for (const listener of listeners.get(event) ?? []) listener(value)
+  }
 
-    expect(result.exitCode, result.stderr).toBe(0)
-    expect(JSON.parse(result.stdout)).toEqual(["+30%", "-50%", ["One.", "Two.", "Three."]])
-  })
+  return { child, emit, kills, stderrReads, stdoutOpens: () => stdoutOpens }
+}
 
-  test("joins narration history atomically without overwriting names", async () => {
-    const root = await mkdtemp(join(tmpdir(), "speedy-code-engine-"))
-    temporary.push(root)
-    const first = join(root, "first.mp3")
-    const second = join(root, "second.mp3")
-    const destination = join(root, "narration.mp3")
-    await writeFile(first, "one")
-    await writeFile(second, "two")
+/** Lets every pending microtask and queued iteration run. */
+async function flush() {
+  for (let index = 0; index < 10; index += 1) await new Promise((resolve) => setTimeout(resolve, 0))
+}
 
-    for (let count = 0; count < 2; count++) {
-      const result = await runPython(["engine/history.py", destination, first, second], {
-        env: { SPEEDY_NARRATION: "Narrated text" },
-      })
-      expect(result.exitCode, result.stderr).toBe(0)
-    }
+/** Everything the speaker reports, joined. */
+async function collected(process: { output: AsyncIterable<string> }) {
+  const chunks: string[] = []
+  for await (const chunk of process.output) chunks.push(chunk)
+  return chunks.join("")
+}
 
-    expect(await readFile(destination, "utf8")).toBe("onetwo")
-    expect(await readFile(join(root, "narration.txt"), "utf8")).toBe("Narrated text")
-    expect(await readFile(join(root, "narration-2.mp3"), "utf8")).toBe("onetwo")
-  })
-
-  test("reports a missing Groq key without making a request", async () => {
-    const result = await runPython(["engine/polish.py"], {
-      env: { GROQ_API_KEY: "" },
-      stdin: JSON.stringify({ model: "test", system: "test", text: "test" }),
+describe("createSpeaker", () => {
+  test("runs the engine command the request names", () => {
+    const fake = fakeChild()
+    const argvSeen: string[][] = []
+    const speaker = createSpeaker({
+      platform: "darwin",
+      root: "/plugin",
+      python: "/venv/bin/python",
+      spawn: (argv) => {
+        argvSeen.push([...argv])
+        return fake.child
+      },
     })
 
-    expect(result.exitCode, result.stderr).toBe(0)
-    expect(JSON.parse(result.stdout)).toEqual({
-      error: "falta la variable de sistema GROQ_API_KEY",
+    const running = speaker(request)
+    expect(argvSeen).toEqual([["/venv/bin/python", "/plugin/engine/speak.py"]])
+    expect(running).toBeDefined()
+  })
+
+  test("streams what the engine prints", async () => {
+    const fake = fakeChild({ stdout: ["voice es-AR-ElenaNeural\n", "..\n"] })
+    const speaker = createSpeaker({ platform: "darwin", root: "/plugin", python: "/p", spawn: () => fake.child })
+
+    expect(await collected(speaker(request))).toBe("voice es-AR-ElenaNeural\n..\n")
+  })
+
+  test("turns a spawn failure into an engine error line instead of throwing", async () => {
+    const fake = fakeChild()
+    const speaker = createSpeaker({ platform: "darwin", root: "/plugin", python: "/p", spawn: () => fake.child })
+
+    const running = speaker(request)
+    fake.emit("error", new Error("spawn python ENOENT"))
+
+    const text = await collected(running)
+    expect(text).toContain("error spawn python ENOENT")
+  })
+
+  test("ends the output when the engine fails before printing anything", async () => {
+    const fake = fakeChild()
+    const speaker = createSpeaker({ platform: "win32", root: "C:/plugin", python: "python", spawn: () => fake.child })
+
+    const running = speaker(request)
+    fake.emit("error", new Error("powershell not found"))
+
+    const text = await collected(running)
+    expect(text.startsWith("error ")).toBe(true)
+  })
+
+  test("drains the engine's error output so a full pipe cannot stall it", async () => {
+    const fake = fakeChild({ stdout: ["voice x\n"], stderr: ["warning one\n", "warning two\n"] })
+    const speaker = createSpeaker({ platform: "darwin", root: "/plugin", python: "/p", spawn: () => fake.child })
+
+    const text = await collected(speaker(request))
+    await flush()
+
+    expect(fake.stderrReads[0]).toBeGreaterThan(0)
+    expect(text).toBe("voice x\n")
+    expect(text).not.toContain("warning")
+  })
+
+  test("stops the engine when asked", () => {
+    const fake = fakeChild()
+    const speaker = createSpeaker({ platform: "darwin", root: "/plugin", python: "/p", spawn: () => fake.child })
+
+    speaker(request).stop()
+
+    expect(fake.kills).toEqual(["SIGTERM"])
+  })
+
+  test("stops the whole process tree on Windows", () => {
+    const fake = fakeChild()
+    const trees: number[] = []
+    const speaker = createSpeaker({
+      platform: "win32",
+      root: "C:/plugin",
+      python: "python",
+      spawn: () => fake.child,
+      killTree: (pid) => trees.push(pid),
     })
+
+    speaker(request).stop()
+
+    expect(trees).toEqual([4242])
+    expect(fake.kills).toEqual([])
+  })
+
+  test("does not throw when the engine cannot be reached at all", async () => {
+    const speaker = createSpeaker({
+      platform: "darwin",
+      root: "/plugin",
+      python: "/p",
+      spawn: () => {
+        throw new Error("spawn failed synchronously")
+      },
+    })
+
+    const text = await collected(speaker(request))
+    expect(text).toContain("error spawn failed synchronously")
   })
 })

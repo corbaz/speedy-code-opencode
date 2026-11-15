@@ -28,6 +28,7 @@ export interface FooterFit {
  * control always stay; the networks go first.
  */
 export const FOOTER_RANKS: Readonly<Record<string, number>> = {
+  play: 0,
   copy: 0,
   paste: 0,
   image: 0,
@@ -202,10 +203,22 @@ export function footerControls(input: FooterInput): FooterControl[] {
 
 /** The footer as one string, in control order, with the short forms the fit chose. */
 export function footerText(controls: readonly FooterControl[], result: FooterFit): string {
+  return visibleControls(controls, result)
+    .map((control) => control.text)
+    .join("")
+}
+
+/**
+ * The controls the fit kept, in order, each carrying the text it is drawn with:
+ * its short form when the fit chose it. The renderer uses this instead of
+ * repeating the filter and compact logic, so what is drawn is what is tested.
+ */
+export function visibleControls(controls: readonly FooterControl[], result: FooterFit): FooterControl[] {
   return controls
     .filter((control) => result.shown.has(control.name))
     .map((control) =>
-      result.compact.has(control.name) && control.compactText !== undefined ? control.compactText : control.text,
+      result.compact.has(control.name) && control.compactText !== undefined
+        ? { ...control, text: control.compactText }
+        : control,
     )
-    .join("")
 }

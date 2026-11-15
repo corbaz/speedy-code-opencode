@@ -11,6 +11,7 @@ import {
   footerRoom,
   footerText,
   modelFamily,
+  visibleControls,
 } from "../src/footer"
 
 describe("cells", () => {
@@ -207,5 +208,42 @@ describe("footerText", () => {
   test("drops the controls the fit left out", () => {
     const text = footerText(controls, { shown: new Set(["settings"]), compact: new Set() })
     expect(text).toBe(" ⚙️ ")
+  })
+})
+
+describe("visibleControls", () => {
+  const input = {
+    narrator: true,
+    speech: "idle" as const,
+    listening: "off" as const,
+    model: "claude-sonnet-4-5",
+    voice: "Español",
+  }
+
+  test("keeps the controls the fit kept, in the order they are drawn", () => {
+    const controls = footerControls(input)
+    const result = footerFit(controls, 80)
+
+    expect(visibleControls(controls, result).map((control) => control.name)).toEqual(
+      controls.map((control) => control.name),
+    )
+  })
+
+  test("draws the short form of a control the fit compacted", () => {
+    const controls = footerControls(input)
+    const result = footerFit(controls, 40)
+    const shown = visibleControls(controls, result)
+    const model = shown.find((control) => control.name === "model")
+
+    expect(result.compact.has("model")).toBe(true)
+    expect(model?.text).toBe(controls.find((control) => control.name === "model")?.compactText)
+  })
+
+  test("keeps the play control when the width sheds the others", () => {
+    const controls = footerControls(input)
+    const result = footerFit(controls, 30)
+
+    expect(result.shown.has("play")).toBe(true)
+    expect(result.shown.size).toBeLessThan(controls.length)
   })
 })

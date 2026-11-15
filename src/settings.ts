@@ -55,8 +55,28 @@ export const PAIR: Record<LevelKey, LevelKey> = {
 
 export const LEVEL_KEYS: readonly LevelKey[] = ["contextYellow", "contextRed", "limitYellow", "limitRed"]
 
-/** The voices the original fills in on a fresh install. */
-export const DEFAULT_PICKS: Picks = { es: "es-AR-ElenaNeural", active: "es" }
+/** The voice a fresh install speaks each language with: a Microsoft Edge neural voice. */
+export const DEFAULT_VOICES: Readonly<Record<string, string>> = {
+  es: "es-AR-ElenaNeural",
+  en: "en-US-AriaNeural",
+  fr: "fr-FR-DeniseNeural",
+  it: "it-IT-ElsaNeural",
+  pt: "pt-BR-FranciscaNeural",
+  ru: "ru-RU-SvetlanaNeural",
+  zh: "zh-CN-XiaoxiaoNeural",
+  ar: "ar-EG-SalmaNeural",
+  hi: "hi-IN-SwaraNeural",
+  bn: "bn-BD-NabanitaNeural",
+  ur: "ur-PK-UzmaNeural",
+}
+
+/** The voices the original fills in on a fresh install: one per language, then the tab shown. */
+export const DEFAULT_PICKS: Picks = { ...DEFAULT_VOICES, active: "es" }
+
+/** The voice to speak `code` with, falling back to the language shown, then to Spanish. */
+export function voiceFor(picks: Picks, code: string): string {
+  return picks[code] || picks[picks.active] || DEFAULT_VOICES.es || ""
+}
 
 /** A language tab: its code, its Spanish name, its English name and its color. */
 export const LANGUAGES: ReadonlyArray<readonly [code: string, es: string, en: string, color: string]> = [
@@ -208,4 +228,22 @@ export function cloneSettings(settings: SpeedySettings): SpeedySettings {
 /** The status line's levels and priority back to the defaults. */
 export function resetSettings(settings: SpeedySettings): SpeedySettings {
   return { ...cloneSettings(settings), barLevels: { ...DEFAULT_LEVELS }, barOrder: [...DEFAULT_ORDER] }
+}
+
+/** One value as a string whose objects compare by key and not by insertion order. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`
+  if (typeof value === "object" && value !== null) {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
+      .join(",")}}`
+  }
+  return JSON.stringify(value)
+}
+
+/** Whether a stored value already says exactly what the repaired settings say. */
+export function sameSettings(settings: SpeedySettings, saved: unknown): boolean {
+  return canonical(settings) === canonical(saved)
 }
