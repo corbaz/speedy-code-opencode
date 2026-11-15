@@ -13,6 +13,7 @@
 import { spawn as nodeSpawn } from "node:child_process"
 
 import { playCommand, type Play, type PlayRequest } from "./history"
+import { listenCommand, type Listen, type ListenRequest } from "./dictation"
 import { speakCommand, type Speak, type SpeakRequest, type SpeakingProcess } from "./narration"
 
 /** What this module needs of a child process. */
@@ -189,6 +190,20 @@ export function createPlayer(options: SpeakerOptions): Play {
         python: options.python,
         clip: request.clip,
         control: request.controlPath,
+      }),
+    )
+}
+
+/** Listens through the engine, so a missing interpreter is one `error` line. */
+export function createListener(options: SpeakerOptions): Listen {
+  return (request: ListenRequest): SpeakingProcess =>
+    runProcess(
+      options,
+      listenCommand({
+        platform: options.platform,
+        root: options.root,
+        python: options.python,
+        request,
       }),
     )
 }

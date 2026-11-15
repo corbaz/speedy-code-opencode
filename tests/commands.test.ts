@@ -28,6 +28,11 @@ describe("routeCommand", () => {
     expect(routeCommand("history")).toEqual({ kind: "history" })
   })
 
+  test("starts or closes the dictation by either name", () => {
+    expect(routeCommand("dictado")).toEqual({ kind: "dictation" })
+    expect(routeCommand("dictation")).toEqual({ kind: "dictation" })
+  })
+
   test("stops, pauses and resumes", () => {
     expect(routeCommand("stop")).toEqual({ kind: "stop" })
     expect(routeCommand("pausa")).toEqual({ kind: "pause" })
@@ -46,7 +51,7 @@ describe("routeCommand", () => {
   })
 
   test("names every keyword in the help line", () => {
-    for (const word of ["on", "off", "stop", "pausa", "seguir", "voces"]) {
+    for (const word of ["on", "off", "stop", "pausa", "seguir", "voces", "historial", "dictado"]) {
       expect(COMMAND_HELP).toContain(word)
     }
   })

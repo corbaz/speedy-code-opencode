@@ -6,7 +6,8 @@ import { dirname, join, resolve } from "node:path"
 import { Plugin } from "@opencode/plugin/tui"
 
 import { COMMAND_HELP, routeCommand } from "./commands"
-import { createPlayer, createSpeaker } from "./engine"
+import { Dictation } from "./dictation"
+import { createListener, createPlayer, createSpeaker } from "./engine"
 import {
   DISABLED_COLOR,
   footerControls,
@@ -69,6 +70,11 @@ export default Plugin.define({
     const [speech, setSpeech] = context.storage.memory<{ state: SpeechState }>("speedy-code.speech", {
       initial: { state: "idle" },
     })
+    const [listen, setListen] = context.storage.memory<{
+      state: "off" | "loading" | "on"
+      heard: string
+      partial: string
+    }>("speedy-code.listen", { initial: { state: "off", heard: "", partial: "" } })
 
     // Repair an older or hand-edited value once, without writing when it is already whole.
     const repaired = settingsFromSaved(settings)
@@ -79,6 +85,11 @@ export default Plugin.define({
     }
 
     const writeControl = async (path: string, asked: "pause" | "play") => {
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(path, asked, "utf8")
+    }
+
+    const writeDictation = async (path: string, asked: "listen" | "stop") => {
       await mkdir(dirname(path), { recursive: true })
       await writeFile(path, asked, "utf8")
     }
@@ -130,6 +141,88 @@ export default Plugin.define({
 
     // The pause, resume and stop commands drive whichever sound is playing.
     const activeSpeech = () => (clipPlayer.state === "idle" ? narration : clipPlayer)
+
+    // OpenCode 2.3.0 has no way to write into the prompt, so a finished dictation
+    // is copied to the terminal's clipboard and shown when that is not available.
+    let deliverOnEnd = false
+
+    const deliverDictation = async () => {
+      const text = listen.heard.trim()
+      setListen((draft) => {
+        draft.heard = ""
+        draft.partial = ""
+      })
+      if (!text) {
+        context.ui.toast.show({ message: "speedy-code: no se oyó nada", variant: "info" })
+        return
+      }
+      const copied = context.renderer?.copyToClipboardOSC52?.(text) ?? false
+      if (copied) {
+        context.ui.toast.show({ message: "speedy-code: dictado copiado al portapapeles", variant: "success" })
+        return
+      }
+      await context.ui.dialog.alert({ title: "speedy-code · dictado", message: text })
+    }
+
+    const dictation = new Dictation({
+      listen: createListener({
+        platform: process.platform,
+        root: PLUGIN_ROOT,
+        python: pythonPath(),
+      }),
+      controlPath: () => join(DATA_ROOT, "control", `listen-${crypto.randomUUID()}.txt`),
+      writeControl: writeDictation,
+      removeControl,
+      onState: (state) => {
+        setListen((draft) => {
+          draft.state = state
+        })
+        if (state === "off" && deliverOnEnd) {
+          deliverOnEnd = false
+          void deliverDictation()
+        }
+      },
+      onText: (words) => {
+        setListen((draft) => {
+          draft.heard += words
+        })
+      },
+      onPartial: (text) => {
+        setListen((draft) => {
+          draft.partial = text
+        })
+      },
+      onError: (message) => {
+        context.ui.toast.show({ message: `speedy-code: ${message}`, variant: "error" })
+      },
+    })
+
+    const toggleDictation = async () => {
+      if (listen.state === "off") {
+        // The voice would be heard by the microphone near the speakers: it pauses.
+        if (speech.state === "playing") await narration.pause()
+        deliverOnEnd = true
+        setListen((draft) => {
+          draft.heard = ""
+          draft.partial = ""
+        })
+        context.ui.toast.show({ message: "speedy-code: escuchando", variant: "info" })
+        void dictation.start(settings.picks.active ?? "es", settings.mic || undefined)
+        return
+      }
+      // The engine still writes the phrase under way before it ends.
+      await dictation.finish()
+      context.ui.toast.show({ message: "speedy-code: cerrando el dictado", variant: "info" })
+    }
+
+    const stopEverything = async () => {
+      deliverOnEnd = false
+      setListen((draft) => {
+        draft.heard = ""
+        draft.partial = ""
+      })
+      await Promise.all([activeSpeech().stop(), dictation.stop()])
+    }
 
     // Switching the narrator off while it speaks pauses it, so switching it on goes on from there.
     let pausedByOff = false
@@ -282,8 +375,10 @@ export default Plugin.define({
           return openVoice()
         case "history":
           return openHistory()
+        case "dictation":
+          return toggleDictation()
         case "stop":
-          return activeSpeech().stop()
+          return stopEverything()
         case "pause":
           return activeSpeech().pause()
         case "resume":
@@ -298,7 +393,7 @@ export default Plugin.define({
         {
           id: "speedy",
           title: "speedy-code",
-          description: "Narración y voz: on, off, stop, pausa, seguir, voces",
+          description: "Narración y voz: on, off, stop, pausa, seguir, voces, historial, dictado",
           group: "speedy-code",
           slash: { name: "speedy", arguments: true },
           run: (input) => runCommand(input ?? ""),
@@ -318,11 +413,19 @@ export default Plugin.define({
           run: () => toggleNarrator(),
         },
         {
+          id: "speedy.dictation",
+          title: "speedy-code: dictado",
+          description: "Escuchar el micrófono y copiar lo dicho",
+          group: "speedy-code",
+          palette: true,
+          run: () => toggleDictation(),
+        },
+        {
           id: "speedy.stop",
           title: "speedy-code: detener la narración",
           group: "speedy-code",
           palette: true,
-          run: () => activeSpeech().stop(),
+          run: () => stopEverything(),
         },
       ],
     }))
@@ -348,7 +451,7 @@ export default Plugin.define({
         const controls = footerControls({
           narrator: settings.narrator,
           speech: speech.state,
-          listening: "off",
+          listening: listen.state,
           model: context.ui.model.current()?.modelID,
           voice: voiceName(),
         })
@@ -370,6 +473,7 @@ export default Plugin.define({
     return () => {
       disposeNarration()
       disposeFooter()
+      void dictation.stop()
       return narration.stop()
     }
   },

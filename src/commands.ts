@@ -12,13 +12,14 @@ export type CommandAction =
   | { readonly kind: "narrator"; readonly on: boolean }
   | { readonly kind: "voices" }
   | { readonly kind: "history" }
+  | { readonly kind: "dictation" }
   | { readonly kind: "stop" }
   | { readonly kind: "pause" }
   | { readonly kind: "resume" }
   | { readonly kind: "unknown" }
 
 /** Shown when the argument names nothing. */
-export const COMMAND_HELP = "speedy-code: usa on, off, stop, pausa, seguir, voces o historial"
+export const COMMAND_HELP = "speedy-code: usa on, off, stop, pausa, seguir, voces, historial o dictado"
 
 /** Routes one `/speedy` argument, ignoring case and surrounding spaces. */
 export function routeCommand(input: string): CommandAction {
@@ -37,6 +38,9 @@ export function routeCommand(input: string): CommandAction {
     case "historial":
     case "history":
       return { kind: "history" }
+    case "dictado":
+    case "dictation":
+      return { kind: "dictation" }
     case "stop":
       return { kind: "stop" }
     case "pausa":
