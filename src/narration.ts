@@ -15,6 +15,9 @@
 import { posix, win32 } from "node:path"
 
 import type { SpeechState } from "./footer"
+import { SpeechSession, type SpeakingProcess } from "./speech"
+
+export type { SpeakingProcess } from "./speech"
 
 /** The speed the original narrates at: 1.3×, said as `+30%` by the engine. */
 export const SPEED = 1.3
@@ -39,11 +42,6 @@ export interface SpeakRequest {
 }
 
 /** The engine under way: its output and the way to end it. */
-export interface SpeakingProcess {
-  readonly output: AsyncIterable<string>
-  stop(): void
-}
-
 export type Speak = (request: SpeakRequest) => SpeakingProcess
 
 /**
@@ -152,114 +150,47 @@ export interface NarrationOptions {
  */
 export class Narration {
   readonly #options: NarrationOptions
-  #state: SpeechState = "idle"
-  #process: SpeakingProcess | undefined
-  #control: string | undefined
-  /** Identifies the narration under way, so a stop mid-start is never overwritten by it. */
-  #token: object | undefined
+  readonly #session: SpeechSession
 
   constructor(options: NarrationOptions) {
     this.#options = options
+    this.#session = new SpeechSession(options)
   }
 
   get state(): SpeechState {
-    return this.#state
-  }
-
-  #set(state: SpeechState): void {
-    this.#state = state
-    this.#options.onState(state)
-  }
-
-  async #removeControl(path: string): Promise<void> {
-    if (!this.#options.removeControl) return
-    try {
-      await this.#options.removeControl(path)
-    } catch {
-      // The file is already gone, or the directory is unwritable: nothing to do.
-    }
+    return this.#session.state
   }
 
   async narrate(input: { readonly text: string; readonly voice: string }): Promise<void> {
-    await this.stop()
     const text = input.text.trim().slice(0, MAX_TEXT)
-    if (!text || !input.voice) return
-
-    const control = this.#options.controlPath()
-    const token = {}
-    this.#token = token
-    this.#control = control
-    this.#set("thinking")
-
-    let process: SpeakingProcess | undefined
-    try {
-      await this.#options.writeControl(control, "play")
-      // A stop issued while the control file was written must win over this narration.
-      if (this.#token !== token) return
-
-      process = this.#options.speak({
-        text,
-        voice: input.voice,
-        speed: SPEED,
-        controlPath: control,
-        savePath: this.#options.savePath({ text, voice: input.voice }),
-      })
-      this.#process = process
-
-      let rest = ""
-      for await (const chunk of process.output) {
-        rest += chunk
-        const lines = rest.split(/\r?\n/)
-        rest = lines.pop() ?? ""
-        for (const line of lines) this.#line(line)
-      }
-      if (rest) this.#line(rest)
-    } catch (error) {
-      this.#options.onError?.(error instanceof Error ? error.message : String(error))
-    } finally {
-      if (this.#token === token) {
-        this.#token = undefined
-        this.#process = undefined
-        this.#control = undefined
-        await this.#removeControl(control)
-        this.#set("idle")
-      }
+    if (!text || !input.voice) {
+      await this.#session.stop()
+      return
     }
+
+    await this.#session.run({
+      initial: "thinking",
+      flipOnVoice: true,
+      start: (control) =>
+        this.#options.speak({
+          text,
+          voice: input.voice,
+          speed: SPEED,
+          controlPath: control,
+          savePath: this.#options.savePath({ text, voice: input.voice }),
+        }),
+    })
   }
 
-  /** One complete line the engine printed. */
-  #line(line: string): void {
-    if (line.startsWith("voice ") && this.#state === "thinking") this.#set("playing")
-    if (line.startsWith("error ")) this.#options.onError?.(line.slice("error ".length))
+  pause(): Promise<void> {
+    return this.#session.pause()
   }
 
-  async pause(): Promise<void> {
-    if (!this.#control) return
-    try {
-      await this.#options.writeControl(this.#control, "pause")
-      if (this.#control) this.#set("paused")
-    } catch (error) {
-      this.#options.onError?.(error instanceof Error ? error.message : String(error))
-    }
+  resume(): Promise<void> {
+    return this.#session.resume()
   }
 
-  async resume(): Promise<void> {
-    if (!this.#control) return
-    try {
-      await this.#options.writeControl(this.#control, "play")
-      if (this.#control) this.#set("playing")
-    } catch (error) {
-      this.#options.onError?.(error instanceof Error ? error.message : String(error))
-    }
-  }
-
-  async stop(): Promise<void> {
-    const control = this.#control
-    this.#process?.stop()
-    this.#token = undefined
-    this.#process = undefined
-    this.#control = undefined
-    if (control) await this.#removeControl(control)
-    this.#set("idle")
+  stop(): Promise<void> {
+    return this.#session.stop()
   }
 }

@@ -12,6 +12,7 @@
 
 import { spawn as nodeSpawn } from "node:child_process"
 
+import { playCommand, type Play, type PlayRequest } from "./history"
 import { speakCommand, type Speak, type SpeakRequest, type SpeakingProcess } from "./narration"
 
 /** What this module needs of a child process. */
@@ -100,63 +101,96 @@ function taskkill(pid: number): void {
   }
 }
 
+/** What running one engine process needs, whichever script it is. */
+export interface ProcessOptions {
+  readonly platform: NodeJS.Platform
+  /** Starts the process. Defaults to `node:child_process`. */
+  readonly spawn?: (argv: readonly string[], env: Record<string, string>) => ChildLike
+  /** Ends the process and the children it started. Defaults to `taskkill /T` on Windows. */
+  readonly killTree?: (pid: number) => void
+}
+
 /**
- * Speaks one request through the engine. Every way the process can fail while
- * starting becomes an `error ...` line in the output, which is the contract the
- * engine itself uses, so the narration machine has one failure path only.
+ * Runs one engine command. Every way the process can fail while starting
+ * becomes an `error ...` line in the output, which is the contract the engine
+ * itself uses, so the caller has one failure path only. The engine's stderr is
+ * drained, and a Windows stop reaches the child the PowerShell wrapper started.
  */
-export function createSpeaker(options: SpeakerOptions): Speak {
+export function runProcess(
+  options: ProcessOptions,
+  command: { readonly argv: readonly string[]; readonly env: Record<string, string> },
+): SpeakingProcess {
   const run = options.spawn ?? defaultSpawn
 
-  return (request: SpeakRequest): SpeakingProcess => {
-    const command = speakCommand({
-      platform: options.platform,
-      root: options.root,
-      python: options.python,
-      request,
-    })
+  const output = channel()
 
-    const output = channel()
+  let child: ChildLike
+  try {
+    child = run(command.argv, command.env)
+  } catch (error) {
+    output.push(`error ${messageOf(error)}\n`)
+    output.close()
+    return { stop: () => {}, output: output.output }
+  }
 
-    let child: ChildLike
+  void drain(child.stderr)
+
+  child.on("error", (value) => {
+    const error = value as unknown as Error | undefined
+    output.push(`error ${messageOf(error)}\n`)
+    output.close()
+  })
+
+  void (async () => {
     try {
-      child = run(command.argv, command.env)
+      for await (const chunk of child.stdout ?? []) output.push(String(chunk))
     } catch (error) {
       output.push(`error ${messageOf(error)}\n`)
+    } finally {
       output.close()
-      return { stop: () => {}, output: output.output }
     }
+  })()
 
-    void drain(child.stderr)
-
-    child.on("error", (value) => {
-      const error = value as unknown as Error | undefined
-      output.push(`error ${messageOf(error)}\n`)
-      output.close()
-    })
-
-    void (async () => {
-      try {
-        for await (const chunk of child.stdout ?? []) output.push(String(chunk))
-      } catch (error) {
-        output.push(`error ${messageOf(error)}\n`)
-      } finally {
-        output.close()
+  return {
+    stop: () => {
+      if (options.platform === "win32" && typeof child.pid === "number") {
+        const stop = options.killTree ?? taskkill
+        stop(child.pid)
+        return
       }
-    })()
-
-    return {
-      stop: () => {
-        if (options.platform === "win32" && typeof child.pid === "number") {
-          const stop = options.killTree ?? taskkill
-          stop(child.pid)
-          return
-        }
-        child.kill()
-      },
-      output: output.output,
-    }
+      child.kill()
+    },
+    output: output.output,
   }
+}
+
+/** Speaks one request through the engine. */
+export function createSpeaker(options: SpeakerOptions): Speak {
+  return (request: SpeakRequest): SpeakingProcess =>
+    runProcess(
+      options,
+      speakCommand({
+        platform: options.platform,
+        root: options.root,
+        python: options.python,
+        request,
+      }),
+    )
+}
+
+/** Plays one kept narration through the engine. */
+export function createPlayer(options: SpeakerOptions): Play {
+  return (request: PlayRequest): SpeakingProcess =>
+    runProcess(
+      options,
+      playCommand({
+        platform: options.platform,
+        root: options.root,
+        python: options.python,
+        clip: request.clip,
+        control: request.controlPath,
+      }),
+    )
 }
 
 function messageOf(error: unknown): string {

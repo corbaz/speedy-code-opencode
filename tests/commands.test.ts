@@ -23,6 +23,11 @@ describe("routeCommand", () => {
     expect(routeCommand("voices")).toEqual({ kind: "voices" })
   })
 
+  test("opens the history by either name", () => {
+    expect(routeCommand("historial")).toEqual({ kind: "history" })
+    expect(routeCommand("history")).toEqual({ kind: "history" })
+  })
+
   test("stops, pauses and resumes", () => {
     expect(routeCommand("stop")).toEqual({ kind: "stop" })
     expect(routeCommand("pausa")).toEqual({ kind: "pause" })

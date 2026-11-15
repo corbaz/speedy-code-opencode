@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path"
 import { Plugin } from "@opencode/plugin/tui"
 
 import { COMMAND_HELP, routeCommand } from "./commands"
-import { createSpeaker } from "./engine"
+import { createPlayer, createSpeaker } from "./engine"
 import {
   DISABLED_COLOR,
   footerControls,
@@ -16,6 +16,7 @@ import {
   visibleControls,
   type SpeechState,
 } from "./footer"
+import { ClipPlayer, clipParts, listClips } from "./history"
 import { Narration, historyName, plain } from "./narration"
 import {
   DEFAULT_SETTINGS,
@@ -107,6 +108,28 @@ export default Plugin.define({
         context.ui.toast.show({ message: `speedy-code: ${message}`, variant: "error" })
       },
     })
+
+    const clipPlayer = new ClipPlayer({
+      play: createPlayer({
+        platform: process.platform,
+        root: PLUGIN_ROOT,
+        python: pythonPath(),
+      }),
+      controlPath: () => join(DATA_ROOT, "control", `clip-${crypto.randomUUID()}.txt`),
+      writeControl,
+      removeControl,
+      onState: (state) => {
+        setSpeech((draft) => {
+          draft.state = state
+        })
+      },
+      onError: (message) => {
+        context.ui.toast.show({ message: `speedy-code: ${message}`, variant: "error" })
+      },
+    })
+
+    // The pause, resume and stop commands drive whichever sound is playing.
+    const activeSpeech = () => (clipPlayer.state === "idle" ? narration : clipPlayer)
 
     // Switching the narrator off while it speaks pauses it, so switching it on goes on from there.
     let pausedByOff = false
@@ -224,6 +247,30 @@ export default Plugin.define({
       if (choice === "reset") await resetBar()
     }
 
+    const openHistory = async () => {
+      const clips = await listClips(join(DATA_ROOT, "audio"))
+      if (clips.length === 0) {
+        context.ui.toast.show({ message: "speedy-code: no hay narraciones guardadas", variant: "info" })
+        return
+      }
+
+      const choice = await context.ui.dialog.select<string>({
+        title: "speedy-code · historial",
+        placeholder: "Narración",
+        options: clips.map((clip) => {
+          const parts = clipParts(clip)
+          return { title: `▶  ${parts.description}`, value: clip.path, description: parts.stamp }
+        }),
+      })
+      if (choice === undefined) return
+
+      const clip = clips.find((one) => one.path === choice)
+      if (!clip) return
+
+      await narration.stop()
+      await clipPlayer.play(clip)
+    }
+
     const runCommand = async (input: string) => {
       const action = routeCommand(input)
       switch (action.kind) {
@@ -233,12 +280,14 @@ export default Plugin.define({
           return setNarrator(action.on)
         case "voices":
           return openVoice()
+        case "history":
+          return openHistory()
         case "stop":
-          return narration.stop()
+          return activeSpeech().stop()
         case "pause":
-          return narration.pause()
+          return activeSpeech().pause()
         case "resume":
-          return narration.resume()
+          return activeSpeech().resume()
         default:
           context.ui.toast.show({ message: COMMAND_HELP, variant: "warning" })
       }
@@ -273,7 +322,7 @@ export default Plugin.define({
           title: "speedy-code: detener la narración",
           group: "speedy-code",
           palette: true,
-          run: () => narration.stop(),
+          run: () => activeSpeech().stop(),
         },
       ],
     }))
@@ -285,7 +334,11 @@ export default Plugin.define({
       if (route.type !== "session" || route.sessionID !== event.data.sessionID) return
       const text = plain(event.data.text)
       if (!text.trim()) return
-      void narration.narrate({ text, voice: voiceForCode(settings.picks.active) })
+      void (async () => {
+        // A reply being read ends a kept narration that was playing.
+        await clipPlayer.stop()
+        await narration.narrate({ text, voice: voiceForCode(settings.picks.active) })
+      })()
     })
 
     const disposeFooter = context.ui.slot({
