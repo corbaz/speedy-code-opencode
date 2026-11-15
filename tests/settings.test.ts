@@ -158,6 +158,23 @@ describe("settingsFromSaved", () => {
   })
 })
 
+describe("settingsFromSaved", () => {
+  test("an empty voice from an older save does not mute the language shown", () => {
+    const saved = { ...DEFAULT_SETTINGS, picks: { es: "es-AR-ElenaNeural", en: "", active: "en" } }
+    const repaired = settingsFromSaved(saved)
+
+    expect(repaired.picks.en).toBe(DEFAULT_VOICES.en)
+    expect(voiceFor(repaired.picks, "en")).toBe(DEFAULT_VOICES.en)
+  })
+
+  test("keeps the chosen voice and falls back to a known language", () => {
+    const repaired = settingsFromSaved({ ...DEFAULT_SETTINGS, picks: { es: "es-AR-ElenaNeural", active: "xx" } })
+
+    expect(repaired.picks.active).toBe(DEFAULT_SETTINGS.picks.active)
+    expect(voiceFor(repaired.picks, "xx")).toBe("es-AR-ElenaNeural")
+  })
+})
+
 describe("resetSettings", () => {
   test("restores the status line defaults", () => {
     const broken: SpeedySettings = {

@@ -687,10 +687,9 @@ export default Plugin.define({
     })
 
     const disposeFooter = context.ui.slot({
-      // The one footer placement this runtime renders: a replacement here is
-      // suppressed by the host's own claim on the prompt footer, so the row is
-      // appended to instead.
-      append: "prompt.footer.status",
+      // Own the whole status row, so nothing of the host's sits beside the
+      // footer. The content is boxed: a bare text at a slot root takes no room.
+      replace: "prompt.footer.status",
       render: () => {
         const columns = context.renderer?.terminalWidth ?? 80
         const model = context.ui.model.current()

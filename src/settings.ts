@@ -196,8 +196,12 @@ export function settingsFromSaved(saved: unknown): SpeedySettings {
 
   const picked: Picks = { ...DEFAULT_PICKS }
   for (const [key, value] of Object.entries(isRecord(saved.picks) ? saved.picks : {})) {
-    if (typeof value === "string") picked[key] = value
+    // An empty voice is not a choice: an older save wrote "" for the languages
+    // never picked, and that muted the language shown. The default keeps it.
+    if (typeof value !== "string" || !value.trim()) continue
+    picked[key] = value
   }
+  if (!LANGUAGE_CODES.has(picked.active)) picked.active = DEFAULT_SETTINGS.picks.active ?? "es"
 
   const socials: Record<string, string> = { ...DEFAULT_SOCIALS }
   for (const [key, value] of Object.entries(isRecord(saved.socials) ? saved.socials : {})) {
