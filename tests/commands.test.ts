@@ -33,6 +33,22 @@ describe("routeCommand", () => {
     expect(routeCommand("dictation")).toEqual({ kind: "dictation" })
   })
 
+  test("copies or polishes the reply by either name", () => {
+    expect(routeCommand("copiar")).toEqual({ kind: "copy" })
+    expect(routeCommand("copy")).toEqual({ kind: "copy" })
+    expect(routeCommand("pulir")).toEqual({ kind: "polish" })
+    expect(routeCommand("polish")).toEqual({ kind: "polish" })
+  })
+
+  test("opens the model variants, the sessions and the socials by either name", () => {
+    expect(routeCommand("modelo")).toEqual({ kind: "model" })
+    expect(routeCommand("model")).toEqual({ kind: "model" })
+    expect(routeCommand("sesiones")).toEqual({ kind: "sessions" })
+    expect(routeCommand("sessions")).toEqual({ kind: "sessions" })
+    expect(routeCommand("redes")).toEqual({ kind: "socials" })
+    expect(routeCommand("socials")).toEqual({ kind: "socials" })
+  })
+
   test("stops, pauses and resumes", () => {
     expect(routeCommand("stop")).toEqual({ kind: "stop" })
     expect(routeCommand("pausa")).toEqual({ kind: "pause" })
@@ -51,7 +67,21 @@ describe("routeCommand", () => {
   })
 
   test("names every keyword in the help line", () => {
-    for (const word of ["on", "off", "stop", "pausa", "seguir", "voces", "historial", "dictado"]) {
+    for (const word of [
+      "on",
+      "off",
+      "stop",
+      "pausa",
+      "seguir",
+      "voces",
+      "historial",
+      "dictado",
+      "copiar",
+      "pulir",
+      "modelo",
+      "sesiones",
+      "redes",
+    ]) {
       expect(COMMAND_HELP).toContain(word)
     }
   })

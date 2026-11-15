@@ -19,6 +19,7 @@ import {
 } from "./footer"
 import { ClipPlayer, clipParts, listClips } from "./history"
 import { Narration, historyName, plain } from "./narration"
+import { createPolisher } from "./polish"
 import {
   DEFAULT_SETTINGS,
   DEFAULT_VOICES,
@@ -36,6 +37,7 @@ import {
   type LevelKey,
   type SpeedySettings,
 } from "./settings"
+import { SOCIALS, socialUrl } from "./socials"
 
 /** What each status line level is called in the settings menu. */
 const LEVEL_LABELS: Record<LevelKey, string> = {
@@ -75,6 +77,11 @@ export default Plugin.define({
       heard: string
       partial: string
     }>("speedy-code.listen", { initial: { state: "off", heard: "", partial: "" } })
+    // The reply on screen, so it can be copied, polished or read again.
+    const [reply, setReply] = context.storage.memory<{ sessionID: string; text: string }>(
+      "speedy-code.reply",
+      { initial: { sessionID: "", text: "" } },
+    )
 
     // Repair an older or hand-edited value once, without writing when it is already whole.
     const repaired = settingsFromSaved(settings)
@@ -222,6 +229,140 @@ export default Plugin.define({
         draft.partial = ""
       })
       await Promise.all([activeSpeech().stop(), dictation.stop()])
+    }
+
+    // OpenCode's clipboard is the terminal's own OSC 52; without it, the text is
+    // shown so nothing is silently lost.
+    const copyText = async (text: string, label: string) => {
+      const copied = context.renderer?.copyToClipboardOSC52?.(text) ?? false
+      if (copied) {
+        context.ui.toast.show({ message: `speedy-code: ${label} copiado al portapapeles`, variant: "success" })
+        return true
+      }
+      await context.ui.dialog.alert({ title: `speedy-code · ${label}`, message: text })
+      return false
+    }
+
+    const copyReply = async () => {
+      const text = plain(reply.text).trim()
+      if (!text) {
+        context.ui.toast.show({ message: "speedy-code: no hay respuesta para copiar", variant: "info" })
+        return
+      }
+      await copyText(text, "respuesta")
+    }
+
+    const polish = createPolisher({
+      platform: process.platform,
+      root: PLUGIN_ROOT,
+      python: pythonPath(),
+    })
+
+    const polishReply = async () => {
+      const text = plain(reply.text).trim()
+      if (!text) {
+        context.ui.toast.show({ message: "speedy-code: no hay respuesta para pulir", variant: "info" })
+        return
+      }
+      context.ui.toast.show({ message: "speedy-code: puliendo la respuesta", variant: "info" })
+      const result = await polish({ text })
+      if ("error" in result) {
+        context.ui.toast.show({ message: `speedy-code: ${result.error}`, variant: "error" })
+        return
+      }
+      setReply((draft) => {
+        draft.text = result.text
+      })
+      await copyText(result.text, "respuesta pulida")
+    }
+
+    const openModel = async () => {
+      const model = context.ui.model.current()
+      if (!model) {
+        context.ui.toast.show({ message: "speedy-code: no hay modelo seleccionado", variant: "info" })
+        return
+      }
+      const variants = context.ui.model.variant.list()
+      if (variants.length === 0) {
+        context.ui.toast.show({ message: `speedy-code: ${model.modelID} no tiene variantes`, variant: "info" })
+        return
+      }
+
+      const chosen = await context.ui.dialog.select<string>({
+        title: `speedy-code · ${model.modelID}`,
+        placeholder: "Variante",
+        current: model.variant ?? "",
+        options: [
+          { title: "Por defecto", value: "", description: "La variante que el modelo trae de fábrica" },
+          ...variants.map((variant) => ({ title: variant, value: variant })),
+        ],
+      })
+      if (chosen === undefined) return
+
+      const changed = context.ui.model.variant.set(chosen || undefined)
+      context.ui.toast.show({
+        message: changed ? `speedy-code: ${chosen || "variante por defecto"}` : "speedy-code: variante no disponible",
+        variant: changed ? "success" : "error",
+      })
+    }
+
+    const openSessions = async () => {
+      const sessions = context.data.session.list()
+      if (sessions.length === 0) {
+        context.ui.toast.show({ message: "speedy-code: no hay sesiones", variant: "info" })
+        return
+      }
+
+      const choice = await context.ui.dialog.select<string>({
+        title: "speedy-code · sesiones",
+        placeholder: "Sesión",
+        options: sessions.map((session) => {
+          const info = session as { id?: string; title?: string; directory?: string }
+          const id = info.id ?? ""
+          return { title: info.title || id, value: id, description: info.directory }
+        }),
+      })
+      if (!choice) return
+
+      context.ui.router.navigate({ type: "session", sessionID: choice })
+    }
+
+    const openSocials = async () => {
+      const choice = await context.ui.dialog.select<string>({
+        title: "speedy-code · redes",
+        placeholder: "Red social",
+        options: SOCIALS.map((social) => {
+          const handle = settings.socials[social.id] ?? ""
+          return {
+            title: `${social.badge}  ${social.name}`,
+            value: social.id,
+            description: handle || social.hint || "sin usuario",
+            footer: socialUrl(social.id, handle),
+          }
+        }),
+      })
+      if (!choice) return
+
+      const social = SOCIALS.find((one) => one.id === choice)
+      if (!social) return
+
+      let handle = settings.socials[choice] ?? ""
+      if (!handle.trim()) {
+        const typed = await context.ui.dialog.prompt({
+          title: `speedy-code · ${social.name}`,
+          description: social.hint ?? "Usuario",
+          placeholder: social.hint ?? "usuario",
+        })
+        if (!typed?.trim()) return
+        handle = typed.trim()
+        await update((draft) => {
+          draft.socials[choice] = handle
+        })
+      }
+
+      const url = socialUrl(choice, handle)
+      if (!url) return
+      await copyText(url, `enlace de ${social.name}`)
     }
 
     // Switching the narrator off while it speaks pauses it, so switching it on goes on from there.
@@ -377,6 +518,16 @@ export default Plugin.define({
           return openHistory()
         case "dictation":
           return toggleDictation()
+        case "copy":
+          return copyReply()
+        case "polish":
+          return polishReply()
+        case "model":
+          return openModel()
+        case "sessions":
+          return openSessions()
+        case "socials":
+          return openSocials()
         case "stop":
           return stopEverything()
         case "pause":
@@ -421,6 +572,48 @@ export default Plugin.define({
           run: () => toggleDictation(),
         },
         {
+          id: "speedy.history",
+          title: "speedy-code: historial de narraciones",
+          group: "speedy-code",
+          palette: true,
+          run: () => openHistory(),
+        },
+        {
+          id: "speedy.copy",
+          title: "speedy-code: copiar la respuesta",
+          group: "speedy-code",
+          palette: true,
+          run: () => copyReply(),
+        },
+        {
+          id: "speedy.polish",
+          title: "speedy-code: pulir la respuesta",
+          group: "speedy-code",
+          palette: true,
+          run: () => polishReply(),
+        },
+        {
+          id: "speedy.model",
+          title: "speedy-code: variante del modelo",
+          group: "speedy-code",
+          palette: true,
+          run: () => openModel(),
+        },
+        {
+          id: "speedy.sessions",
+          title: "speedy-code: sesiones",
+          group: "speedy-code",
+          palette: true,
+          run: () => openSessions(),
+        },
+        {
+          id: "speedy.socials",
+          title: "speedy-code: redes",
+          group: "speedy-code",
+          palette: true,
+          run: () => openSocials(),
+        },
+        {
           id: "speedy.stop",
           title: "speedy-code: detener la narración",
           group: "speedy-code",
@@ -437,6 +630,10 @@ export default Plugin.define({
       if (route.type !== "session" || route.sessionID !== event.data.sessionID) return
       const text = plain(event.data.text)
       if (!text.trim()) return
+      setReply((draft) => {
+        draft.sessionID = event.data.sessionID
+        draft.text = text
+      })
       void (async () => {
         // A reply being read ends a kept narration that was playing.
         await clipPlayer.stop()

@@ -13,13 +13,19 @@ export type CommandAction =
   | { readonly kind: "voices" }
   | { readonly kind: "history" }
   | { readonly kind: "dictation" }
+  | { readonly kind: "copy" }
+  | { readonly kind: "polish" }
+  | { readonly kind: "model" }
+  | { readonly kind: "sessions" }
+  | { readonly kind: "socials" }
   | { readonly kind: "stop" }
   | { readonly kind: "pause" }
   | { readonly kind: "resume" }
   | { readonly kind: "unknown" }
 
 /** Shown when the argument names nothing. */
-export const COMMAND_HELP = "speedy-code: usa on, off, stop, pausa, seguir, voces, historial o dictado"
+export const COMMAND_HELP =
+  "speedy-code: on, off, stop, pausa, seguir, voces, historial, dictado, copiar, pulir, modelo, sesiones, redes"
 
 /** Routes one `/speedy` argument, ignoring case and surrounding spaces. */
 export function routeCommand(input: string): CommandAction {
@@ -41,6 +47,21 @@ export function routeCommand(input: string): CommandAction {
     case "dictado":
     case "dictation":
       return { kind: "dictation" }
+    case "copiar":
+    case "copy":
+      return { kind: "copy" }
+    case "pulir":
+    case "polish":
+      return { kind: "polish" }
+    case "modelo":
+    case "model":
+      return { kind: "model" }
+    case "sesiones":
+    case "sessions":
+      return { kind: "sessions" }
+    case "redes":
+    case "socials":
+      return { kind: "socials" }
     case "stop":
       return { kind: "stop" }
     case "pausa":
