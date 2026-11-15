@@ -1,0 +1,34 @@
+import { describe, expect, test } from "bun:test"
+
+const windowsInstaller = await Bun.file("setup/install.ps1").text()
+const macInstaller = await Bun.file("setup/install.sh").text()
+const listener = await Bun.file("engine/listen.py").text()
+
+describe("cross-platform setup contract", () => {
+  test("stores runtime data in the OpenCode configuration tree", () => {
+    expect(windowsInstaller).toContain(".config\\opencode\\speedy-code")
+    expect(macInstaller).toContain(".config/opencode/speedy-code")
+    expect(windowsInstaller).not.toContain(".claude\\speedy-code")
+    expect(macInstaller).not.toContain(".claude/speedy-code")
+  })
+
+  test("uses the portable engine without Claude preference hooks", () => {
+    expect(windowsInstaller).toContain("..\\engine\\listen.py")
+    expect(macInstaller).toContain("../engine/listen.py")
+    expect(windowsInstaller).not.toContain("claude_prefs.py")
+    expect(macInstaller).not.toContain("claude_prefs.py")
+  })
+
+  test("installer and listener share the OpenCode model root", () => {
+    expect(listener).toContain(
+      'os.path.join(os.path.expanduser("~"), ".config", "opencode", "speedy-code", "models", MODEL_FILE)',
+    )
+    expect(listener).not.toContain('".claude", "speedy-code", "models"')
+  })
+
+  test("retains the upstream MIT attribution", async () => {
+    const license = await Bun.file("LICENSE").text()
+    expect(license).toContain("MIT License")
+    expect(license).toContain("Copyright (c) 2026 Julio Cesar Corbaz")
+  })
+})
