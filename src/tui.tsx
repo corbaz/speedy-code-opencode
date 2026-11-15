@@ -678,8 +678,9 @@ export default Plugin.define({
     })
 
     const disposeFooter = context.ui.slot({
-      // Own the whole status row: the plugin's footer is the only thing in it.
-      replace: "prompt.footer.status",
+      // A bar of its own, above the composer: the status row belongs to the host
+      // and a replace there is suppressed by any ancestor that replaces it.
+      append: "session.composer.top",
       render: () => {
         const columns = context.renderer?.terminalWidth ?? 80
         const model = context.ui.model.current()
