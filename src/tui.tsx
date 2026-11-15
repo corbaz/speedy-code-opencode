@@ -1,13 +1,21 @@
+import { spawn } from "node:child_process"
+import { existsSync } from "node:fs"
+import { mkdir, writeFile } from "node:fs/promises"
+import { homedir } from "node:os"
+import { dirname, join, resolve } from "node:path"
+
 import { Plugin } from "@opencode/plugin/tui"
 
-import { DISABLED_COLOR, footerControls, footerFit, footerRoom } from "./footer"
+import { DISABLED_COLOR, footerControls, footerFit, footerRoom, type SpeechState } from "./footer"
+import { Narration, historyName, plain, speakCommand, type SpeakRequest, type SpeakingProcess } from "./narration"
 import {
+  DEFAULT_SETTINGS,
+  LANGUAGE_CODES,
   LEVEL_KEYS,
   LANGUAGES,
   SPEEDY_STORE_KEY,
   adjustLevel,
   cloneSettings,
-  DEFAULT_SETTINGS,
   languageName,
   resetSettings,
   settingsFromSaved,
@@ -26,10 +34,46 @@ const LEVEL_LABELS: Record<LevelKey, string> = {
 /** What the settings menu can do. */
 type SettingsChoice = "narrator" | "voice" | "bar" | "reset"
 
+/** The plugin's own folder: the engine scripts live beside `src`. */
+export const PLUGIN_ROOT = resolve(import.meta.dir, "..")
+
+/** The runtime data root the setup scripts create. */
+export const DATA_ROOT = join(homedir(), ".config", "opencode", "speedy-code")
+
+/** The Python that runs the engine: the mod's own environment, else whatever the PATH finds. */
+export function pythonPath(): string {
+  const owned = process.platform === "win32"
+    ? join(DATA_ROOT, "venv", "Scripts", "python.exe")
+    : join(DATA_ROOT, "venv", "bin", "python")
+  if (existsSync(owned)) return owned
+  return process.platform === "win32" ? "python" : "python3"
+}
+
+/** Runs one engine script and streams what it prints. */
+function engineProcess(argv: readonly string[], env: Record<string, string>): SpeakingProcess {
+  const child = spawn(argv[0] as string, argv.slice(1), {
+    env: { ...process.env, ...env },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  })
+
+  return {
+    stop: () => {
+      child.kill()
+    },
+    output: (async function* () {
+      for await (const chunk of child.stdout) yield String(chunk)
+    })(),
+  }
+}
+
 export default Plugin.define({
   id: "speedy-code.tui",
   setup(context) {
     const [settings, update] = context.storage.store(SPEEDY_STORE_KEY, { initial: DEFAULT_SETTINGS })
+    const [speech, setSpeech] = context.storage.memory<{ state: SpeechState }>("speedy-code.speech", {
+      initial: { state: "idle" },
+    })
 
     // Repair an older or hand-edited value once, without writing when it is already whole.
     const repaired = settingsFromSaved(settings)
@@ -39,12 +83,53 @@ export default Plugin.define({
       })
     }
 
+    const writeControl = async (path: string, asked: "pause" | "play") => {
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(path, asked, "utf8")
+    }
+
+    const narration = new Narration({
+      speak: (request: SpeakRequest) => {
+        const command = speakCommand({
+          platform: process.platform,
+          root: PLUGIN_ROOT,
+          python: pythonPath(),
+          request,
+        })
+        return engineProcess(command.argv, command.env)
+      },
+      controlPath: () => join(DATA_ROOT, "control", `control-${crypto.randomUUID()}.txt`),
+      savePath: (input) => join(DATA_ROOT, "audio", historyName(input.text, new Date())),
+      writeControl,
+      onState: (state) => {
+        setSpeech((draft) => {
+          draft.state = state
+        })
+      },
+      onError: (message) => {
+        context.ui.toast.show({ message: `speedy-code: ${message}`, variant: "error" })
+      },
+    })
+
+    // Switching the narrator off while it speaks pauses it, so switching it on goes on from there.
+    let pausedByOff = false
+
     const voiceName = () => languageName(settings.picks.active)
+    const voiceFor = (code: string) => settings.picks[code] ?? settings.picks[settings.picks.active] ?? ""
 
     const setNarrator = async (on: boolean) => {
       await update((draft) => {
         draft.narrator = on
       })
+      if (!on && speech.state === "playing") {
+        await narration.pause()
+        pausedByOff = true
+      } else if (!on && speech.state === "thinking") {
+        await narration.stop()
+      } else if (on && pausedByOff && speech.state === "paused") {
+        await narration.resume()
+      }
+      if (on) pausedByOff = false
       context.ui.toast.show({
         message: on ? "speedy-code: narrador encendido" : "speedy-code: narrador apagado",
         variant: "info",
@@ -53,7 +138,7 @@ export default Plugin.define({
 
     const toggleNarrator = () => setNarrator(!settings.narrator)
 
-    const openVoices = async () => {
+    const openVoice = async () => {
       const code = await context.ui.dialog.select<string>({
         title: "speedy-code · voz",
         placeholder: "Idioma",
@@ -66,6 +151,7 @@ export default Plugin.define({
         })),
       })
       if (code === undefined) return
+      if (!LANGUAGE_CODES.has(code)) return
       await update((draft) => {
         draft.picks.active = code
       })
@@ -73,7 +159,7 @@ export default Plugin.define({
     }
 
     const openBar = async () => {
-      const key = await context.ui.dialog.select<LevelKey>({
+      await context.ui.dialog.select<LevelKey>({
         title: "speedy-code · barra de estado",
         placeholder: "Umbral",
         options: LEVEL_KEYS.map((one) => ({
@@ -105,7 +191,6 @@ export default Plugin.define({
           },
         ],
       })
-      if (key === undefined) return
     }
 
     const resetBar = async () => {
@@ -135,7 +220,7 @@ export default Plugin.define({
         ],
       })
       if (choice === "narrator") await toggleNarrator()
-      if (choice === "voice") await openVoices()
+      if (choice === "voice") await openVoice()
       if (choice === "bar") await openBar()
       if (choice === "reset") await resetBar()
     }
@@ -145,8 +230,14 @@ export default Plugin.define({
       if (argument === "" || argument === "ajustes" || argument === "settings") return openSettings()
       if (argument === "on") return setNarrator(true)
       if (argument === "off") return setNarrator(false)
-      if (argument === "voces" || argument === "voices") return openVoices()
-      context.ui.toast.show({ message: "speedy-code: usa on, off o voces", variant: "warning" })
+      if (argument === "voces" || argument === "voices") return openVoice()
+      if (argument === "stop") return narration.stop()
+      if (argument === "pausa" || argument === "pause") return narration.pause()
+      if (argument === "seguir" || argument === "resume") return narration.resume()
+      context.ui.toast.show({
+        message: "speedy-code: usa on, off, stop, pausa, seguir o voces",
+        variant: "warning",
+      })
     }
 
     context.keymap.layer(() => ({
@@ -154,7 +245,7 @@ export default Plugin.define({
         {
           id: "speedy",
           title: "speedy-code",
-          description: "Encender, apagar o elegir la voz: on, off, voces",
+          description: "Narración y voz: on, off, stop, pausa, seguir, voces",
           group: "speedy-code",
           slash: { name: "speedy", arguments: true },
           run: (input) => runCommand(input ?? ""),
@@ -173,8 +264,25 @@ export default Plugin.define({
           palette: true,
           run: () => toggleNarrator(),
         },
+        {
+          id: "speedy.stop",
+          title: "speedy-code: detener la narración",
+          group: "speedy-code",
+          palette: true,
+          run: () => narration.stop(),
+        },
       ],
     }))
+
+    // A reply finishes as one text part ends; only the session on screen is read aloud.
+    const disposeNarration = context.data.on("session.text.ended", (event) => {
+      if (!settings.narrator) return
+      const route = context.ui.router.current()
+      if (route.type !== "session" || route.sessionID !== event.data.sessionID) return
+      const text = plain(event.data.text)
+      if (!text.trim()) return
+      void narration.narrate({ text, voice: voiceFor(settings.picks.active) })
+    })
 
     const disposeFooter = context.ui.slot({
       append: "prompt.footer.status",
@@ -182,7 +290,7 @@ export default Plugin.define({
         const columns = context.renderer?.terminalWidth ?? 80
         const controls = footerControls({
           narrator: settings.narrator,
-          speech: "idle",
+          speech: speech.state,
           listening: "off",
           model: context.ui.model.current()?.modelID,
           voice: voiceName(),
@@ -205,6 +313,10 @@ export default Plugin.define({
       },
     })
 
-    return disposeFooter
+    return () => {
+      disposeNarration()
+      disposeFooter()
+      return narration.stop()
+    }
   },
 })

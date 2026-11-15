@@ -20,13 +20,21 @@ native storage, slots, keymap, and dialogs.
 Available now:
 
 - A `speedy-code` status footer above the prompt, which shortens and sheds its
-  controls as the terminal narrows.
-- `/speedy on`, `/speedy off`, and `/speedy voces`, plus the
-  `speedy-code: ajustes` and `speedy-code: alternar narrador` palette commands.
-- Preferences that survive a restart in one durable store entry.
+  controls as the terminal narrows and shows the narration state.
+- Narration of the reply of the session on screen when the narrator is on,
+  through the imported engine, with pause and resume.
+- `/speedy on`, `/speedy off`, `/speedy stop`, `/speedy pausa`,
+  `/speedy seguir`, and `/speedy voces`, plus the `speedy-code: ajustes`,
+  `speedy-code: alternar narrador`, and `speedy-code: detener la narración`
+  palette commands.
+- Preferences that survive a restart in one durable store entry, and every new
+  narration kept under `~/.config/opencode/speedy-code/audio`.
 
-Narration playback, dictation, polishing, image actions, and the status line
-installer are still being ported, so those controls are not in the footer yet.
+Narration playback from the history menu, dictation, polishing, image actions,
+and the status line installer are still being ported, so those controls are not
+in the footer yet. Replies longer than the original's short-answer limit, or in
+another language, are read as written instead of being rewritten by a model
+first; that rewrite is a pending port.
 
 The original footer is click-driven. OpenCode's documented TUI plugin API
 exposes keyboard commands, slots, and dialogs but no pointer surface, so the
