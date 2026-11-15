@@ -82,6 +82,10 @@ export default Plugin.define({
       "speedy-code.reply",
       { initial: { sessionID: "", text: "" } },
     )
+    // The wand's glyph says it is at work while the request is out.
+    const [wand, setWand] = context.storage.memory<{ busy: boolean }>("speedy-code.wand", {
+      initial: { busy: false },
+    })
 
     // Repair an older or hand-edited value once, without writing when it is already whole.
     const repaired = settingsFromSaved(settings)
@@ -265,7 +269,17 @@ export default Plugin.define({
         return
       }
       context.ui.toast.show({ message: "speedy-code: puliendo la respuesta", variant: "info" })
-      const result = await polish({ text })
+      setWand((draft) => {
+        draft.busy = true
+      })
+      let result: Awaited<ReturnType<typeof polish>>
+      try {
+        result = await polish({ text })
+      } finally {
+        setWand((draft) => {
+          draft.busy = false
+        })
+      }
       if ("error" in result) {
         context.ui.toast.show({ message: `speedy-code: ${result.error}`, variant: "error" })
         return
@@ -327,6 +341,30 @@ export default Plugin.define({
       context.ui.router.navigate({ type: "session", sessionID: choice })
     }
 
+    // Clicking a badge does what the original's badge did: opens that profile.
+    const copySocialLink = async (id: string) => {
+      const social = SOCIALS.find((one) => one.id === id)
+      if (!social) return
+
+      let handle = settings.socials[id] ?? ""
+      if (!handle.trim()) {
+        const typed = await context.ui.dialog.prompt({
+          title: `speedy-code · ${social.name}`,
+          description: social.hint ?? "Usuario",
+          placeholder: social.hint ?? "usuario",
+        })
+        if (!typed?.trim()) return
+        handle = typed.trim()
+        await update((draft) => {
+          draft.socials[id] = handle
+        })
+      }
+
+      const url = socialUrl(id, handle)
+      if (!url) return
+      await copyText(url, `enlace de ${social.name}`)
+    }
+
     const openSocials = async () => {
       const choice = await context.ui.dialog.select<string>({
         title: "speedy-code · redes",
@@ -342,27 +380,48 @@ export default Plugin.define({
         }),
       })
       if (!choice) return
+      await copySocialLink(choice)
+    }
 
-      const social = SOCIALS.find((one) => one.id === choice)
-      if (!social) return
+    // The play control: pauses what sounds, or reads the last reply again.
+    const togglePlay = async () => {
+      const sound = activeSpeech()
+      if (sound.state === "playing") return sound.pause()
+      if (sound.state === "paused") return sound.resume()
 
-      let handle = settings.socials[choice] ?? ""
-      if (!handle.trim()) {
-        const typed = await context.ui.dialog.prompt({
-          title: `speedy-code · ${social.name}`,
-          description: social.hint ?? "Usuario",
-          placeholder: social.hint ?? "usuario",
-        })
-        if (!typed?.trim()) return
-        handle = typed.trim()
-        await update((draft) => {
-          draft.socials[choice] = handle
-        })
+      const text = plain(reply.text).trim()
+      if (!text) {
+        context.ui.toast.show({ message: "speedy-code: no hay respuesta para leer", variant: "info" })
+        return
       }
+      await clipPlayer.stop()
+      await narration.narrate({ text, voice: voiceForCode(settings.picks.active) })
+    }
 
-      const url = socialUrl(choice, handle)
-      if (!url) return
-      await copyText(url, `enlace de ${social.name}`)
+    // Every control the footer draws runs the same thing its command runs.
+    const runControl = async (id: string) => {
+      if (id.startsWith("social:")) return copySocialLink(id.slice("social:".length))
+      switch (id) {
+        case "copy":
+          return copyReply()
+        case "polish":
+          return polishReply()
+        case "model":
+        case "effort":
+          return openModel()
+        case "voice":
+          return openVoice()
+        case "narrator":
+          return toggleNarrator()
+        case "mic":
+          return toggleDictation()
+        case "play":
+          return togglePlay()
+        case "history":
+          return openHistory()
+        case "settings":
+          return openSettings()
+      }
     }
 
     // Switching the narrator off while it speaks pauses it, so switching it on goes on from there.
@@ -645,12 +704,23 @@ export default Plugin.define({
       append: "prompt.footer.status",
       render: () => {
         const columns = context.renderer?.terminalWidth ?? 80
+        const model = context.ui.model.current()
+        const linked = SOCIALS.flatMap((social) => {
+          const handle = settings.socials[social.id] ?? ""
+          return handle.trim()
+            ? [{ id: social.id, badge: social.badge, color: social.color }]
+            : []
+        })
         const controls = footerControls({
           narrator: settings.narrator,
           speech: speech.state,
           listening: listen.state,
-          model: context.ui.model.current()?.modelID,
+          model: model?.modelID,
+          effort: model?.variant,
           voice: voiceName(),
+          language: settings.picks.active.toUpperCase(),
+          polishing: wand.busy,
+          socials: linked,
         })
         const result = footerFit(controls, footerRoom(columns))
         const shown = visibleControls(controls, result)
@@ -659,7 +729,14 @@ export default Plugin.define({
         return (
           <box flexDirection="row">
             {shown.map((control) => (
-              <text fg={control.color}>{control.text}</text>
+              <text
+                fg={control.color}
+                onMouseDown={
+                  control.id === undefined ? undefined : () => void runControl(control.id as string)
+                }
+              >
+                {control.text}
+              </text>
             ))}
             {hidden.length > 0 ? <text fg={DISABLED_COLOR}> ⋯ </text> : null}
           </box>

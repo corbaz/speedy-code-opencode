@@ -139,36 +139,79 @@ describe("footerControls", () => {
   test("draws the controls in their documented order", () => {
     const controls = footerControls({ ...base, model: "claude-sonnet-4-5", voice: "Español" })
     expect(controls.map((control) => control.name)).toEqual([
-      "play",
+      "copy",
+      "polish",
       "model",
       "voice",
       "narrator",
       "mic",
+      "play",
+      "history",
       "settings",
     ])
   })
 
   test("omits the model when none is selected", () => {
     expect(footerControls(base).map((control) => control.name)).toEqual([
-      "play",
+      "copy",
+      "polish",
       "voice",
       "narrator",
       "mic",
+      "play",
+      "history",
       "settings",
     ])
+  })
+
+  test("draws the linked networks first, then the bar", () => {
+    const names = footerControls({
+      ...base,
+      socials: [
+        { id: "github", badge: "GH", color: "#e6edf3" },
+        { id: "x", badge: "X", color: "#e6edf3" },
+      ],
+    }).map((control) => control.name)
+
+    expect(names.slice(0, 3)).toEqual(["social:github", "social:x", "divider"])
+    expect(names).toContain("copy")
+  })
+
+  test("shows the effort beside the model and the language beside the voice", () => {
+    const controls = footerControls({ ...base, model: "claude-sonnet-4-5", effort: "medium", language: "ES" })
+    expect(controls.find((one) => one.name === "effort")?.text).toBe("· medium ▾ ")
+    expect(controls.find((one) => one.name === "voice")?.text).toBe(" 🗣  Español · ES ▾")
+  })
+
+  test("says the wand is working instead of showing its idle glyph", () => {
+    expect(footerControls({ ...base, polishing: true }).find((one) => one.name === "polish")?.text).toBe(" ⏳ ")
+  })
+
+  test("every control that does something carries the id to run", () => {
+    const controls = footerControls({ ...base, socials: [{ id: "github", badge: "GH", color: "#e6edf3" }] })
+    for (const control of controls) {
+      if (control.name === "divider") {
+        expect(control.id).toBeUndefined()
+        continue
+      }
+      expect(control.id).toBe(control.name)
+    }
   })
 
   test("flips the narrator glyph and color", () => {
     const off = footerControls(base).find((control) => control.name === "narrator")
     const on = footerControls({ ...base, narrator: true }).find((control) => control.name === "narrator")
-    expect(off?.text).toBe(" 🔊 ")
-    expect(on?.text).toBe(" 🔇 ")
+    // As the original draws it: the speaker sounds while the narrator is on.
+    expect(off?.text).toBe(" 🔇 ")
+    expect(on?.text).toBe(" 🔊 ")
     expect(on?.color).not.toBe(off?.color)
   })
 
   test("follows the speech state on the play control", () => {
-    expect(footerControls({ ...base, speech: "playing" })[0]?.text).toBe(" ⏸︎ ")
-    expect(footerControls({ ...base, speech: "thinking" })[0]?.text).toBe(" ⧗ ")
+    const play = (speech: "playing" | "thinking") =>
+      footerControls({ ...base, speech }).find((control) => control.name === "play")?.text
+    expect(play("playing")).toBe(" ⏸︎ ")
+    expect(play("thinking")).toBe(" ⧗ ")
   })
 
   test("follows the listening state on the microphone", () => {
@@ -194,15 +237,15 @@ describe("footerText", () => {
 
   test("joins the shown controls in order", () => {
     const text = footerText(controls, footerFit(controls, 200))
-    expect(text.startsWith(" ⏵  claude-sonnet-4-5 ▾  🗣")).toBe(true)
+    expect(text.startsWith(" 📋  🖋️  claude-sonnet-4-5  🗣")).toBe(true)
   })
 
   test("uses the short form the fit chose", () => {
     const text = footerText(controls, {
-      shown: new Set(["play", "model"]),
+      shown: new Set(["model"]),
       compact: new Set(["model"]),
     })
-    expect(text).toBe(" ⏵  sonnet ▾ ")
+    expect(text).toBe(" sonnet ▾ ")
   })
 
   test("drops the controls the fit left out", () => {

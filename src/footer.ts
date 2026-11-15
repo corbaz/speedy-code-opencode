@@ -36,14 +36,22 @@ export const FOOTER_RANKS: Readonly<Record<string, number>> = {
   send: 0,
   clear: 0,
   model: 0,
+  effort: 0,
   voice: 0,
   compact: 0,
   exit: 0,
+  divider: 0,
   settings: 1,
   reload: 2,
+  history: 3,
   mic: 3,
   narrator: 4,
   socials: 5,
+}
+
+/** The rank a name gets: every network badge is drawn last, as one group. */
+function rankOf(name: string): number {
+  return name.startsWith("social:") ? 5 : (FOOTER_RANKS[name] ?? 9)
 }
 
 /**
@@ -104,7 +112,7 @@ export function footerRoom(columns: number, modesWidth = 0): number {
  * until one does not fit: a lower rank never takes a higher one's place.
  */
 export function footerFit(groups: readonly FooterGroup[], room: number): FooterFit {
-  const rank = (name: string) => FOOTER_RANKS[name] ?? 9
+  const rank = rankOf
   const compact = new Set<string>()
   if (groups.reduce((sum, group) => sum + group.width, 0) <= room) {
     return { shown: new Set(groups.map((group) => group.name)), compact }
@@ -149,11 +157,20 @@ export function hiddenGroups(groups: readonly FooterGroup[], result: FooterFit):
 /** The microphone states the footer draws. */
 export type ListeningState = "off" | "loading" | "on"
 
-/** One control the footer draws: its label, its color and its short label. */
+/** One control the footer draws: its label, its color, its short label and what it runs. */
 export interface FooterControl extends FooterGroup {
   readonly text: string
   readonly color: string
   readonly compactText?: string
+  /** What clicking it runs; absent on a control that is only decoration. */
+  readonly id?: string
+}
+
+/** One network drawn as a badge, like the original footer draws the linked ones. */
+export interface FooterSocial {
+  readonly id: string
+  readonly badge: string
+  readonly color: string
 }
 
 /** What the footer needs to decide what to draw. */
@@ -162,7 +179,15 @@ export interface FooterInput {
   readonly speech: SpeechState
   readonly listening: ListeningState
   readonly model?: string
+  /** The variant in force, shown beside the model as the original shows effort. */
+  readonly effort?: string
   readonly voice?: string
+  /** The language's short code, as the original writes it (`ES`). */
+  readonly language?: string
+  /** True while the wand is working, so its glyph says so. */
+  readonly polishing?: boolean
+  /** The networks with a handle set, in the original's order. */
+  readonly socials?: readonly FooterSocial[]
 }
 
 /** The family of a model id, for the short footer label. */
@@ -171,32 +196,58 @@ export function modelFamily(model: string): string {
   return parts.length > 1 ? (parts[1] as string) : model
 }
 
+/** One control, sized from the label it draws. */
+function control(id: string, name: string, text: string, color: string, compactText?: string): FooterControl {
+  const full = { name, id, text, color, width: cells(text) }
+  return compactText === undefined
+    ? full
+    : { ...full, compactText, compactWidth: cells(compactText) }
+}
+
 /**
- * The footer controls, in the order they are drawn, each with the cells it
- * takes. A control whose action belongs to a later phase is drawn disabled
- * instead of disappearing, so the footer keeps its shape.
+ * The footer controls, in the order the original draws them and with the same
+ * glyphs: the linked networks, the tools, the model with its variant, the voice
+ * with its language, the narrator, the microphone, the play control and the
+ * settings. Only the controls this port can actually run are drawn; the ones
+ * that belong to the host (send, clear, compact, exit, reload) stay the host's.
  */
 export function footerControls(input: FooterInput): FooterControl[] {
   const play = PLAY_GLYPHS[input.speech]
   const mic = MIC_GLYPHS[input.listening]
-  const controls: FooterControl[] = [
-    { name: "play", text: ` ${play.glyph} `, color: play.color, width: cells(` ${play.glyph} `) },
-  ]
+  const controls: FooterControl[] = []
 
-  if (input.model) {
-    const full = ` ${input.model} ▾ `
-    const short = ` ${modelFamily(input.model)} ▾ `
-    controls.push({ name: "model", text: full, compactText: short, color: "#ffa94d", width: cells(full), compactWidth: cells(short) })
+  for (const social of input.socials ?? []) {
+    controls.push(control(`social:${social.id}`, `social:${social.id}`, ` ${social.badge} `, social.color))
+  }
+  if ((input.socials?.length ?? 0) > 0) {
+    controls.push({ name: "divider", text: "│", color: DISABLED_COLOR, width: cells("│") })
   }
 
-  const voice = ` 🗣  ${input.voice ?? "Español"} ▾`
-  controls.push({ name: "voice", text: voice, color: "#adb5bd", width: cells(voice) })
+  controls.push(control("copy", "copy", " 📋 ", "#adb5bd"))
+  controls.push(control("polish", "polish", input.polishing ? " ⏳ " : " 🖋️ ", "#da77f2"))
 
-  const narrator = input.narrator ? " 🔇 " : " 🔊 "
-  controls.push({ name: "narrator", text: narrator, color: input.narrator ? "#51cf66" : DISABLED_COLOR, width: cells(narrator) })
+  if (input.model) {
+    const full = ` ${input.model} `
+    const short = ` ${modelFamily(input.model)} ▾ `
+    controls.push(control("model", "model", full, "#ffa94d", short))
+  }
+  if (input.effort) {
+    controls.push(control("effort", "effort", `· ${input.effort} ▾ `, "#adb5bd"))
+  }
 
-  controls.push({ name: "mic", text: ` ${mic.glyph} `, color: mic.color, width: cells(` ${mic.glyph} `) })
-  controls.push({ name: "settings", text: " ⚙️ ", color: "#adb5bd", width: cells(" ⚙️ ") })
+  const language = input.language ? ` · ${input.language}` : ""
+  const voice = ` 🗣  ${input.voice ?? "Español"}${language} ▾`
+  controls.push(control("voice", "voice", voice, "#adb5bd"))
+
+  const narrator = input.narrator ? " 🔊 " : " 🔇 "
+  controls.push(
+    control("narrator", "narrator", narrator, input.narrator ? "#51cf66" : DISABLED_COLOR),
+  )
+
+  controls.push(control("mic", "mic", ` ${mic.glyph} `, mic.color))
+  controls.push(control("play", "play", ` ${play.glyph} `, play.color))
+  controls.push(control("history", "history", " 📎 ", "#ffd43b"))
+  controls.push(control("settings", "settings", " ⚙️ ", "#adb5bd"))
 
   return controls
 }
