@@ -4,6 +4,7 @@ import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
 import { Plugin } from "@opencode/plugin/tui"
+import { StyledText, fg as coloredText } from "@opentui/core"
 
 import { COMMAND_HELP, routeCommand } from "./commands"
 import { Dictation } from "./dictation"
@@ -398,32 +399,6 @@ export default Plugin.define({
       await narration.narrate({ text, voice: voiceForCode(settings.picks.active) })
     }
 
-    // Every control the footer draws runs the same thing its command runs.
-    const runControl = async (id: string) => {
-      if (id.startsWith("social:")) return copySocialLink(id.slice("social:".length))
-      switch (id) {
-        case "copy":
-          return copyReply()
-        case "polish":
-          return polishReply()
-        case "model":
-        case "effort":
-          return openModel()
-        case "voice":
-          return openVoice()
-        case "narrator":
-          return toggleNarrator()
-        case "mic":
-          return toggleDictation()
-        case "play":
-          return togglePlay()
-        case "history":
-          return openHistory()
-        case "settings":
-          return openSettings()
-      }
-    }
-
     // Switching the narrator off while it speaks pauses it, so switching it on goes on from there.
     let pausedByOff = false
 
@@ -587,6 +562,8 @@ export default Plugin.define({
           return openSessions()
         case "socials":
           return openSocials()
+        case "play":
+          return togglePlay()
         case "stop":
           return stopEverything()
         case "pause":
@@ -701,7 +678,8 @@ export default Plugin.define({
     })
 
     const disposeFooter = context.ui.slot({
-      append: "prompt.footer.status",
+      // Own the whole status row: the plugin's footer is the only thing in it.
+      replace: "prompt.footer.status",
       render: () => {
         const columns = context.renderer?.terminalWidth ?? 80
         const model = context.ui.model.current()
@@ -726,21 +704,11 @@ export default Plugin.define({
         const shown = visibleControls(controls, result)
         const hidden = hiddenGroups(controls, result)
 
-        return (
-          <box flexDirection="row">
-            {shown.map((control) => (
-              <text
-                fg={control.color}
-                onMouseDown={
-                  control.id === undefined ? undefined : () => void runControl(control.id as string)
-                }
-              >
-                {control.text}
-              </text>
-            ))}
-            {hidden.length > 0 ? <text fg={DISABLED_COLOR}> ⋯ </text> : null}
-          </box>
-        )
+        // One styled text, never a row of text elements: OpenTUI wraps each text
+        // element on its own, and the footer broke into several lines.
+        const chunks = shown.map((control) => coloredText(control.color)(control.text))
+        if (hidden.length > 0) chunks.push(coloredText(DISABLED_COLOR)(" ⋯ "))
+        return <text content={new StyledText(chunks)} wrapMode="none" />
       },
     })
 

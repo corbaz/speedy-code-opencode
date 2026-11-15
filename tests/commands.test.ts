@@ -49,6 +49,11 @@ describe("routeCommand", () => {
     expect(routeCommand("socials")).toEqual({ kind: "socials" })
   })
 
+  test("reads the last reply again by either name", () => {
+    expect(routeCommand("leer")).toEqual({ kind: "play" })
+    expect(routeCommand("play")).toEqual({ kind: "play" })
+  })
+
   test("stops, pauses and resumes", () => {
     expect(routeCommand("stop")).toEqual({ kind: "stop" })
     expect(routeCommand("pausa")).toEqual({ kind: "pause" })
@@ -73,6 +78,7 @@ describe("routeCommand", () => {
       "stop",
       "pausa",
       "seguir",
+      "leer",
       "voces",
       "historial",
       "dictado",

@@ -18,6 +18,7 @@ export type CommandAction =
   | { readonly kind: "model" }
   | { readonly kind: "sessions" }
   | { readonly kind: "socials" }
+  | { readonly kind: "play" }
   | { readonly kind: "stop" }
   | { readonly kind: "pause" }
   | { readonly kind: "resume" }
@@ -25,7 +26,7 @@ export type CommandAction =
 
 /** Shown when the argument names nothing. */
 export const COMMAND_HELP =
-  "speedy-code: on, off, stop, pausa, seguir, voces, historial, dictado, copiar, pulir, modelo, sesiones, redes"
+  "speedy-code: on, off, stop, pausa, seguir, leer, voces, historial, dictado, copiar, pulir, modelo, sesiones, redes"
 
 /** Routes one `/speedy` argument, ignoring case and surrounding spaces. */
 export function routeCommand(input: string): CommandAction {
@@ -62,6 +63,9 @@ export function routeCommand(input: string): CommandAction {
     case "redes":
     case "socials":
       return { kind: "socials" }
+    case "leer":
+    case "play":
+      return { kind: "play" }
     case "stop":
       return { kind: "stop" }
     case "pausa":
