@@ -4,7 +4,6 @@ import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
 import { Plugin } from "@opencode/plugin/tui"
-import { StyledText, fg as coloredText } from "@opentui/core"
 
 import { COMMAND_HELP, routeCommand } from "./commands"
 import { Dictation } from "./dictation"
@@ -39,6 +38,16 @@ import {
   type SpeedySettings,
 } from "./settings"
 import { SOCIALS, socialUrl } from "./socials"
+
+/**
+ * One colored run inside a text. `SpanRenderable` forwards `fg` to
+ * `TextNodeRenderable` at runtime, but its published props omit it, so the
+ * element is the one place that needs the cast.
+ */
+function Tinted(props: { fg: string; children?: string }) {
+  // @ts-expect-error span takes fg at runtime; its props type omits it.
+  return <span fg={props.fg}>{props.children}</span>
+}
 
 /** What each status line level is called in the settings menu. */
 const LEVEL_LABELS: Record<LevelKey, string> = {
@@ -706,14 +715,17 @@ export default Plugin.define({
         const shown = visibleControls(controls, result)
         const hidden = hiddenGroups(controls, result)
 
-        // One styled text, never a row of text elements: OpenTUI wraps each text
-        // element on its own, and the footer broke into several lines.
-        const chunks = shown.map((control) => coloredText(control.color)(control.text))
-        if (hidden.length > 0) chunks.push(coloredText(DISABLED_COLOR)(" ⋯ "))
+        // One text with a span per control, never a row of text elements: OpenTUI
+        // wraps each text element on its own and the footer broke into lines.
         // Inside a box: a bare text at a slot root takes no room of its own.
         return (
           <box flexDirection="row" flexShrink={0}>
-            <text content={new StyledText(chunks)} wrapMode="none" />
+            <text wrapMode="none">
+              {shown.map((control) => (
+                <Tinted fg={control.color}>{control.text}</Tinted>
+              ))}
+              {hidden.length > 0 ? <Tinted fg={DISABLED_COLOR}>{" ⋯ "}</Tinted> : null}
+            </text>
           </box>
         )
       },
