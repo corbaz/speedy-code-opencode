@@ -140,27 +140,44 @@ describe("footerControls", () => {
     const controls = footerControls({ ...base, model: "claude-sonnet-4-5", voice: "Español" })
     expect(controls.map((control) => control.name)).toEqual([
       "copy",
-      "polish",
+      "paste",
+      "image",
+      "clear",
+      "bar",
       "model",
       "voice",
+      "compact",
       "narrator",
-      "mic",
       "play",
       "history",
+      "mic",
+      "polish",
+      "send",
+      "new",
+      "reload",
       "settings",
+      "exit",
     ])
   })
 
   test("omits the model when none is selected", () => {
     expect(footerControls(base).map((control) => control.name)).toEqual([
       "copy",
-      "polish",
+      "paste",
+      "image",
+      "clear",
       "voice",
+      "compact",
       "narrator",
-      "mic",
       "play",
       "history",
+      "mic",
+      "polish",
+      "send",
+      "new",
+      "reload",
       "settings",
+      "exit",
     ])
   })
 
@@ -190,7 +207,7 @@ describe("footerControls", () => {
   test("every control that does something carries the id to run", () => {
     const controls = footerControls({ ...base, socials: [{ id: "github", badge: "GH", color: "#e6edf3" }] })
     for (const control of controls) {
-      if (control.name === "divider") {
+      if (control.name === "divider" || control.name === "bar") {
         expect(control.id).toBeUndefined()
         continue
       }
@@ -237,7 +254,7 @@ describe("footerText", () => {
 
   test("joins the shown controls in order", () => {
     const text = footerText(controls, footerFit(controls, 200))
-    expect(text.startsWith(" 📋  🖋️  claude-sonnet-4-5  🗣")).toBe(true)
+    expect(text.startsWith(" 📋  📥  🖼️  🗑️ │ claude-sonnet-4-5 ▾  🗣")).toBe(true)
   })
 
   test("uses the short form the fit chose", () => {
@@ -265,7 +282,7 @@ describe("visibleControls", () => {
 
   test("keeps the controls the fit kept, in the order they are drawn", () => {
     const controls = footerControls(input)
-    const result = footerFit(controls, 80)
+    const result = footerFit(controls, 200)
 
     expect(visibleControls(controls, result).map((control) => control.name)).toEqual(
       controls.map((control) => control.name),

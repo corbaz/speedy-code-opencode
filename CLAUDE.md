@@ -51,6 +51,7 @@ other test framework in the project.
 | `src/dictation.ts` | The microphone contract of `engine/listen.py` |
 | `src/polish.ts` | The wand contract of `engine/polish.py` |
 | `src/socials.ts` | The social table and its link templates |
+| `src/statusline.ts` | Pure status line: parts, colors, priority fit |
 | `src/engine.ts` | Spawning the engine: errors as `error` lines, stderr drained, Windows tree kill |
 | `src/capabilities.ts` | What this host exposes and what it does not |
 | `engine/` | The original scripts, unchanged. Do not edit without the original |
@@ -77,9 +78,20 @@ anything outside this list without checking it first.
   `mouse` defaults to `true`), and a `<box onMouseUp>` inside a slot receives
   the click; verified by driving the real TUI through a pseudo terminal. A
   `<span>` inside a `<text>` does not: give each control its own box.
-- **No composer API.** There is no way to read or write the prompt text, so
-  dictated words cannot be inserted into the composer; the transcript is copied
-  through `renderer.copyToClipboardOSC52` instead.
+- **Host commands run by name.** `keymap.dispatch(id)` runs any reachable
+  host command: `prompt.paste`, `prompt.clear`, `prompt.submit`, `model.list`,
+  `variant.list`, `session.compact`, `session.new`, `location.reload`,
+  `app.exit`. `keymap.commands()` lists them. The footer uses these for paste,
+  clear, send, the model, the effort, compact, new, reload and exit.
+- **No call reads the prompt text.** Text goes in as a paste does: on the
+  system clipboard, then `prompt.paste`. Dictation is delivered that way.
+- **Session data**: `data.session.get(id)` (model, cost, tokens, time),
+  `data.session.message.list(id)` (each assistant message has `tokens`),
+  `data.location.model.list()` (`name`, `limit.context`),
+  `data.location.vcs.info()`, `app.version`. The status line is drawn from these.
+- **Layout**: `prompt.footer` is one row; a sibling placed `before` it lands in
+  the same row. Two rows need one claim that renders a column. On the home
+  screen the prompt is narrow and centered, so both rows go `before: "home.footer"`.
 - **Available and used**: `storage.store` (durable), `storage.memory`
   (ephemeral), `ui.dialog.select/alert/confirm/prompt`, `ui.toast.show`,
   `ui.model.current()`, `ui.model.variant.list/set`, `ui.router.navigate`,
@@ -94,16 +106,18 @@ anything outside this list without checking it first.
   `modelo`, `sesiones`, `redes`, `leer`) and through palette commands.
 - The original rewrites long or foreign-language replies with a model before
   reading them. That rewrite is **not** ported: replies are read as written.
-- The original paints a status line. The thresholds are stored and editable,
-  but the host owns that bar.
-- `send`, `clear`, `compact`, `exit` and `reload` are the host's controls and
-  are not duplicated.
+- The status line has no 5-hour and weekly limits: those are Claude
+  subscription figures the host does not have.
+- The model and the effort open the host's own lists, which are the only way
+  to change the model.
 
 ## Open work
 
-1. **Status line and framed menus.** The original paints a statistics bar
-   and opens its menus as framed panels above the prompt; this port still
-   opens the host's dialogs and draws no statistics bar.
+1. **Framed menus.** The original opens its menus (voices by language and
+   gender, kept audios, settings with accounts and the bar order) as framed
+   panels above the prompt; this port opens the host's dialogs, with fewer
+   choices. Also not ported: the pasted-image history (👁️), the microphone
+   picker (▾) and correcting the draft with the pen (it polishes the reply).
 2. **Live verification.** Synthesis, playback and dictation were never run
    against a real speaker or microphone: `~/.config/opencode/speedy-code/venv`
    and the models do not exist in the development environment. Those paths are

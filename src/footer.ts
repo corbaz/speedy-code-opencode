@@ -34,6 +34,8 @@ export const FOOTER_RANKS: Readonly<Record<string, number>> = {
   image: 0,
   polish: 0,
   send: 0,
+  new: 0,
+  bar: 0,
   clear: 0,
   model: 0,
   effort: 0,
@@ -80,6 +82,17 @@ export const MIC_GLYPHS = {
   loading: { glyph: "🔵", color: "#748ffc" },
   on: { glyph: "🔴", color: "#ff6b6b" },
 } as const
+
+/** The effort beside the model, in its traffic-light color. */
+export const EFFORT_TONES: Readonly<Record<string, string>> = {
+  none: "#adb5bd",
+  minimal: "#69db7c",
+  low: "#69db7c",
+  medium: "#a9e34b",
+  high: "#ffd43b",
+  xhigh: "#ffa94d",
+  max: "#ff6b6b",
+}
 
 /** A control that does nothing right now. */
 export const DISABLED_COLOR = "#495057"
@@ -207,9 +220,8 @@ function control(id: string, name: string, text: string, color: string, compactT
 /**
  * The footer controls, in the order the original draws them and with the same
  * glyphs: the linked networks, the tools, the model with its variant, the voice
- * with its language, the narrator, the microphone, the play control and the
- * settings. Only the controls this port can actually run are drawn; the ones
- * that belong to the host (send, clear, compact, exit, reload) stay the host's.
+ * with its language, compact, the narrator with play and the kept audios, the
+ * microphone, the pen, send and new, reload, the settings and exit.
  */
 export function footerControls(input: FooterInput): FooterControl[] {
   const play = PLAY_GLYPHS[input.speech]
@@ -224,30 +236,39 @@ export function footerControls(input: FooterInput): FooterControl[] {
   }
 
   controls.push(control("copy", "copy", " 📋 ", "#adb5bd"))
-  controls.push(control("polish", "polish", input.polishing ? " ⏳ " : " 🖋️ ", "#da77f2"))
+  controls.push(control("paste", "paste", " 📥 ", "#adb5bd"))
+  controls.push(control("image", "image", " 🖼️ ", "#adb5bd"))
+  controls.push(control("clear", "clear", " 🗑️ ", "#adb5bd"))
 
   if (input.model) {
-    const full = ` ${input.model} `
+    controls.push({ name: "bar", text: "│", color: DISABLED_COLOR, width: cells("│") })
+    const full = input.effort ? ` ${input.model} ` : ` ${input.model} ▾ `
     const short = ` ${modelFamily(input.model)} ▾ `
     controls.push(control("model", "model", full, "#ffa94d", short))
   }
   if (input.effort) {
-    controls.push(control("effort", "effort", `· ${input.effort} ▾ `, "#adb5bd"))
+    controls.push(control("effort", "effort", `· ${input.effort} ▾ `, EFFORT_TONES[input.effort] ?? "#adb5bd"))
   }
 
   const language = input.language ? ` · ${input.language}` : ""
   const voice = ` 🗣  ${input.voice ?? "Español"}${language} ▾`
-  controls.push(control("voice", "voice", voice, "#adb5bd"))
+  const voiceShort = input.language ? ` 🗣  ${input.language} ▾` : undefined
+  controls.push(control("voice", "voice", voice, "#adb5bd", voiceShort))
+
+  controls.push(control("compact", "compact", " 🗜️ ", "#ff6b6b"))
 
   const narrator = input.narrator ? " 🔊 " : " 🔇 "
-  controls.push(
-    control("narrator", "narrator", narrator, input.narrator ? "#51cf66" : DISABLED_COLOR),
-  )
+  controls.push(control("narrator", "narrator", narrator, input.narrator ? "#51cf66" : "#868e96"))
+  controls.push(control("play", "play", ` ${play.glyph} `, play.color))
+  controls.push(control("history", "history", " 📎 ", input.narrator ? "#ffd43b" : DISABLED_COLOR))
 
   controls.push(control("mic", "mic", ` ${mic.glyph} `, mic.color))
-  controls.push(control("play", "play", ` ${play.glyph} `, play.color))
-  controls.push(control("history", "history", " 📎 ", "#ffd43b"))
+  controls.push(control("polish", "polish", input.polishing ? " ⏳ " : " 🖋️ ", "#da77f2"))
+  controls.push(control("send", "send", " ⏎ ", "#51cf66"))
+  controls.push(control("new", "new", " + ", "#51cf66"))
+  controls.push(control("reload", "reload", " 🔄 ", "#adb5bd"))
   controls.push(control("settings", "settings", " ⚙️ ", "#adb5bd"))
+  controls.push(control("exit", "exit", " ✕ ", "#ff6b6b"))
 
   return controls
 }

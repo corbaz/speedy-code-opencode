@@ -190,6 +190,28 @@ export default Plugin.define({
     // is copied to the terminal's clipboard and shown when that is not available.
     let deliverOnEnd = false
 
+    /** Puts `text` on the system clipboard; false when the system has no way to. */
+    const writeClipboard = (text: string): Promise<boolean> =>
+      new Promise((done) => {
+        const argv =
+          process.platform === "win32"
+            ? ["powershell", "-NoProfile", "-NonInteractive", "-Command", "Set-Clipboard -Value $env:SPEEDY_TEXT"]
+            : process.platform === "darwin"
+              ? ["/bin/sh", "-c", 'printf %s "$SPEEDY_TEXT" | pbcopy']
+              : ["/bin/sh", "-c", 'printf %s "$SPEEDY_TEXT" | xclip -selection clipboard']
+        try {
+          const child = spawn(argv[0] as string, argv.slice(1), {
+            env: { ...process.env, SPEEDY_TEXT: text },
+            stdio: "ignore",
+            windowsHide: true,
+          })
+          child.on("error", () => done(false))
+          child.on("exit", (code) => done(code === 0))
+        } catch {
+          done(false)
+        }
+      })
+
     const deliverDictation = async () => {
       const text = listen.heard.trim()
       setListen((draft) => {
@@ -198,6 +220,11 @@ export default Plugin.define({
       })
       if (!text) {
         context.ui.toast.show({ message: "speedy-code: no se oyó nada", variant: "info" })
+        return
+      }
+      // The words go into the prompt as a paste does: on the clipboard, then the host's own paste.
+      if (await writeClipboard(text)) {
+        context.keymap.dispatch("prompt.paste")
         return
       }
       const copied = context.renderer?.copyToClipboardOSC52?.(text) ?? false
@@ -458,9 +485,27 @@ export default Plugin.define({
           return copyReply()
         case "polish":
           return polishReply()
+        // The host's own commands, run by their names: its model list changes
+        // the model, which no plugin call can.
+        case "paste":
+        case "image":
+          return context.keymap.dispatch("prompt.paste")
+        case "clear":
+          return context.keymap.dispatch("prompt.clear")
         case "model":
+          return context.keymap.dispatch("model.list")
         case "effort":
-          return openModel()
+          return context.keymap.dispatch("variant.list")
+        case "compact":
+          return context.keymap.dispatch("session.compact")
+        case "send":
+          return context.keymap.dispatch("prompt.submit")
+        case "new":
+          return context.keymap.dispatch("session.new")
+        case "reload":
+          return context.keymap.dispatch("location.reload")
+        case "exit":
+          return context.keymap.dispatch("app.exit")
         case "voice":
           return openVoice()
         case "narrator":
@@ -807,11 +852,14 @@ export default Plugin.define({
           const handle = settings.socials[social.id] ?? ""
           return handle.trim() ? [{ id: social.id, badge: social.badge, color: social.color }] : []
         })
+        const named = (context.data.location.model.list() ?? []).find(
+          (one) => one.modelID === model?.modelID && one.providerID === model?.providerID,
+        ) as ModelShape | undefined
         const controls = footerControls({
           narrator: settings.narrator,
           speech: speech.state,
           listening: listen.state,
-          model: model?.modelID,
+          model: named?.name ?? model?.modelID,
           effort: model?.variant,
           voice: voiceName(),
           language: settings.picks.active.toUpperCase(),
