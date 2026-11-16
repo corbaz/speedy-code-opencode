@@ -1,6 +1,17 @@
 # speedy-code for OpenCode
 
-An OpenCode V2 port of speedy-code. This repository is independent from the
+**Hablale a OpenCode y escuchalo responder.** Un plugin de OpenCode para Windows y macOS: lee las
+respuestas en voz alta con las voces neurales de Microsoft Edge, convierte tu voz en el prompt mientras
+hablás, con un modelo que corre en tu máquina, y suma al pie de la pantalla una línea de estado a color y
+una barra de atajos (copiar, pegar texto o imagen, corregir el prompt con IA, enviar, sesión nueva, tus
+redes, salir).
+
+*Talk to OpenCode and hear it answer: Edge neural voices, local dictation streamed as you speak, a colored
+status line and a footer of shortcuts. Windows and macOS.*
+
+---
+
+An OpenCode V2 port of [speedy-code](https://github.com/corbaz/speedy-code), the Claude Code plugin. This repository is independent from the
 Claude Code plugin and is discovered automatically when cloned into:
 
 - Windows: `%USERPROFILE%\.config\opencode\plugins\speedy-code`
@@ -69,52 +80,67 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   without it the reply is read as written.
 - The 5-hour and weekly windows are the OpenCode Go plan's; another plan shows none.
 
-## Install on Windows
+## Install
 
-Open PowerShell:
+Requirements: [OpenCode](https://opencode.ai) 2.3 or later, git and [bun](https://bun.sh). Nothing needs
+administrator rights; everything else (uv, Python 3.12, the voices, the dictation and its model, about
+750 MB) is installed under the user's own folders.
+
+### Windows
 
 ```powershell
-$plugin = Join-Path $HOME ".config\opencode\plugins\speedy-code"
-git clone <repository-url> $plugin
-Set-Location $plugin
+git clone https://github.com/corbaz/speedy-code-opencode "$HOME\.config\opencode\plugins\speedy-code"
+Set-Location "$HOME\.config\opencode\plugins\speedy-code"
 bun install
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup\install.ps1
-opencode plugin list
-opencode
 ```
 
-The setup script installs its Python environment and model under
-`%USERPROFILE%\.config\opencode\speedy-code`. To enable `/speedy pulir`, pass
-`-GroqKey <key>` once or define `GROQ_API_KEY` as a user environment variable.
+Option: `-GroqKey <key>` (saves the key the 🖋️ button and the translated narration use).
 
-## Install on macOS
-
-Open Terminal:
+### macOS
 
 ```bash
-git clone <repository-url> ~/.config/opencode/plugins/speedy-code
+git clone https://github.com/corbaz/speedy-code-opencode ~/.config/opencode/plugins/speedy-code
 cd ~/.config/opencode/plugins/speedy-code
 bun install
 bash setup/install.sh
-opencode plugin list
-opencode
 ```
 
-The setup script installs its Python environment and model under
-`~/.config/opencode/speedy-code`. To enable `/speedy pulir`, export
-`GROQ_API_KEY` in your shell before starting OpenCode.
+For 🖋️ and the translated narration, export `GROQ_API_KEY` in `~/.zshrc`.
 
-## Update
+OpenCode finds the plugin by its folder: no marketplace and no config entry. Restart OpenCode: the
+status line and the footer show under the prompt, and `opencode plugin list` names `speedy-code`.
+⚙️ → **Instalación** → **Instalar / reparar todo** runs the same setup again at any time. The setup keeps
+its Python environment and model under `~/.config/opencode/speedy-code`.
 
-From the plugin directory on either platform:
+### Update
 
 ```bash
+cd ~/.config/opencode/plugins/speedy-code     # Windows: cd $HOME\.config\opencode\plugins\speedy-code
 git pull
 bun install
 ```
 
-Run the platform setup script again only when engine dependencies change. An
-open OpenCode TUI can load updated plugin code with `/reload`.
+Then restart OpenCode (or 🔄 in the footer). Run the setup script again only when the engine's
+dependencies change.
+
+### For an AI agent installing it
+
+Do these steps in order, without asking; each is safe to run again.
+
+1. Check that `opencode --version`, `git --version` and `bun --version` work. If `opencode` is missing or
+   older than 2.3, stop and tell the user. If `bun` is missing, install it with its official installer
+   (`curl -fsSL https://bun.sh/install | bash` on macOS, `irm bun.sh/install.ps1 | iex` on Windows).
+2. Detect the system: Windows (PowerShell, `$env:OS -eq 'Windows_NT'`) or macOS (`uname` prints `Darwin`).
+3. If `~/.config/opencode/plugins/speedy-code/.git` exists, run `git pull` in it; otherwise clone as above.
+   Do not clone anywhere else: OpenCode discovers the plugin by this folder.
+4. Run `bun install` in the clone.
+5. Run the setup for the system (`setup/install.ps1` on Windows, `bash setup/install.sh` on macOS) and read
+   its output: every line starting with `fail` is a step that failed, with the reason after it. The
+   Groq key failing is optional (only 🖋️ and the translated narration need it); any other `fail` needs
+   fixing before you finish.
+6. Run `opencode plugin list` and check that `speedy-code` is listed and not marked `failed`.
+7. Tell the user to restart OpenCode. Never ask for or print the Groq key yourself.
 
 ## Development
 
@@ -125,7 +151,3 @@ bun run typecheck
 
 The engine scripts under `engine/` come from the original speedy-code plugin and
 keep its MIT license; see `LICENSE`.
-
-This repository currently has no remote URL. Replace `<repository-url>` after
-the repository is published; publishing and pushing are separate maintainer
-actions.

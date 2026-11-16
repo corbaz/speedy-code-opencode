@@ -7,3 +7,5 @@ coverage/
 *.part
 __pycache__/
 *.py[cod]
+# The work log: kept on the maintainer's machine, as the original does.
+odd/
