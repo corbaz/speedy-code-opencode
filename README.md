@@ -49,14 +49,12 @@ Palette commands mirror them: `speedy-code: ajustes`, `alternar narrador`,
 
 ## Known limitations
 
-- **OpenCode 2.3.0 exposes no API to write into the prompt**, so the port cannot
-  append dictated words into the composer the way the original did. It copies
-  the transcript to the clipboard instead, and shows it in a dialog when the
-  terminal has no clipboard.
+- Dictated words go into the prompt as a paste does: through the system
+  clipboard, which they replace.
 - The original opens its menus as framed panels above the prompt. Here a click
   opens the host's own dialog. The status line has no 5-hour and weekly limits.
-- Paste, image actions, send, clear, compact, exit and reload stay OpenCode's own
-  controls; the plugin does not duplicate what the host already offers.
+- The pasted-image history, the microphone picker and correcting the draft
+  with the pen are not ported; the pen polishes the last reply.
 - A long reply is read as written; the original's model rewrite before narrating
   is not ported.
 - The status-bar thresholds are stored and editable, but the bar itself is drawn
