@@ -29,7 +29,7 @@ code under `src/` is the rewrite.
 
 ```bash
 bun install     # once, and after dependency changes
-bun test        # 162 tests across 12 files
+bun test        # one suite per module
 bun run typecheck
 ```
 
@@ -41,7 +41,9 @@ other test framework in the project.
 | Path | What it is |
 | --- | --- |
 | `src/index.ts` | The server part of the plugin (`speedy-code.server`) |
-| `src/tui.tsx` | The terminal part (`speedy-code.tui`): footer, commands, dialogs, narration, dictation |
+| `src/tui.tsx` | The terminal part (`speedy-code.tui`): state, engine, actions, slots |
+| `src/menus.tsx` | The framed menus: voices, audios, microphone, settings, more |
+| `src/voices.ts` | Pure voice list: names, countries, the edge-tts listing, microphones |
 | `src/commands.ts` | Pure router for `/speedy <word>` |
 | `src/settings.ts` | Durable settings, languages, voices, socials, status-line levels |
 | `src/footer.ts` | Pure footer layout: controls, cell widths, adaptive fit |
@@ -54,7 +56,7 @@ other test framework in the project.
 | `src/statusline.ts` | Pure status line: parts, colors, priority fit |
 | `src/engine.ts` | Spawning the engine: errors as `error` lines, stderr drained, Windows tree kill |
 | `src/capabilities.ts` | What this host exposes and what it does not |
-| `engine/` | The original scripts, unchanged. Do not edit without the original |
+| `engine/` | The original scripts. `listen.py` differs only in where it finds its model |
 | `odd/tasks/opencode-port.md` | The tracking document: specs, tasks, evidence, log |
 | `tests/` | `bun test` suites, one per module |
 
@@ -83,15 +85,29 @@ anything outside this list without checking it first.
   `variant.list`, `session.compact`, `session.new`, `location.reload`,
   `app.exit`. `keymap.commands()` lists them. The footer uses these for paste,
   clear, send, the model, the effort, compact, new, reload and exit.
-- **No call reads the prompt text.** Text goes in as a paste does: on the
-  system clipboard, then `prompt.paste`. Dictation is delivered that way.
+- **The prompt's text is reachable through the renderer.** While the prompt
+  has the focus, `renderer.currentFocusedRenderable` is its text field:
+  `plainText` reads the draft, `setText(text)` replaces it and
+  `insertText(text)` writes at the cursor. The pen and the dictation use it;
+  the clipboard and `prompt.paste` are the fallback.
+- **The plan's usage windows**: `client.usage.limits({})` answers
+  `data.go.rolling` (the 5-hour window), `weekly` and `monthly`, each with
+  `percent` and `resetsAt` in milliseconds. The status line asks every minute.
+- **The selection**: `renderer.getSelection()?.getSelectedText()`.
 - **Session data**: `data.session.get(id)` (model, cost, tokens, time),
   `data.session.message.list(id)` (each assistant message has `tokens`),
   `data.location.model.list()` (`name`, `limit.context`),
   `data.location.vcs.info()`, `app.version`. The status line is drawn from these.
 - **Layout**: `prompt.footer` is one row; a sibling placed `before` it lands in
-  the same row. Two rows need one claim that renders a column. On the home
-  screen the prompt is narrow and centered, so both rows go `before: "home.footer"`.
+  the same row. The port replaces `prompt.footer` whole with a column (status
+  line, then controls), so nothing of the host is beside it. A menu is drawn
+  in `session.composer.top`. On the home screen the prompt is narrow and
+  centered, so menu and rows go `before: "home.footer"`. A slot input is
+  reactive: read it inside JSX (`<Show when={input.sessionID}>`), never once
+  in the render body.
+- **Menus are the port's own boxes**, not host dialogs: a bordered `<box>`
+  with `title`, and a `<box onMouseUp>` per control. Escape closes the menu
+  through a keymap command enabled only while one is open.
 - **Available and used**: `storage.store` (durable), `storage.memory`
   (ephemeral), `ui.dialog.select/alert/confirm/prompt`, `ui.toast.show`,
   `ui.model.current()`, `ui.model.variant.list/set`, `ui.router.navigate`,
@@ -101,29 +117,37 @@ anything outside this list without checking it first.
 
 ## Deliberate differences from the original
 
-- The footer is click-driven like the original, and the same actions are also
-  reachable by name (`/speedy on`, `voces`, `historial`, `dictado`, `copiar`, `pulir`,
-  `modelo`, `sesiones`, `redes`, `leer`) and through palette commands.
-- The original rewrites long or foreign-language replies with a model before
-  reading them. That rewrite is **not** ported: replies are read as written.
-- The status line has no 5-hour and weekly limits: those are Claude
-  subscription figures the host does not have.
 - The model and the effort open the host's own lists, which are the only way
   to change the model.
+- The original rewrites long or foreign-language replies with a model before
+  reading them. That rewrite is **not** ported: replies are read as written,
+  with the voice of the language chosen.
+- The status line is drawn by the plugin above its controls; its switch in
+  the settings hides it. The 5-hour and weekly windows are the OpenCode Go
+  plan's, and are absent on another plan.
+- A network has one account; the original allows several.
+- A user name is edited in the host's prompt dialog, not in a field of the menu.
+- With no environment of its own, the engine runs with the one the Claude
+  Code plugin installed (`~/.claude/speedy-code`), Python and dictation model.
 
 ## Open work
 
-1. **Framed menus.** The original opens its menus (voices by language and
-   gender, kept audios, settings with accounts and the bar order) as framed
-   panels above the prompt; this port opens the host's dialogs, with fewer
-   choices. Also not ported: the pasted-image history (👁️), the microphone
-   picker (▾) and correcting the draft with the pen (it polishes the reply).
-2. **Live verification.** Synthesis, playback and dictation were never run
-   against a real speaker or microphone: `~/.config/opencode/speedy-code/venv`
-   and the models do not exist in the development environment. Those paths are
-   covered by contract tests only.
+1. **Pasted-image history (👁️).** The host gives no list of the images pasted
+   into a session, so the menu that shows them and pastes one again is not ported.
+2. **Narration voice report.** The maintainer heard a female English voice
+   once while `Victor · ES` was chosen. It did not reproduce; every narration
+   now appends its voice to `~/.config/opencode/speedy-code/narrations.log`.
 3. **Remote.** No remote URL yet, so the port has never been cloned or pulled
    anywhere.
+
+## Verifying in the real TUI
+
+The host can be driven without a person: run `opencode` in a pseudo terminal
+(pywinpty on Windows), feed the output to a terminal emulator (pyte) and send
+SGR mouse reports (`ESC [ < 0 ; x ; y M` then `m`). Every click described in
+the log was verified that way. Editing `src/` reloads the plugin in every
+running TUI at once: work in a separate worktree and fast-forward this one
+only when typecheck and tests pass.
 
 ## Rules for changes here
 

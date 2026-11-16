@@ -23,7 +23,10 @@ describe("cross-platform setup contract", () => {
     expect(listener).toContain(
       'os.path.join(os.path.expanduser("~"), ".config", "opencode", "speedy-code", "models", MODEL_FILE)',
     )
-    expect(listener).not.toContain('".claude", "speedy-code", "models"')
+    // The Claude Code plugin's model is only a fallback, taken when this root has none.
+    expect(listener.indexOf("if not os.path.exists(MODEL_PATH):")).toBeLessThan(
+      listener.indexOf('".claude", "speedy-code", "models"'),
+    )
   })
 
   test("retains the upstream MIT attribution", async () => {

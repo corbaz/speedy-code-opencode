@@ -41,6 +41,11 @@ PAUSE_SECONDS = 0.8
 MIN_SPEECH_SECONDS = 0.2
 MODEL_FILE = "nemotron-3.5-asr-streaming-0.6b-Q8_0.gguf"
 MODEL_PATH = os.path.join(os.path.expanduser("~"), ".config", "opencode", "speedy-code", "models", MODEL_FILE)
+# The Claude Code plugin keeps the same model: where it is installed and this one is not, that one is used.
+if not os.path.exists(MODEL_PATH):
+    _CLAUDE_MODEL = os.path.join(os.path.expanduser("~"), ".claude", "speedy-code", "models", MODEL_FILE)
+    if os.path.exists(_CLAUDE_MODEL):
+        MODEL_PATH = _CLAUDE_MODEL
 # The variant of each language the model is asked for: Latin American Spanish over Spain's.
 PREFERRED = {"es": "es-US", "en": "en-US", "pt": "pt-BR", "fr": "fr-FR"}
 

@@ -5,6 +5,7 @@ import {
   STATUS_COLORS,
   formatCost,
   formatDuration,
+  formatReset,
   formatTokens,
   priorityOf,
   statusLine,
@@ -85,6 +86,37 @@ describe("statusLine", () => {
 
   test("with nothing known it still draws zeros", () => {
     expect(text(statusLine({}, 0, levels))).toBe(" » ◆  │ ⏱  0m │ in 0 out 0 caché 0 │ ctx: ▱▱▱▱ 0% │ sesión $0.00")
+  })
+})
+
+describe("limits", () => {
+  const now = new Date(2026, 10, 16, 10, 0).getTime()
+  const limits = {
+    five_hour: { percent: 1, resetsAt: new Date(2026, 10, 16, 13, 40).getTime() },
+    seven_day: { percent: 0, resetsAt: new Date(2026, 10, 22, 13, 0).getTime() },
+  }
+
+  test("the 5-hour and weekly windows close the line, with when each starts over", () => {
+    expect(text(statusLine({ ...input, limits, now }, 0, levels))).toEndWith(
+      " │ sesión $2.04 │ 5hs ▱▱▱▱ 1% ↻ hoy 13:40 │ semana ▱▱▱▱ 0% ↻ Dom 13:00",
+    )
+  })
+
+  test("a narrow terminal keeps the windows short before it drops a part", () => {
+    expect(text(statusLine({ ...input, limits, now }, 62, levels))).toBe(
+      "v2.3.0 ◆ GLM-5.3 · high │ 5hs ▱▱▱▱ 1% │ semana ▱▱▱▱ 0%",
+    )
+  })
+
+  test("a window turns red at the saved level and warns", () => {
+    const line = statusLine({ ...input, limits: { five_hour: { percent: 95 } }, now }, 0, levels)
+    expect(text(line)).toContain("5hs ▰▰▰▰ 95% ⚠ ")
+    expect(line.find((run) => run.text === " 95%")?.color).toBe(STATUS_COLORS.red)
+  })
+
+  test("reset times are told from today", () => {
+    expect(formatReset(new Date(2026, 10, 17, 9, 5).getTime(), now)).toBe("mañana 09:05")
+    expect(formatReset(undefined, now)).toBe("")
   })
 })
 

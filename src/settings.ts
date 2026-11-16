@@ -130,6 +130,8 @@ export interface SpeedySettings {
   socials: Record<string, string>
   barLevels: BarLevels
   barOrder: BarPart[]
+  /** Whether the status line is drawn over the controls. */
+  statusBar: boolean
 }
 
 export const DEFAULT_SETTINGS: SpeedySettings = {
@@ -139,6 +141,7 @@ export const DEFAULT_SETTINGS: SpeedySettings = {
   socials: { ...DEFAULT_SOCIALS },
   barLevels: { ...DEFAULT_LEVELS },
   barOrder: [...DEFAULT_ORDER],
+  statusBar: true,
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -221,6 +224,7 @@ export function settingsFromSaved(saved: unknown): SpeedySettings {
     socials,
     barLevels: normalizeLevels(saved.barLevels),
     barOrder: barOrderOf(saved.barOrder),
+    statusBar: typeof saved.statusBar === "boolean" ? saved.statusBar : DEFAULT_SETTINGS.statusBar,
   }
 }
 

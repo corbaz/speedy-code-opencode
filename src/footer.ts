@@ -47,6 +47,7 @@ export const FOOTER_RANKS: Readonly<Record<string, number>> = {
   reload: 2,
   history: 3,
   mic: 3,
+  mics: 3,
   narrator: 4,
   socials: 5,
 }
@@ -177,6 +178,8 @@ export interface FooterControl extends FooterGroup {
   readonly compactText?: string
   /** What clicking it runs; absent on a control that is only decoration. */
   readonly id?: string
+  /** Its label in the more menu, where it has room for its name. */
+  readonly panel?: string
 }
 
 /** One network drawn as a badge, like the original footer draws the linked ones. */
@@ -209,9 +212,28 @@ export function modelFamily(model: string): string {
   return parts.length > 1 ? (parts[1] as string) : model
 }
 
+/** What each control is called in the more menu. */
+export const PANEL_LABELS: Readonly<Record<string, string>> = {
+  copy: " 📋 copiar ",
+  paste: " 📥 pegar ",
+  image: " 🖼️ imagen ",
+  clear: " 🗑️ borrar ",
+  compact: " 🗜️ compactar ",
+  narrator: " 🔊 narrador ",
+  play: " ⏵ leer de nuevo ",
+  history: " 📎 audios y selección ",
+  mic: " 🎙️ dictar ",
+  mics: " ▾ micrófono ",
+  polish: " 🖋️ corregir ",
+  send: " ⏎ enviar ",
+  new: " + conversación nueva ",
+  reload: " 🔄 recargar ",
+  settings: " ⚙️ configuración ",
+}
+
 /** One control, sized from the label it draws. */
 function control(id: string, name: string, text: string, color: string, compactText?: string): FooterControl {
-  const full = { name, id, text, color, width: cells(text) }
+  const full = { name, id, text, color, width: cells(text), panel: PANEL_LABELS[name] }
   return compactText === undefined
     ? full
     : { ...full, compactText, compactWidth: cells(compactText) }
@@ -263,6 +285,7 @@ export function footerControls(input: FooterInput): FooterControl[] {
   controls.push(control("history", "history", " 📎 ", input.narrator ? "#ffd43b" : DISABLED_COLOR))
 
   controls.push(control("mic", "mic", ` ${mic.glyph} `, mic.color))
+  controls.push(control("mics", "mics", "▾ ", MIC_GLYPHS.off.color))
   controls.push(control("polish", "polish", input.polishing ? " ⏳ " : " 🖋️ ", "#da77f2"))
   controls.push(control("send", "send", " ⏎ ", "#51cf66"))
   controls.push(control("new", "new", " + ", "#51cf66"))

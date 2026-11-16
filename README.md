@@ -17,48 +17,50 @@ reached by name, through `/speedy <word>` or the palette. Both Spanish and Engli
 
 | Command | What it does |
 | --- | --- |
-| `/speedy` or `/speedy ajustes` | Settings menu: narrator, voice, status bar, reset |
+| `/speedy` or `/speedy ajustes` | Settings menu: installer, status bar, networks |
 | `/speedy on` / `/speedy off` | Turns narration on or off |
 | `/speedy stop` | Stops whatever is playing and ends a dictation |
 | `/speedy pausa` / `/speedy seguir` | Pauses and resumes the sound under way |
-| `/speedy voces` | Chooses the language, and with it the voice |
-| `/speedy historial` | Plays back one of the narrations kept on disk |
+| `/speedy voces` | Voice menu: a tab per language, women or men, every voice |
+| `/speedy historial` | Audio menu: read the selection, play a kept narration, clear |
 | `/speedy dictado` | Starts and closes the microphone |
 | `/speedy copiar` | Copies the last reply |
-| `/speedy pulir` | Cleans up the last reply with Groq |
-| `/speedy modelo` | Picks a variant of the selected model |
+| `/speedy pulir` | Corrects what is written in the prompt, with Groq |
+| `/speedy modelo` | Opens the model list |
 | `/speedy sesiones` | Switches to another session |
-| `/speedy redes` | Copies the link of one of your social profiles |
+| `/speedy redes` | Settings menu, on the networks |
 
-Palette commands mirror them: `speedy-code: ajustes`, `alternar narrador`,
-`detener la narración`, `historial de narraciones`, `copiar la respuesta`,
-`pulir la respuesta`, `variante del modelo`, `sesiones`, `redes` and `dictado`.
+Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
+`alternar narrador`, `dictado`, `audios guardados`, `copiar la respuesta`,
+`corregir lo escrito` and `detener la narración`. Escape closes a menu.
 
 ## What the port does
 
-- A `speedy-code` footer above the prompt shows the narration state, the model,
-  the language, the narrator switch, the microphone and the settings entry. It
-  shortens and sheds its controls as the terminal narrows.
+- Two rows under the prompt, and nothing of the host beside them: the status
+  line (folder, branch, version, model, effort, time, tokens, context, cost
+  and the plan's 5-hour and weekly windows) and the controls, in the
+  original's order. Both shed what does not fit as the terminal narrows; the
+  controls left out go to the `⋯` menu.
+- Every control takes a click. Menus open framed above the prompt, their
+  title on the border: voices, kept audios, microphones and settings.
 - The reply of the session on screen is read aloud when the narrator is on,
   through the original engine, with pause and resume. Every narration is kept
   under `~/.config/opencode/speedy-code/audio` and can be played back later.
-- Every language offered ships a voice, so choosing one is never silently mute.
-- Preferences survive a restart in one durable store entry.
 - Dictation runs the original streaming model on this machine: nothing is sent
-  anywhere. What it hears is copied to the terminal's clipboard.
+  anywhere. What it hears is written into the prompt.
+- The pen corrects what is written in the prompt.
+- Paste, clear, send, new conversation, compact, reload, exit, the model and
+  the effort run the host's own commands.
+- Preferences survive a restart in one durable store entry.
 
 ## Known limitations
 
-- Dictated words go into the prompt as a paste does: through the system
-  clipboard, which they replace.
-- The original opens its menus as framed panels above the prompt. Here a click
-  opens the host's own dialog. The status line has no 5-hour and weekly limits.
-- The pasted-image history, the microphone picker and correcting the draft
-  with the pen are not ported; the pen polishes the last reply.
+- The pasted-image history (👁️) is not ported: the host does not list the
+  images pasted into a session.
 - A long reply is read as written; the original's model rewrite before narrating
   is not ported.
-- The status-bar thresholds are stored and editable, but the bar itself is drawn
-  by the host, so the plugin does not paint it.
+- The 5-hour and weekly windows are the OpenCode Go plan's; another plan shows none.
+- A network keeps one account.
 
 ## Install on Windows
 

@@ -23,6 +23,8 @@ export const STATUS_COLORS = {
   output: "#ff87af",
   cache: "#afafff",
   cost: "#ffd700",
+  five: "#87afff",
+  week: "#d7afff",
   label: "#8a8a8a",
   dim: "#585858",
   green: "#87d787",
@@ -67,6 +69,30 @@ export interface StatusInput {
   readonly cacheWriteTokens?: number
   readonly contextSize?: number
   readonly costUsd?: number
+  /** The plan's windows, when the host knows them: 0% is a limit too. */
+  readonly limits?: { readonly five_hour?: StatusLimit; readonly seven_day?: StatusLimit }
+  /** The moment the reset times are told from; now when absent. */
+  readonly now?: number
+}
+
+/** One usage window: how much of it is used, and when it starts over, in milliseconds. */
+export interface StatusLimit {
+  readonly percent: number
+  readonly resetsAt?: number
+}
+
+const DAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"] as const
+
+/** `hoy 13:40`, `mañana 09:00`, `Dom 13:00`: local time. */
+export function formatReset(at: number | undefined, now = Date.now()): string {
+  if (!at) return ""
+  const when = new Date(at)
+  const time = `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`
+  const day = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const days = Math.round((day(when) - day(new Date(now))) / 86400000)
+  if (days === 0) return `hoy ${time}`
+  if (days === 1) return `mañana ${time}`
+  return `${DAYS[when.getDay()]} ${time}`
 }
 
 /** One decimal at most, none when it is `.0`. */
@@ -168,7 +194,12 @@ export function statusLine(
     core.push(run(" · ", C.label), run(input.effort, EFFORT_COLORS[input.effort] ?? C.label))
   }
 
-  const parts: Array<{ key: string; runs: Run[]; shown?: boolean }> = [
+  const meter = (percent: number, color: string): Run[] => {
+    const filled = Math.round((Math.min(100, Math.max(0, percent)) / 100) * 4)
+    return [run("▰".repeat(filled), color), run("▱".repeat(4 - filled), C.dim)]
+  }
+
+  const parts: Array<{ key: string; runs: Run[]; short?: Run[]; shown?: Run[] }> = [
     { key: "folder", runs: folder },
     { key: "core", runs: core },
     { key: "time", runs: [run(`⏱  ${formatDuration(input.durationMs)}`, C.time)] },
@@ -177,13 +208,39 @@ export function statusLine(
     { key: "cost", runs: part("sesión", formatCost(input.costUsd), C.cost) },
   ]
 
+  for (const [key, label, color] of [
+    ["five_hour", "5hs", C.five],
+    ["seven_day", "semana", C.week],
+  ] as const) {
+    const limit = input.limits?.[key]
+    if (!limit || !Number.isFinite(limit.percent)) continue
+    const usedLimit = Math.round(limit.percent)
+    const limitTone = usedLimit >= levels.limitRed ? C.red : usedLimit >= levels.limitYellow ? C.yellow : C.green
+    const short: Run[] = [run(`${label} `, color), ...meter(usedLimit, limitTone), run(` ${usedLimit}%`, limitTone)]
+    if (usedLimit >= levels.limitRed) short.push(run(" ⚠ ", C.red))
+    const reset = formatReset(limit.resetsAt, input.now)
+    parts.push({ key, short, runs: reset ? [...short, run(` ↻ ${reset}`, C.label)] : short })
+  }
+
+  // The parts in rank order, each in its short form, until one does not fit;
+  // then the limits get their reset time back with the room left.
   const room = columns > 0 ? columns - 4 : Number.POSITIVE_INFINITY
+  const ranked = [...parts].sort((x, y) => rank(x.key) - rank(y.key))
   let taken = 0
-  for (const one of [...parts].sort((x, y) => rank(x.key) - rank(y.key))) {
+  for (const one of ranked) {
+    const form = one.short ?? one.runs
     const gap = taken ? 3 : 0
-    if (taken > 0 && taken + gap + runsWidth(one.runs) > room) break
-    one.shown = true
-    taken += gap + runsWidth(one.runs)
+    if (taken > 0 && taken + gap + runsWidth(form) > room) break
+    one.shown = form
+    taken += gap + runsWidth(form)
+  }
+  for (const one of ranked) {
+    if (!one.shown || !one.short) continue
+    const more = runsWidth(one.runs) - runsWidth(one.short)
+    if (taken + more <= room) {
+      one.shown = one.runs
+      taken += more
+    }
   }
 
   const line: Run[] = []
@@ -192,7 +249,7 @@ export function statusLine(
     if (index > 0) {
       line.push(shown[index - 1]?.key === "folder" ? run(" » ", C.dim) : run(" │ ", C.dim))
     }
-    line.push(...one.runs)
+    line.push(...(one.shown ?? one.runs))
   })
   return line
 }

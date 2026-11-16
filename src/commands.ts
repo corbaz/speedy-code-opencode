@@ -1,8 +1,7 @@
 /**
  * What `/speedy` does with its argument.
  *
- * The original footer was click-driven: each control sent its own message. The
- * OpenCode footer has no pointer surface, so the same controls are reached by
+ * Every footer control takes a click; the same actions are also reached by
  * naming them. This router is pure so the documented keywords are pinned by
  * tests instead of living only in TUI wiring.
  */
