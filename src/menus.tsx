@@ -496,6 +496,44 @@ function MoreMenu(props: { api: MenuApi }) {
   )
 }
 
+/** The color of a new session: the footer's own `+`. */
+const NEW_SESSION_COLOR = "#51cf66"
+
+/** The dialog `+` opens: the new session's name, typed in a framed field; the host closes it on esc. */
+export function NewSessionDialog(props: { onSubmit: (name: string) => void; onCancel: () => void }) {
+  let field: { value?: string; plainText?: string } | undefined
+  const typed = () => field?.value ?? field?.plainText ?? ""
+  return (
+    <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingBottom={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <Label text="✚ Nueva sesión" color={NEW_SESSION_COLOR} bold />
+        <Btn label="esc" dim onPress={props.onCancel} />
+      </box>
+      <box marginTop={1}>
+        <Label text="Nombre de la pestaña" color="#74c0fc" bold />
+      </box>
+      <box border borderStyle="rounded" borderColor={NEW_SESSION_COLOR} paddingLeft={1} paddingRight={1}>
+        <input
+          ref={(one: unknown) => {
+            field = one as typeof field
+          }}
+          focused
+          placeholder="vacío: la nombra OpenCode"
+          placeholderColor="#868e96"
+          textColor="#ffd43b"
+          cursorColor={NEW_SESSION_COLOR}
+          onSubmit={() => props.onSubmit(typed())}
+        />
+      </box>
+      <box flexDirection="row" marginTop={1}>
+        <Btn label=" ⏎ crear " color="#101113" bg={NEW_SESSION_COLOR} bold onPress={() => props.onSubmit(typed())} />
+        <Label text="  " />
+        <Btn label=" esc cancelar " color="#ff6b6b" onPress={props.onCancel} />
+      </box>
+    </box>
+  )
+}
+
 /** The networks menu: every account with a user name, to open its profile; nothing is set here. */
 function SocialsMenu(props: { api: MenuApi }) {
   const api = props.api

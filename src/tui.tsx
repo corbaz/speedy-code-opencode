@@ -26,6 +26,7 @@ import {
   DraftImages,
   INITIAL_MENU,
   MenuFrame,
+  NewSessionDialog,
   SELECTION_CLIP,
   type KeptImage,
   type MenuApi,
@@ -484,10 +485,27 @@ export default Plugin.define({
     /** +: asks for the session's name, then opens it under that title; an empty name is the host's own. */
     const newSession = async () => {
       const choice = newSessionChoice(
-        await context.ui.dialog.prompt({
-          title: "speedy-code · nueva sesión",
-          description: "Nombre de la sesión (vacío: lo pone OpenCode)",
-          placeholder: "nombre",
+        await new Promise<string | undefined>((resolve) => {
+          // Whichever comes first answers: the name sent, or the dialog closed.
+          let answered = false
+          const answer = (name: string | undefined) => {
+            if (answered) return
+            answered = true
+            resolve(name)
+            if (name !== undefined) context.ui.dialog.clear()
+          }
+          context.ui.dialog.show(
+            () => (
+              <NewSessionDialog
+                onSubmit={(name) => answer(name)}
+                onCancel={() => {
+                  answer(undefined)
+                  context.ui.dialog.clear()
+                }}
+              />
+            ),
+            () => answer(undefined),
+          )
         }),
       )
       if (choice.kind === "none") return
