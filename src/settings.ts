@@ -132,6 +132,8 @@ export interface SpeedySettings {
   barOrder: BarPart[]
   /** Whether the status line is drawn over the controls. */
   statusBar: boolean
+  /** Whether what the Claude Code plugin keeps was already brought in. */
+  imported: boolean
 }
 
 export const DEFAULT_SETTINGS: SpeedySettings = {
@@ -142,6 +144,7 @@ export const DEFAULT_SETTINGS: SpeedySettings = {
   barLevels: { ...DEFAULT_LEVELS },
   barOrder: [...DEFAULT_ORDER],
   statusBar: true,
+  imported: false,
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -225,7 +228,30 @@ export function settingsFromSaved(saved: unknown): SpeedySettings {
     barLevels: normalizeLevels(saved.barLevels),
     barOrder: barOrderOf(saved.barOrder),
     statusBar: typeof saved.statusBar === "boolean" ? saved.statusBar : DEFAULT_SETTINGS.statusBar,
+    imported: saved.imported === true,
   }
+}
+
+/**
+ * What the Claude Code plugin keeps, laid over these settings: its voices, its
+ * microphone, its networks and its status line levels. Anything it lacks or
+ * holds in another shape is left as it is here.
+ */
+export function importClaude(settings: SpeedySettings, claude: unknown): SpeedySettings {
+  const next = cloneSettings(settings)
+  next.imported = true
+  if (!isRecord(claude)) return next
+  for (const [key, value] of Object.entries(isRecord(claude.picks) ? claude.picks : {})) {
+    if (typeof value !== "string" || !value.trim()) continue
+    if (key === "active" ? LANGUAGE_CODES.has(value) : LANGUAGE_CODES.has(key)) next.picks[key] = value
+  }
+  for (const [key, value] of Object.entries(isRecord(claude.socials) ? claude.socials : {})) {
+    if (typeof value === "string" && !key.includes("#")) next.socials[key] = value.trim().replace(/^@/, "")
+  }
+  if (typeof claude.mic === "string") next.mic = claude.mic
+  if (isRecord(claude.barLevels)) next.barLevels = normalizeLevels({ ...next.barLevels, ...claude.barLevels })
+  if (Array.isArray(claude.barOrder)) next.barOrder = barOrderOf(claude.barOrder)
+  return next
 }
 
 /** A fresh copy, so a caller never mutates the shared defaults. */

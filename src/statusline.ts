@@ -12,6 +12,7 @@ import type { BarLevels } from "./settings"
 export interface Run {
   readonly text: string
   readonly color: string
+  readonly bold?: boolean
 }
 
 export const STATUS_COLORS = {
@@ -161,7 +162,7 @@ export function statusLine(
 
   let cwd = input.cwd ?? ""
   if (input.home && cwd.toLowerCase().startsWith(input.home.toLowerCase())) cwd = `~${cwd.slice(input.home.length)}`
-  const folder: Run[] = [run(cwd, C.folder)]
+  const folder: Run[] = [{ ...run(cwd, C.folder), bold: true }]
   if (input.branch) folder.push(run(` ⎇ ${input.branch}`, C.branch))
 
   const tokens: Run[] = [
@@ -189,7 +190,7 @@ export function statusLine(
 
   const core: Run[] = []
   if (input.version) core.push(run(`v${input.version} `, C.time))
-  core.push(run(`◆ ${input.model ?? ""}`, C.model))
+  core.push({ ...run(`◆ ${input.model ?? ""}`, C.model), bold: true })
   if (input.effort) {
     core.push(run(" · ", C.label), run(input.effort, EFFORT_COLORS[input.effort] ?? C.label))
   }
@@ -205,7 +206,7 @@ export function statusLine(
     { key: "time", runs: [run(`⏱  ${formatDuration(input.durationMs)}`, C.time)] },
     { key: "tokens", runs: tokens },
     { key: "context", runs: context },
-    { key: "cost", runs: part("sesión", formatCost(input.costUsd), C.cost) },
+    { key: "cost", runs: [run("sesión ", C.label), { ...run(formatCost(input.costUsd), C.cost), bold: true }] },
   ]
 
   for (const [key, label, color] of [
@@ -251,5 +252,6 @@ export function statusLine(
     }
     line.push(...(one.shown ?? one.runs))
   })
-  return line
+  // A stretch with nothing in it would still take a cell when drawn.
+  return line.filter((one) => one.text !== "")
 }

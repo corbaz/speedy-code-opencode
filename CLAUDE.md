@@ -72,8 +72,12 @@ anything outside this list without checking it first.
   `sidebar.content`, `sidebar.footer`, `session.panel`.
   - A **bare `<text>` at a slot root takes no room**: wrap slot content in a
     `<box>`.
-  - **`<text content={styledText}>` stringifies to `[object Object]`**: build
-    colored runs with `<span fg=...>` children instead.
+  - **`<text content={styledText}>` stringifies to `[object Object]`**, and a
+    `<span fg>` inside a text is drawn in the text's own color: every color
+    needs its own `<text fg>`, laid out in a row box.
+  - **An element built once cannot be shown twice.** JSX kept in a constant
+    and placed under `<Show>` is gone after its first unmount: build it in a
+    function called inside the `<Show>`.
   - **An ancestor replacement beats a descendant one.** Replacing
     `prompt.footer.status` is suppressed by whatever claims `prompt.footer`.
 - **Slot content takes clicks.** The mouse is on by default (`cli.json`
@@ -119,9 +123,17 @@ anything outside this list without checking it first.
 
 - The model and the effort open the host's own lists, which are the only way
   to change the model.
-- The original rewrites long or foreign-language replies with a model before
-  reading them. That rewrite is **not** ported: replies are read as written,
-  with the voice of the language chosen.
+- The original rewrites long or foreign-language replies with Haiku before
+  reading them. Here the same rewrite goes through Groq (the pen's key): a
+  reply in another language is translated, a long one is told short. Without
+  the key the reply is read as written. The reply is read once, when the
+  turn ends (`session.execution.succeeded`).
+- A pasted image is kept by the port itself, from the clipboard, when a paste
+  control is clicked: the host does not list a session's images. An image
+  pasted with the keyboard is not kept. An image is viewed in the system's
+  viewer.
+- On first run the voices, the microphone, the networks and the status line
+  levels are read from the Claude Code plugin's store, once (`imported`).
 - The status line is drawn by the plugin above its controls; its switch in
   the settings hides it. The 5-hour and weekly windows are the OpenCode Go
   plan's, and are absent on another plan.
@@ -132,8 +144,8 @@ anything outside this list without checking it first.
 
 ## Open work
 
-1. **Pasted-image history (👁️).** The host gives no list of the images pasted
-   into a session, so the menu that shows them and pastes one again is not ported.
+1. **Several accounts per network.** The original allows them; here a
+   network keeps one.
 2. **Narration voice report.** The maintainer heard a female English voice
    once while `Victor · ES` was chosen. It did not reproduce; every narration
    now appends its voice to `~/.config/opencode/speedy-code/narrations.log`.

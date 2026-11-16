@@ -32,6 +32,7 @@ export const FOOTER_RANKS: Readonly<Record<string, number>> = {
   copy: 0,
   paste: 0,
   image: 0,
+  images: 0,
   polish: 0,
   send: 0,
   new: 0,
@@ -180,6 +181,8 @@ export interface FooterControl extends FooterGroup {
   readonly id?: string
   /** Its label in the more menu, where it has room for its name. */
   readonly panel?: string
+  /** Drawn bold, as the original draws the networks, the model and the effort. */
+  readonly bold?: boolean
 }
 
 /** One network drawn as a badge, like the original footer draws the linked ones. */
@@ -198,6 +201,8 @@ export interface FooterInput {
   /** The variant in force, shown beside the model as the original shows effort. */
   readonly effort?: string
   readonly voice?: string
+  /** The color of the language narrated in: the voice is drawn in it. */
+  readonly voiceColor?: string
   /** The language's short code, as the original writes it (`ES`). */
   readonly language?: string
   /** True while the wand is working, so its glyph says so. */
@@ -217,6 +222,7 @@ export const PANEL_LABELS: Readonly<Record<string, string>> = {
   copy: " 📋 copiar ",
   paste: " 📥 pegar ",
   image: " 🖼️ imagen ",
+  images: " 👁️ ver imágenes ",
   clear: " 🗑️ borrar ",
   compact: " 🗜️ compactar ",
   narrator: " 🔊 narrador ",
@@ -251,7 +257,7 @@ export function footerControls(input: FooterInput): FooterControl[] {
   const controls: FooterControl[] = []
 
   for (const social of input.socials ?? []) {
-    controls.push(control(`social:${social.id}`, `social:${social.id}`, ` ${social.badge} `, social.color))
+    controls.push({ ...control(`social:${social.id}`, `social:${social.id}`, ` ${social.badge} `, social.color), bold: true })
   }
   if ((input.socials?.length ?? 0) > 0) {
     controls.push({ name: "divider", text: "│", color: DISABLED_COLOR, width: cells("│") })
@@ -260,22 +266,26 @@ export function footerControls(input: FooterInput): FooterControl[] {
   controls.push(control("copy", "copy", " 📋 ", "#adb5bd"))
   controls.push(control("paste", "paste", " 📥 ", "#adb5bd"))
   controls.push(control("image", "image", " 🖼️ ", "#adb5bd"))
+  controls.push(control("images", "images", " 👁️ ", "#74c0fc"))
   controls.push(control("clear", "clear", " 🗑️ ", "#adb5bd"))
 
   if (input.model) {
     controls.push({ name: "bar", text: "│", color: DISABLED_COLOR, width: cells("│") })
     const full = input.effort ? ` ${input.model} ` : ` ${input.model} ▾ `
     const short = ` ${modelFamily(input.model)} ▾ `
-    controls.push(control("model", "model", full, "#ffa94d", short))
+    controls.push({ ...control("model", "model", full, "#ffa94d", short), bold: true })
   }
   if (input.effort) {
-    controls.push(control("effort", "effort", `· ${input.effort} ▾ `, EFFORT_TONES[input.effort] ?? "#adb5bd"))
+    controls.push({
+      ...control("effort", "effort", `· ${input.effort} ▾ `, EFFORT_TONES[input.effort] ?? "#adb5bd"),
+      bold: true,
+    })
   }
 
   const language = input.language ? ` · ${input.language}` : ""
   const voice = ` 🗣  ${input.voice ?? "Español"}${language} ▾`
   const voiceShort = input.language ? ` 🗣  ${input.language} ▾` : undefined
-  controls.push(control("voice", "voice", voice, "#adb5bd", voiceShort))
+  controls.push(control("voice", "voice", voice, input.voiceColor ?? "#adb5bd", voiceShort))
 
   controls.push(control("compact", "compact", " 🗜️ ", "#ff6b6b"))
 

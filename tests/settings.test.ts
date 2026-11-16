@@ -224,3 +224,29 @@ describe("voiceShortName", () => {
     expect(voiceShortName("")).toBe("")
   })
 })
+
+describe("importClaude", () => {
+  test("brings the voices, the microphone, the networks and the levels over", async () => {
+    const { importClaude, DEFAULT_SETTINGS, cloneSettings } = await import("../src/settings")
+    const next = importClaude(cloneSettings(DEFAULT_SETTINGS), {
+      picks: { es: "es-PR-VictorNeural", en: "en-AU-NatashaNeural", active: "es", xx: "nope" },
+      mic: "Micrófono (G432 Gaming Headset)",
+      socials: { github: "@corbaz", "github#2": "otro" },
+      barLevels: { contextRed: 85 },
+    })
+    expect(next.imported).toBe(true)
+    expect(next.picks.en).toBe("en-AU-NatashaNeural")
+    expect(next.picks.xx).toBeUndefined()
+    expect(next.mic).toBe("Micrófono (G432 Gaming Headset)")
+    expect(next.socials.github).toBe("corbaz")
+    expect(next.socials["github#2"]).toBeUndefined()
+    expect(next.barLevels.contextRed).toBe(85)
+    expect(next.barLevels.contextYellow).toBe(60)
+  })
+
+  test("with nothing to read it only notes that it looked", async () => {
+    const { importClaude, DEFAULT_SETTINGS, cloneSettings } = await import("../src/settings")
+    const next = importClaude(cloneSettings(DEFAULT_SETTINGS), undefined)
+    expect(next).toEqual({ ...cloneSettings(DEFAULT_SETTINGS), imported: true })
+  })
+})

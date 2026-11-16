@@ -40,12 +40,29 @@ describe("socialUrl", () => {
     )
   })
 
-  test("keeps the characters a handle can carry", () => {
-    expect(socialUrl("x", "a b")).toBe("https://x.com/a%20b")
+  test("builds no link from what no user name holds, as the original does", () => {
+    expect(socialUrl("x", "a b")).toBe("")
+    expect(socialUrl("x", "chipy_corbaz")).toBe("https://x.com/chipy_corbaz")
   })
 
   test("returns nothing for an unknown network or an empty handle", () => {
     expect(socialUrl("myspace", "corbaz")).toBe("")
     expect(socialUrl("github", "   ")).toBe("")
+  })
+})
+
+describe("a user name as people write it", () => {
+  test("a leading @ and a gmail address are the user name alone", async () => {
+    const { socialUrl } = await import("../src/socials")
+    expect(socialUrl("github", "@corbaz")).toBe("https://github.com/corbaz")
+    expect(socialUrl("youtube", "@juliocorbaz")).toBe("https://www.youtube.com/@juliocorbaz")
+    expect(socialUrl("gmail", "julio.corbaz@gmail.com")).toBe(
+      "https://mail.google.com/mail/u/?authuser=julio.corbaz@gmail.com",
+    )
+  })
+
+  test("what no user name holds builds no link", async () => {
+    const { socialUrl } = await import("../src/socials")
+    expect(socialUrl("github", "a b/c")).toBe("")
   })
 })

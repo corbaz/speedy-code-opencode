@@ -53,7 +53,8 @@ export const SOCIALS: readonly Social[] = [
 /** The link of `id`'s profile for `handle`; nothing when the network has no handle. */
 export function socialUrl(id: string, handle: string): string {
   const social = SOCIALS.find((one) => one.id === id)
-  const user = handle.trim()
-  if (!social || !user) return ""
-  return social.template.replace("{u}", encodeURIComponent(user))
+  // A name as people write it: `@corbaz` and `name@gmail.com` are the user name alone.
+  const user = handle.trim().replace(/^@/, "").replace(/@gmail\.com$/i, "")
+  if (!social || !/^[\w.-]{1,100}$/.test(user)) return ""
+  return social.template.replace("{u}", user)
 }

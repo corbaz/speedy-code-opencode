@@ -142,6 +142,7 @@ describe("footerControls", () => {
       "copy",
       "paste",
       "image",
+      "images",
       "clear",
       "bar",
       "model",
@@ -166,6 +167,7 @@ describe("footerControls", () => {
       "copy",
       "paste",
       "image",
+      "images",
       "clear",
       "voice",
       "compact",
@@ -256,7 +258,7 @@ describe("footerText", () => {
 
   test("joins the shown controls in order", () => {
     const text = footerText(controls, footerFit(controls, 200))
-    expect(text.startsWith(" 📋  📥  🖼️  🗑️ │ claude-sonnet-4-5 ▾  🗣")).toBe(true)
+    expect(text.startsWith(" 📋  📥  🖼️  👁️  🗑️ │ claude-sonnet-4-5 ▾  🗣")).toBe(true)
   })
 
   test("uses the short form the fit chose", () => {

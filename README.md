@@ -49,16 +49,20 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 - Dictation runs the original streaming model on this machine: nothing is sent
   anywhere. What it hears is written into the prompt.
 - The pen corrects what is written in the prompt.
+- A reply in another language is translated before it is read, and a long
+  one is told in a few sentences, with the voice chosen.
+- An image pasted from the footer is kept: a chip over the prompt shows it,
+  and the 👁️ menu shows the last ones and pastes one again.
 - Paste, clear, send, new conversation, compact, reload, exit, the model and
   the effort run the host's own commands.
 - Preferences survive a restart in one durable store entry.
 
 ## Known limitations
 
-- The pasted-image history (👁️) is not ported: the host does not list the
-  images pasted into a session.
-- A long reply is read as written; the original's model rewrite before narrating
-  is not ported.
+- Only an image pasted with the 🖼️ or 📥 control is kept for the 👁️ menu; one
+  pasted with the keyboard is not.
+- Translating a reply and telling a long one short need `GROQ_API_KEY`;
+  without it the reply is read as written.
 - The 5-hour and weekly windows are the OpenCode Go plan's; another plan shows none.
 - A network keeps one account.
 

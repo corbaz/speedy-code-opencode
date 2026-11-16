@@ -151,3 +151,25 @@ export function guessLanguage(text: string): string {
   }
   return best
 }
+
+/** Past this length a reply is told short instead of read whole. */
+export const SHORT_ANSWER = 3000
+
+/** What turns a reply into text a voice reads, when it is not read as it is. */
+export const NARRATION_SYSTEM =
+  "You turn an assistant reply into text a speech synthesizer reads aloud. Plain sentences only: no markdown, lists, emojis or code; no URLs, file paths or hashes spelled out. Answer with the text alone."
+
+/**
+ * What to ask a model so `text` can be narrated in `lang`: nothing when it is
+ * short and already in that language, a translation when it is in another, and
+ * a few sentences telling it when it is long.
+ */
+export function narrationRequest(text: string, lang: string, target: string): { system: string; text: string } | undefined {
+  if (!text.trim()) return undefined
+  if (text.length <= SHORT_ANSWER && guessLanguage(text) === lang) return undefined
+  const ask =
+    text.length <= SHORT_ANSWER
+      ? `Translate this reply into ${target}, faithfully and completely:\n\n${text}`
+      : `Say what this reply tells, in ${target}, in two to four short sentences, in first person, speaking to the reader:\n\n${text}`
+  return { system: NARRATION_SYSTEM, text: ask }
+}

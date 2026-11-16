@@ -22,7 +22,13 @@ import { SOCIALS, socialUrl } from "./socials"
 import { distinctVoices, micName, voiceTitle, type Voice } from "./voices"
 
 /** The menu on screen; empty when none is. */
-export type MenuName = "" | "voices" | "mic" | "history" | "settings" | "more"
+export type MenuName = "" | "voices" | "mic" | "history" | "images" | "settings" | "more"
+
+/** One pasted image the port kept: its file and the moment it was pasted. */
+export interface KeptImage {
+  readonly path: string
+  readonly stamp: string
+}
 
 export type SettingsTab = "setup" | "bar" | "socials"
 
@@ -44,6 +50,10 @@ export interface MenuState {
   clips: HistoryClip[]
   /** The kept narration playing from the history menu: its path; empty when none. */
   clipNow: string
+  /** The images kept, newest first. */
+  images: KeptImage[]
+  /** The images pasted into the draft being written: a chip each over the prompt. */
+  draftImages: KeptImage[]
   settingsTab: SettingsTab
   setup: Record<string, SetupCheck>
   setupLog: string[]
@@ -62,6 +72,8 @@ export const INITIAL_MENU: MenuState = {
   mics: [],
   clips: [],
   clipNow: "",
+  images: [],
+  draftImages: [],
   settingsTab: "socials",
   setup: {},
   setupLog: [],
@@ -92,6 +104,7 @@ const COUNTRY_WIDTH = 12
 const VOICE_WIDTH = 3 + NAME_WIDTH + 1 + COUNTRY_WIDTH + 2
 const COLUMN_GAP = 2
 const PRIORITY_COLOR = "#74c0fc"
+const IMAGE_COLOR = "#74c0fc"
 const LEVEL_COLORS: Record<LevelKey, string> = {
   contextYellow: "#ffd43b",
   contextRed: "#ff6b6b",
@@ -123,6 +136,9 @@ export interface MenuApi {
   readonly pressClip: (clip: HistoryClip) => void
   readonly clearClips: () => void
   readonly pickMic: (name: string) => void
+  readonly viewImage: (image: KeptImage) => void
+  readonly pasteImage: (image: KeptImage) => void
+  readonly clearImages: () => void
   readonly systemName: string
   readonly editSocial: (id: string) => void
   readonly runSetup: () => void
@@ -379,6 +395,50 @@ function HistoryMenu(props: { api: MenuApi }) {
   )
 }
 
+/** The 👁 menu: the images kept, newest first, each with 👁️ to see it and 🖼️ to paste it again. */
+function ImagesMenu(props: { api: MenuApi }) {
+  const api = props.api
+  return (
+    <box flexDirection="column">
+      <Show
+        when={api.state.images.length > 0}
+        fallback={<Label text="  Todavía no hay imágenes en el historial." dim />}
+      >
+        <For each={api.state.images}>
+          {(image, index) => (
+            <box flexDirection="row">
+              <Btn label=" 👁️ " color={IMAGE_COLOR} bold onPress={() => api.viewImage(image)} />
+              <Btn label=" 🖼️ " color={IMAGE_COLOR} bold onPress={() => api.pasteImage(image)} />
+              <Label text={` [Imagen #${api.state.images.length - index()}] `} color={IMAGE_COLOR} bold />
+              <Label text={image.stamp} dim />
+            </box>
+          )}
+        </For>
+      </Show>
+      <box marginTop={1} flexDirection="row">
+        <Btn label=" 🗑️ limpiar historial " color="#ff6b6b" bold onPress={() => api.clearImages()} />
+      </box>
+    </box>
+  )
+}
+
+/** The images pasted into the draft, a chip each: a click shows the image. */
+export function DraftImages(props: { api: MenuApi }) {
+  const api = props.api
+  return (
+    <Show when={api.state.draftImages.length > 0}>
+      <box flexDirection="row" flexShrink={0} paddingLeft={1} columnGap={1}>
+        <For each={api.state.draftImages}>
+          {(image, index) => (
+            <Btn label={`[Imagen #${index() + 1}]`} color={IMAGE_COLOR} bold onPress={() => api.viewImage(image)} />
+          )}
+        </For>
+        <Label text="clic para ver" dim />
+      </box>
+    </Show>
+  )
+}
+
 /** The microphone menu: the system's default, then each microphone connected; the one in use marked. */
 function MicMenu(props: { api: MenuApi }) {
   const api = props.api
@@ -438,7 +498,7 @@ function SettingsMenu(props: { api: MenuApi }) {
   const narrow = () => inside() < 75
   const mark = { "": ["·", "#868e96"], working: ["…", "#ffd43b"], ok: ["✔", "#51cf66"], fail: ["✘", "#ff6b6b"] } as const
 
-  const setupTab = (
+  const setupTab = () => (
     <box flexDirection="column">
       <For each={SETUP_STEPS}>
         {([name, label]) => {
@@ -473,7 +533,7 @@ function SettingsMenu(props: { api: MenuApi }) {
 
   const nameWidth = () => Math.min(26, Math.max(10, inside() - 12))
   const sideBySide = () => !narrow() && inside() >= 38 + 12 + 4 + 3 + nameWidth() + 1 + 7
-  const barTab = (
+  const barTab = () => (
     <box flexDirection="column">
       <box flexDirection="row" marginBottom={1}>
         <Label text=" ▤  Barra speedy-code " color="#4dabf7" bold />
@@ -559,7 +619,7 @@ function SettingsMenu(props: { api: MenuApi }) {
     const per = Math.ceil(SOCIALS.length / tables())
     return Array.from({ length: tables() }, (_, index) => SOCIALS.slice(index * per, (index + 1) * per))
   }
-  const socialsTab = (
+  const socialsTab = () => (
     <box flexDirection="row" columnGap={3}>
       <For each={halves()}>
         {(part) => (
@@ -628,9 +688,9 @@ function SettingsMenu(props: { api: MenuApi }) {
           }}
         </For>
       </box>
-      <Show when={api.state.settingsTab === "setup"}>{setupTab}</Show>
-      <Show when={api.state.settingsTab === "bar"}>{barTab}</Show>
-      <Show when={api.state.settingsTab === "socials"}>{socialsTab}</Show>
+      <Show when={api.state.settingsTab === "setup"}>{setupTab()}</Show>
+      <Show when={api.state.settingsTab === "bar"}>{barTab()}</Show>
+      <Show when={api.state.settingsTab === "socials"}>{socialsTab()}</Show>
     </box>
   )
 }
@@ -644,6 +704,8 @@ export function menuHeading(open: MenuName, settings: SpeedySettings): { title: 
       return { title: "Micrófono para dictar", color: "#ff6b6b" }
     case "history":
       return { title: "📎 Audios", color: "#ffd43b" }
+    case "images":
+      return { title: "Imágenes", color: "#74c0fc" }
     case "more":
       return { title: "Más", color: "#adb5bd" }
     default:
@@ -677,6 +739,9 @@ export function MenuFrame(props: { api: MenuApi }) {
         </Show>
         <Show when={api.state.open === "history"}>
           <HistoryMenu api={api} />
+        </Show>
+        <Show when={api.state.open === "images"}>
+          <ImagesMenu api={api} />
         </Show>
         <Show when={api.state.open === "mic"}>
           <MicMenu api={api} />

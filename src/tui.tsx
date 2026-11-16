@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { appendFile, mkdir, readdir, rm, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
@@ -22,9 +22,11 @@ import {
 } from "./footer"
 import { ClipPlayer, listClips, type HistoryClip } from "./history"
 import {
+  DraftImages,
   INITIAL_MENU,
   MenuFrame,
   SELECTION_CLIP,
+  type KeptImage,
   type MenuApi,
   type MenuName,
   type MenuState,
@@ -35,8 +37,10 @@ import { createPolisher } from "./polish"
 import {
   DEFAULT_SETTINGS,
   SPEEDY_STORE_KEY,
+  LANGUAGES,
   adjustLevel,
   cloneSettings,
+  importClaude,
   languageName,
   movePart,
   resetSettings,
@@ -48,7 +52,7 @@ import {
 } from "./settings"
 import { SOCIALS, socialUrl } from "./socials"
 import { statusLine, type Run, type StatusLimit } from "./statusline"
-import { nameOf, parseMics, parseVoices, type Voice } from "./voices"
+import { nameOf, narrationRequest, parseMics, parseVoices, type Voice } from "./voices"
 
 /** What the status line reads of a session, a message and a model: the host types do not resolve locally. */
 interface SessionShape {
@@ -82,13 +86,15 @@ interface EditorShape {
 }
 
 /**
- * One colored run inside a text. `SpanRenderable` forwards `fg` to
- * `TextNodeRenderable` at runtime, but its published props omit it, so the
- * element is the one place that needs the cast.
+ * One colored stretch of a row: a text of its own. A `<span fg>` inside a text
+ * is drawn in the text's color, so every color needs its own text element.
  */
-function Tinted(props: { fg: string; children?: string }) {
-  // @ts-expect-error span takes fg at runtime; its props type omits it.
-  return <span fg={props.fg}>{props.children}</span>
+function Tinted(props: { fg: string; bold?: boolean; children?: string }) {
+  return (
+    <text wrapMode="none" selectable={false} flexShrink={0} fg={props.fg} attributes={props.bold ? 1 : 0}>
+      {props.children}
+    </text>
+  )
 }
 
 /** The plugin's own folder: the engine scripts live beside `src`. */
@@ -159,7 +165,7 @@ export default Plugin.define({
     const [wand, setWand] = context.storage.memory<{ busy: boolean }>("speedy-code.wand", {
       initial: { busy: false },
     })
-    const [menus, setMenus] = context.storage.memory<MenuState>("speedy-code.menus.1", {
+    const [menus, setMenus] = context.storage.memory<MenuState>("speedy-code.menus.2", {
       initial: { ...INITIAL_MENU },
     })
     // The plan's usage windows, asked now and then.
@@ -173,6 +179,23 @@ export default Plugin.define({
       void update((draft) => {
         Object.assign(draft, repaired)
       })
+    }
+
+    // What the Claude Code plugin keeps is brought in once: the voices, the microphone and the networks.
+    if (!settings.imported) {
+      void (async () => {
+        let claude: unknown
+        try {
+          const dir = join(homedir(), ".claude", "plugins", "store")
+          const name = (await readdir(dir)).find((one) => /^speedy-code_speedy-code-.*\.json$/.test(one))
+          if (name) claude = JSON.parse(await readFile(join(dir, name), "utf8"))
+        } catch {
+          // No Claude Code plugin on this machine: the defaults stay.
+        }
+        await update((draft) => {
+          Object.assign(draft, importClaude(cloneSettings(draft as SpeedySettings), claude))
+        })
+      })()
     }
 
     const toast = (message: string, variant: "info" | "success" | "error" | "warning" = "info") =>
@@ -233,9 +256,31 @@ export default Plugin.define({
     const voiceName = () =>
       voiceShortName(voiceForCode(settings.picks.active)) || languageName(settings.picks.active)
 
-    /** Reads `text` aloud with the voice of the language narrated in, and notes which voice it was. */
-    const narrate = async (text: string) => {
+    const polish = createPolisher(engine)
+
+    // The narration under way: one asked for after it takes its place.
+    let narrating = 0
+
+    /**
+     * Reads `answer` aloud with the voice of the language narrated in: as it
+     * is, or translated or told short by a model when it is in another
+     * language or long, as the original does.
+     */
+    const narrate = async (answer: string) => {
       const voice = voiceForCode(settings.picks.active)
+      const lang = settings.picks.active || "es"
+      const mine = ++narrating
+      let text = answer
+      const request = narrationRequest(answer, lang, LANGUAGES.find(([code]) => code === lang)?.[2] ?? "Spanish")
+      if (request) {
+        await clipPlayer.stop()
+        await narration.stop()
+        onSpeech("thinking")
+        const result = await polish(request)
+        if (mine !== narrating) return
+        if ("text" in result && result.text.trim()) text = result.text.trim()
+        else onSpeech("idle")
+      }
       void appendFile(
         join(DATA_ROOT, "narrations.log"),
         `${new Date().toISOString()} voice=${voice} active=${settings.picks.active} chars=${text.length}\n`,
@@ -294,8 +339,10 @@ export default Plugin.define({
       return false
     }
 
-    // A finished dictation goes into the prompt, as the original writes it.
+    // What is heard goes into the prompt as it is heard, as the original writes it;
+    // only what could not be written there is delivered when the dictation ends.
     let deliverOnEnd = false
+    let dictationField: EditorShape | undefined
 
     const deliverDictation = async () => {
       const text = listen.heard.trim()
@@ -303,10 +350,7 @@ export default Plugin.define({
         draft.heard = ""
         draft.partial = ""
       })
-      if (!text) {
-        toast("no se oyó nada")
-        return
-      }
+      if (!text) return
       if (await typeIntoPrompt(`${text} `)) return
       await context.ui.dialog.alert({ title: "speedy-code · dictado", message: text })
     }
@@ -326,6 +370,14 @@ export default Plugin.define({
         }
       },
       onText: (words) => {
+        const field = dictationField ?? editor()
+        if (field?.insertText) {
+          field.insertText(words)
+          setListen((draft) => {
+            draft.partial = ""
+          })
+          return
+        }
         setListen((draft) => {
           draft.heard += words
         })
@@ -343,6 +395,7 @@ export default Plugin.define({
         // The voice would be heard by the microphone near the speakers: it pauses.
         if (speech.state === "playing") await activeSpeech().pause()
         deliverOnEnd = true
+        dictationField = editor()
         setListen((draft) => {
           draft.heard = ""
           draft.partial = ""
@@ -380,8 +433,6 @@ export default Plugin.define({
       }
       await copyText(text, "respuesta")
     }
-
-    const polish = createPolisher(engine)
 
     /** The pen: corrects what is written in the prompt, as the original does. */
     const polishDraft = async () => {
@@ -649,9 +700,11 @@ export default Plugin.define({
             .getSelection?.()
             ?.getSelectedText?.()
             ?.trim() ?? ""
-        pendingSelection = selected || (await readClipboard())
+        // A click leaves a selection of a glyph or two behind: only one that holds words counts.
+        pendingSelection = /\p{L}{3,}/u.test(selected) ? selected : await readClipboard()
         await refreshClips()
       }
+      if (which === "images") await refreshImages()
       if (which === "mic") void loadMics()
       if (which === "settings") void checkSetup()
       setMenus((draft) => {
@@ -670,7 +723,7 @@ export default Plugin.define({
 
     /** The first row of the 📎 menu: reads the selection taken when 📎 was pressed. */
     const readSelection = async () => {
-      if (!pendingSelection) {
+      if (!plain(pendingSelection).trim()) {
         toast("seleccioná o copiá un texto primero")
         return
       }
@@ -684,11 +737,15 @@ export default Plugin.define({
         draft.text = text
       })
       await clipPlayer.stop()
+      await narration.stop()
       setMenus((draft) => {
         draft.clipNow = SELECTION_CLIP
       })
-      await narrate(text)
-      await refreshClips()
+      void narrate(text).then(refreshClips)
+      // The row is marked after the stops above cleared it.
+      setMenus((draft) => {
+        draft.clipNow = SELECTION_CLIP
+      })
     }
 
     /** A row's button: the narration playing from it pauses or goes on; another row starts. */
@@ -720,6 +777,102 @@ export default Plugin.define({
       closeMenu()
     }
 
+    const imagesDir = join(DATA_ROOT, "images")
+
+    const refreshImages = async () => {
+      const names = (await readdir(imagesDir).catch(() => [] as string[]))
+        .filter((name) => /\.png$/i.test(name))
+        .sort()
+        .reverse()
+        .slice(0, 10)
+      const found = names.map((name) => ({ path: join(imagesDir, name), stamp: name.replace(/\.png$/i, "") }))
+      setMenus((draft) => {
+        draft.images = found
+      })
+      return found
+    }
+
+    /** Keeps the image on the clipboard, if it holds one, so it can be seen and pasted again. */
+    const keepClipboardImage = async (): Promise<KeptImage | undefined> => {
+      const now = new Date()
+      const two = (value: number) => String(value).padStart(2, "0")
+      const stamp = `${String(now.getFullYear()).slice(2)}-${two(now.getMonth() + 1)}-${two(now.getDate())}_${two(now.getHours())}-${two(now.getMinutes())}-${two(now.getSeconds())}`
+      const path = join(imagesDir, `${stamp}.png`)
+      await mkdir(imagesDir, { recursive: true })
+      const argv =
+        process.platform === "win32"
+          ? [
+              "powershell",
+              "-NoProfile",
+              "-NonInteractive",
+              "-STA",
+              "-Command",
+              "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $image = [Windows.Forms.Clipboard]::GetImage(); if ($image) { $image.Save($env:SPEEDY_IMAGE, [Drawing.Imaging.ImageFormat]::Png); 'kept' } else { 'none' }",
+            ]
+          : [
+              "/bin/sh",
+              "-c",
+              "osascript -e 'set png to (the clipboard as «class PNGf»)' -e 'set out to open for access POSIX file (system attribute \"SPEEDY_IMAGE\") with write permission' -e 'write png to out' -e 'close access out' >/dev/null 2>&1 && echo kept || echo none",
+            ]
+      const result = await run(argv, { SPEEDY_IMAGE: path })
+      if (result.stdout.trim() !== "kept") return undefined
+      await refreshImages()
+      return { path, stamp }
+    }
+
+    /** The paste controls: the image on the clipboard is kept and shown as a chip, then the host pastes. */
+    const pasteFromClipboard = async () => {
+      const kept = await keepClipboardImage()
+      if (kept) {
+        setMenus((draft) => {
+          draft.draftImages = [...draft.draftImages, kept]
+        })
+      }
+      context.keymap.dispatch("prompt.paste")
+    }
+
+    /** Shows an image in the system's own viewer. */
+    const viewImage = (image: KeptImage) => {
+      if (!openLink(image.path)) toast("no pude abrir la imagen", "error")
+    }
+
+    /** Pastes a kept image again: it goes on the clipboard, then the host pastes. */
+    const pasteImage = async (image: KeptImage) => {
+      const argv =
+        process.platform === "win32"
+          ? [
+              "powershell",
+              "-NoProfile",
+              "-NonInteractive",
+              "-STA",
+              "-Command",
+              "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $image = [Drawing.Image]::FromFile($env:SPEEDY_IMAGE); [Windows.Forms.Clipboard]::SetImage($image); $image.Dispose(); 'set'",
+            ]
+          : [
+              "/bin/sh",
+              "-c",
+              "osascript -e 'set the clipboard to (read (POSIX file (system attribute \"SPEEDY_IMAGE\")) as «class PNGf»)' >/dev/null 2>&1 && echo set",
+            ]
+      if ((await run(argv, { SPEEDY_IMAGE: image.path })).stdout.trim() !== "set") {
+        toast("no pude pegar la imagen", "error")
+        return
+      }
+      closeMenu()
+      setMenus((draft) => {
+        draft.draftImages = [...draft.draftImages, image]
+      })
+      context.keymap.dispatch("prompt.paste")
+    }
+
+    const clearImages = async () => {
+      const names = await readdir(imagesDir).catch(() => [] as string[])
+      await Promise.all(names.map((name) => rm(join(imagesDir, name), { force: true })))
+      setMenus((draft) => {
+        draft.draftImages = []
+      })
+      await refreshImages()
+    }
+
     // The controls the footer left out, for the ⋯ menu.
     let hiddenNow: readonly FooterControl[] = []
 
@@ -735,8 +888,13 @@ export default Plugin.define({
         // the model, which no plugin call can.
         case "paste":
         case "image":
-          return context.keymap.dispatch("prompt.paste")
+          return pasteFromClipboard()
+        case "images":
+          return openMenu("images")
         case "clear":
+          setMenus((draft) => {
+            draft.draftImages = []
+          })
           return context.keymap.dispatch("prompt.clear")
         case "model":
           return context.keymap.dispatch("model.list")
@@ -888,7 +1046,10 @@ export default Plugin.define({
       ],
     }))
 
-    // A reply finishes as one text part ends; only the session on screen is read aloud.
+    // The session whose last text was not read aloud yet.
+    let unread = ""
+
+    // A reply's text is kept as each part ends; only the session on screen is read aloud.
     const disposeNarration = context.data.on("session.text.ended", (event) => {
       const route = context.ui.router.current()
       if (route.type !== "session" || route.sessionID !== event.data.sessionID) return
@@ -898,7 +1059,20 @@ export default Plugin.define({
         draft.sessionID = event.data.sessionID
         draft.text = text
       })
-      if (settings.narrator) void narrate(text)
+      unread = event.data.sessionID
+    })
+    // The turn is over: its last words are read, once, as the original reads the answer.
+    const disposeTurn = context.data.on("session.execution.succeeded", (event) => {
+      if (unread !== event.data.sessionID) return
+      unread = ""
+      const text = plain(reply.text).trim()
+      if (settings.narrator && text) void narrate(text)
+    })
+    // A message sent takes its image chips with it.
+    const disposeSent = context.data.on("session.execution.started", () => {
+      setMenus((draft) => {
+        draft.draftImages = []
+      })
     })
 
     /** Asks the host for the plan's windows: the rolling one is the 5-hour window. */
@@ -963,11 +1137,11 @@ export default Plugin.define({
     const StatusRow = (props: { sessionID?: string }) => (
       <Show when={settings.statusBar}>
         <box flexDirection="row" flexShrink={0} paddingLeft={1}>
-          <text wrapMode="none" selectable={false}>
-            {statusRuns(props.sessionID, columnsNow()).map((run) => (
-              <Tinted fg={run.color}>{run.text}</Tinted>
-            ))}
-          </text>
+          {statusRuns(props.sessionID, columnsNow()).map((run) => (
+            <Tinted fg={run.color} bold={run.bold}>
+              {run.text}
+            </Tinted>
+          ))}
         </box>
       </Show>
     )
@@ -991,6 +1165,7 @@ export default Plugin.define({
           model: named?.name ?? model?.modelID,
           effort: model?.variant,
           voice: nameOf(voice).name || voiceName(),
+          voiceColor: LANGUAGES.find(([code]) => code === settings.picks.active)?.[3],
           language: settings.picks.active.toUpperCase(),
           polishing: wand.busy,
           socials: linked,
@@ -1009,16 +1184,16 @@ export default Plugin.define({
               flexShrink={0}
               onMouseUp={control.id === undefined ? undefined : () => void runControl(control.id as string)}
             >
-              <text wrapMode="none" selectable={false}>
-                <Tinted fg={control.color}>{control.text}</Tinted>
-              </text>
+              <Tinted fg={control.color} bold={control.bold}>
+                {control.text}
+              </Tinted>
             </box>
           ))}
           {view().hidden.length > 0 ? (
             <box flexShrink={0} onMouseUp={() => void runControl("more")}>
-              <text wrapMode="none" selectable={false}>
-                <Tinted fg="#adb5bd">{" ⋯ "}</Tinted>
-              </text>
+              <Tinted fg="#adb5bd" bold>
+                {" ⋯ "}
+              </Tinted>
             </box>
           ) : null}
         </box>
@@ -1029,12 +1204,10 @@ export default Plugin.define({
     const HeardRow = () => (
       <Show when={listen.state !== "off"}>
         <box flexDirection="row" flexShrink={0} paddingLeft={1}>
-          <text wrapMode="none" selectable={false}>
-            <Tinted fg={listen.state === "on" ? "#ff6b6b" : "#748ffc"}>
-              {listen.state === "on" ? "🔴 " : "🔵 cargando el modelo… "}
-            </Tinted>
-            <Tinted fg="#adb5bd">{`${listen.heard}${listen.partial}`.slice(-Math.max(20, columnsNow() - 12))}</Tinted>
-          </text>
+          <Tinted fg={listen.state === "on" ? "#ff6b6b" : "#748ffc"}>
+            {listen.state === "on" ? "🔴 dictando " : "🔵 cargando el modelo… "}
+          </Tinted>
+          <Tinted fg="#868e96">{`${listen.heard}${listen.partial}`.slice(-Math.max(20, columnsNow() - 16))}</Tinted>
         </box>
       </Show>
     )
@@ -1053,6 +1226,9 @@ export default Plugin.define({
       pressClip: (clip) => void pressClip(clip),
       clearClips: () => void clearClips(),
       pickMic: (name) => void pickMic(name),
+      viewImage,
+      pasteImage: (image) => void pasteImage(image),
+      clearImages: () => void clearImages(),
       systemName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux",
       editSocial: (id) => void editSocial(id),
       runSetup,
@@ -1083,6 +1259,7 @@ export default Plugin.define({
       render: () => (
         <box flexDirection="column" flexShrink={0}>
           <MenuFrame api={menuApi} />
+          <DraftImages api={menuApi} />
           <HeardRow />
         </box>
       ),
@@ -1107,6 +1284,7 @@ export default Plugin.define({
       render: () => (
         <box flexDirection="column" flexShrink={0}>
           <MenuFrame api={menuApi} />
+          <DraftImages api={menuApi} />
           <HeardRow />
           <StatusRow />
           <FooterRow />
@@ -1116,6 +1294,8 @@ export default Plugin.define({
 
     return () => {
       disposeNarration()
+      disposeTurn()
+      disposeSent()
       disposeMenu()
       disposeFooter()
       disposeHome()

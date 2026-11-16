@@ -6,6 +6,7 @@ import {
   distinctVoices,
   guessLanguage,
   micName,
+  narrationRequest,
   nameOf,
   parseMics,
   parseVoices,
@@ -97,5 +98,31 @@ describe("guessLanguage", () => {
     expect(guessLanguage("el perro que está en la casa de los vecinos")).toBe("es")
     expect(guessLanguage("the dog is in the house and it is with you")).toBe("en")
     expect(guessLanguage("ok")).toBe("")
+  })
+})
+
+describe("narrationRequest", () => {
+  const spanish = "el perro que está en la casa de los vecinos es de la familia"
+  const english = "the dog is in the house and it is with you for this week"
+
+  test("a short reply in the language narrated in is read as it is", () => {
+    expect(narrationRequest(spanish, "es", "Spanish")).toBeUndefined()
+  })
+
+  test("a reply in another language is translated, whole", () => {
+    expect(narrationRequest(english, "es", "Spanish")?.text).toBe(
+      `Translate this reply into Spanish, faithfully and completely:\n\n${english}`,
+    )
+  })
+
+  test("a long reply is told in a few sentences", () => {
+    const long = `${spanish}. `.repeat(80)
+    expect(narrationRequest(long, "es", "Spanish")?.text).toStartWith(
+      "Say what this reply tells, in Spanish, in two to four short sentences",
+    )
+  })
+
+  test("nothing to read asks nothing", () => {
+    expect(narrationRequest("  ", "es", "Spanish")).toBeUndefined()
   })
 })
