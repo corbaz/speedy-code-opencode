@@ -521,6 +521,7 @@ export function NewSessionDialog(props: { onSubmit: (name: string) => void; onCa
           placeholder="vacío: la nombra OpenCode"
           placeholderColor="#868e96"
           textColor="#ffd43b"
+          focusedTextColor="#ffd43b"
           cursorColor={NEW_SESSION_COLOR}
           onSubmit={() => props.onSubmit(typed())}
         />
