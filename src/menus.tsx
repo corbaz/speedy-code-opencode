@@ -835,8 +835,11 @@ export function MenuFrame(props: { api: MenuApi }) {
         </Show>
       </box>
       <box flexDirection="row" justifyContent="flex-end" flexShrink={0} width={api.width()} marginBottom={-1} zIndex={1}>
-        {/* A blank on either side, on the screen's own background, cuts the line around the mark. */}
-        <Btn label=" ✕ " color="#ff6b6b" bg={api.background()} bold onPress={() => api.close()} />
+        {/* A blank on either side, on the screen's own background, cuts the line around the mark.
+            The mark is a box-drawing cross: it fills its one cell exactly in every font, so both
+            blanks look the same. `✕` comes from a fallback font, drawn wider than its cell, and
+            ate into the blank at its right. */}
+        <Btn label=" ╳ " color="#ff6b6b" bg={api.background()} bold onPress={() => api.close()} />
         <box width={2} flexShrink={0} />
       </box>
       </box>
