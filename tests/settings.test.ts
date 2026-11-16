@@ -38,7 +38,7 @@ describe("settings defaults", () => {
   test("starts with the narrator off and the Spanish voice picked", () => {
     expect(DEFAULT_SETTINGS.narrator).toBe(false)
     expect(DEFAULT_SETTINGS.picks.active).toBe("es")
-    expect(DEFAULT_SETTINGS.picks.es).toBe("es-AR-ElenaNeural")
+    expect(DEFAULT_SETTINGS.picks.es).toBe("es-PR-VictorNeural")
     expect(DEFAULT_SETTINGS.mic).toBe("")
     expect(DEFAULT_SETTINGS.barLevels).toEqual(DEFAULT_LEVELS)
     expect(DEFAULT_SETTINGS.barOrder).toEqual(DEFAULT_ORDER)
@@ -212,5 +212,15 @@ describe("sameSettings", () => {
 
   test("reports a real change", () => {
     expect(sameSettings(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS, narrator: !DEFAULT_SETTINGS.narrator })).toBe(false)
+  })
+})
+
+describe("voiceShortName", () => {
+  test("names the voice the way the footer writes it", async () => {
+    const { voiceShortName } = await import("../src/settings")
+    expect(voiceShortName("es-PR-VictorNeural")).toBe("Victor")
+    expect(voiceShortName("en-US-AvaMultilingualNeural")).toBe("Ava")
+    expect(voiceShortName("zh-CN-liaoning-XiaobeiNeural")).toBe("Xiaobei")
+    expect(voiceShortName("")).toBe("")
   })
 })

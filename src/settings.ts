@@ -57,7 +57,7 @@ export const LEVEL_KEYS: readonly LevelKey[] = ["contextYellow", "contextRed", "
 
 /** The voice a fresh install speaks each language with: a Microsoft Edge neural voice. */
 export const DEFAULT_VOICES: Readonly<Record<string, string>> = {
-  es: "es-AR-ElenaNeural",
+  es: "es-PR-VictorNeural",
   en: "en-US-AriaNeural",
   fr: "fr-FR-DeniseNeural",
   it: "it-IT-ElsaNeural",
@@ -76,6 +76,12 @@ export const DEFAULT_PICKS: Picks = { ...DEFAULT_VOICES, active: "es" }
 /** The voice to speak `code` with, falling back to the language shown, then to Spanish. */
 export function voiceFor(picks: Picks, code: string): string {
   return picks[code] || picks[picks.active] || DEFAULT_VOICES.es || ""
+}
+
+/** A voice's own name, as the footer writes it: `es-PR-VictorNeural` → `Victor`. */
+export function voiceShortName(id: string): string {
+  const last = id.split("-").slice(2).at(-1) ?? ""
+  return last.replace(/Neural$/, "").replace(/(Multilingual|Expressive)$/, "")
 }
 
 /** A language tab: its code, its Spanish name, its English name and its color. */

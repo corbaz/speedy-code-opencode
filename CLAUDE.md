@@ -73,11 +73,10 @@ anything outside this list without checking it first.
     colored runs with `<span fg=...>` children instead.
   - **An ancestor replacement beats a descendant one.** Replacing
     `prompt.footer.status` is suppressed by whatever claims `prompt.footer`.
-- **No pointer events reach slot content.** `onMouseDown` exists on renderables
-  in OpenTUI, but the TUI does not route mouse events into slots in this build,
-  and `cli.json` needs `"mouse": true` before the terminal captures any mouse
-  at all. The footer's controls are therefore reachable by command, not by
-  click.
+- **Slot content takes clicks.** The mouse is on by default (`cli.json`
+  `mouse` defaults to `true`), and a `<box onMouseUp>` inside a slot receives
+  the click; verified by driving the real TUI through a pseudo terminal. A
+  `<span>` inside a `<text>` does not: give each control its own box.
 - **No composer API.** There is no way to read or write the prompt text, so
   dictated words cannot be inserted into the composer; the transcript is copied
   through `renderer.copyToClipboardOSC52` instead.
@@ -90,8 +89,8 @@ anything outside this list without checking it first.
 
 ## Deliberate differences from the original
 
-- The original footer is click-driven. This port reaches the same actions by
-  name (`/speedy on`, `voces`, `historial`, `dictado`, `copiar`, `pulir`,
+- The footer is click-driven like the original, and the same actions are also
+  reachable by name (`/speedy on`, `voces`, `historial`, `dictado`, `copiar`, `pulir`,
   `modelo`, `sesiones`, `redes`, `leer`) and through palette commands.
 - The original rewrites long or foreign-language replies with a model before
   reading them. That rewrite is **not** ported: replies are read as written.
@@ -102,11 +101,9 @@ anything outside this list without checking it first.
 
 ## Open work
 
-1. **Footer clicks.** The bar renders on one line with the original's glyphs
-   and colors, but it cannot be clicked. Two things would be needed: `"mouse":
-   true` in `cli.json`, and one `<box onMouseDown>` per control instead of
-   spans inside a single text. The layout risk is real: an earlier row of
-   per-control text elements wrapped onto several lines.
+1. **Status line and framed menus.** The original paints a statistics bar
+   and opens its menus as framed panels above the prompt; this port still
+   opens the host's dialogs and draws no statistics bar.
 2. **Live verification.** Synthesis, playback and dictation were never run
    against a real speaker or microphone: `~/.config/opencode/speedy-code/venv`
    and the models do not exist in the development environment. Those paths are

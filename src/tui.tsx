@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { mkdir, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
@@ -34,6 +35,7 @@ import {
   sameSettings,
   settingsFromSaved,
   voiceFor,
+  voiceShortName,
   type LevelKey,
   type SpeedySettings,
 } from "./settings"
@@ -351,6 +353,22 @@ export default Plugin.define({
       context.ui.router.navigate({ type: "session", sessionID: choice })
     }
 
+    // Opens a link in the system's browser; false when the system cannot.
+    const openLink = (url: string): boolean => {
+      const argv =
+        process.platform === "win32"
+          ? ["cmd", "/c", "start", "", url.replaceAll("&", "^&")]
+          : [process.platform === "darwin" ? "open" : "xdg-open", url]
+      try {
+        const child = spawn(argv[0] as string, argv.slice(1), { stdio: "ignore", windowsHide: true, detached: true })
+        child.on("error", () => {})
+        child.unref()
+        return true
+      } catch {
+        return false
+      }
+    }
+
     // Clicking a badge does what the original's badge did: opens that profile.
     const copySocialLink = async (id: string) => {
       const social = SOCIALS.find((one) => one.id === id)
@@ -372,7 +390,7 @@ export default Plugin.define({
 
       const url = socialUrl(id, handle)
       if (!url) return
-      await copyText(url, `enlace de ${social.name}`)
+      if (!openLink(url)) await copyText(url, `enlace de ${social.name}`)
     }
 
     const openSocials = async () => {
@@ -411,7 +429,35 @@ export default Plugin.define({
     // Switching the narrator off while it speaks pauses it, so switching it on goes on from there.
     let pausedByOff = false
 
-    const voiceName = () => languageName(settings.picks.active)
+    // Every control the footer draws runs the same thing its command runs.
+    const runControl = async (id: string) => {
+      if (id.startsWith("social:")) return copySocialLink(id.slice("social:".length))
+      switch (id) {
+        case "copy":
+          return copyReply()
+        case "polish":
+          return polishReply()
+        case "model":
+        case "effort":
+          return openModel()
+        case "voice":
+          return openVoice()
+        case "narrator":
+          return toggleNarrator()
+        case "mic":
+          return toggleDictation()
+        case "play":
+          return togglePlay()
+        case "history":
+          return openHistory()
+        case "settings":
+          return openSettings()
+      }
+    }
+
+    // The footer names the voice itself, as the original does: `Victor · ES`.
+    const voiceName = () =>
+      voiceShortName(voiceForCode(settings.picks.active)) || languageName(settings.picks.active)
     const voiceForCode = (code: string) => voiceFor(settings.picks, code)
 
     const setNarrator = async (on: boolean) => {
@@ -714,17 +760,29 @@ export default Plugin.define({
         const shown = visibleControls(controls, result)
         const hidden = hiddenGroups(controls, result)
 
-        // One text with a span per control, never a row of text elements: OpenTUI
-        // wraps each text element on its own and the footer broke into lines.
-        // Inside a box: a bare text at a slot root takes no room of its own.
+        // One box per control, so each takes its own click; none shrinks or
+        // wraps, so the row stays on one line.
         return (
           <box flexDirection="row" flexShrink={0}>
-            <text wrapMode="none">
-              {shown.map((control) => (
-                <Tinted fg={control.color}>{control.text}</Tinted>
-              ))}
-              {hidden.length > 0 ? <Tinted fg={DISABLED_COLOR}>{" ⋯ "}</Tinted> : null}
-            </text>
+            {shown.map((control) => (
+              <box
+                flexShrink={0}
+                onMouseUp={
+                  control.id === undefined ? undefined : () => void runControl(control.id as string)
+                }
+              >
+                <text wrapMode="none" selectable={false}>
+                  <Tinted fg={control.color}>{control.text}</Tinted>
+                </text>
+              </box>
+            ))}
+            {hidden.length > 0 ? (
+              <box flexShrink={0}>
+                <text wrapMode="none" selectable={false}>
+                  <Tinted fg={DISABLED_COLOR}>{" ⋯ "}</Tinted>
+                </text>
+              </box>
+            ) : null}
           </box>
         )
       },

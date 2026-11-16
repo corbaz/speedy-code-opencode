@@ -12,8 +12,8 @@ same commands, with the same output contract.
 
 ## Commands
 
-Everything the original footer reached by clicking is reached here by name,
-through `/speedy <word>` or the palette. Both Spanish and English words work.
+The footer's controls take clicks, as the original's do. Each one is also
+reached by name, through `/speedy <word>` or the palette. Both Spanish and English words work.
 
 | Command | What it does |
 | --- | --- |
@@ -53,9 +53,9 @@ Palette commands mirror them: `speedy-code: ajustes`, `alternar narrador`,
   append dictated words into the composer the way the original did. It copies
   the transcript to the clipboard instead, and shows it in a dialog when the
   terminal has no clipboard.
-- The original footer is click-driven. The documented TUI plugin API exposes
-  slots, keymaps and dialogs but no pointer surface, so the controls live in the
-  slash command and the palette.
+- The original opens its menus as framed panels above the prompt and paints a
+  statistics bar. Here a click opens the host's own dialog, and there is no
+  statistics bar yet.
 - Paste, image actions, send, clear, compact, exit and reload stay OpenCode's own
   controls; the plugin does not duplicate what the host already offers.
 - A long reply is read as written; the original's model rewrite before narrating
