@@ -5,6 +5,7 @@ import { homedir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 
 import { Plugin } from "@opencode/plugin/tui"
+import { createSignal } from "solid-js"
 
 import { COMMAND_HELP, routeCommand } from "./commands"
 import { Dictation } from "./dictation"
@@ -40,6 +41,26 @@ import {
   type SpeedySettings,
 } from "./settings"
 import { SOCIALS, socialUrl } from "./socials"
+import { statusLine, type Run } from "./statusline"
+
+/** What the status line reads of a session, a message and a model: the host types do not resolve locally. */
+interface SessionShape {
+  readonly model?: { readonly id?: string; readonly variant?: string }
+  readonly time?: { readonly created?: number }
+  readonly location?: { readonly directory?: string }
+}
+interface MessageShape {
+  readonly type?: string
+  readonly tokens?: {
+    readonly input?: number
+    readonly output?: number
+    readonly cache?: { readonly read?: number; readonly write?: number }
+  }
+}
+interface ModelShape {
+  readonly name?: string
+  readonly limit?: { readonly context?: number }
+}
 
 /**
  * One colored run inside a text. `SpanRenderable` forwards `fg` to
@@ -732,18 +753,59 @@ export default Plugin.define({
       })()
     })
 
-    const disposeFooter = context.ui.slot({
-      // Own the whole status row, so nothing of the host's sits beside the
-      // footer. The content is boxed: a bare text at a slot root takes no room.
-      replace: "prompt.footer.status",
-      render: () => {
-        const columns = context.renderer?.terminalWidth ?? 80
+    // The minute the status line counts the session in: read by its render, so it redraws.
+    const [clock, setClock] = createSignal(Date.now())
+    const ticking = setInterval(() => setClock(Date.now()), 30000)
+
+    /** The status line of the session on screen, or of none on the home screen. */
+    const statusRuns = (sessionID: string | undefined, columns: number): Run[] => {
+      const picked = context.ui.model.current()
+      const session = sessionID ? (context.data.session.get(sessionID) as SessionShape | undefined) : undefined
+      const messages = sessionID ? (context.data.session.message.list(sessionID) as MessageShape[]) : []
+      const last = [...messages].reverse().find((one) => one.type === "assistant" && one.tokens)
+      const modelID = picked?.modelID ?? session?.model?.id
+      const info = (context.data.location.model.list() ?? []).find(
+        (one) => one.modelID === modelID && (!picked || one.providerID === picked.providerID),
+      ) as ModelShape | undefined
+      return statusLine(
+        {
+          cwd: session?.location?.directory ?? context.location?.directory ?? process.cwd(),
+          home: homedir(),
+          branch: context.data.location.vcs.info()?.branch?.current,
+          version: context.app.version,
+          model: info?.name ?? modelID,
+          effort: picked?.variant ?? session?.model?.variant,
+          durationMs: session?.time?.created ? clock() - session.time.created : 0,
+          inputTokens: last?.tokens?.input,
+          outputTokens: last?.tokens?.output,
+          cacheReadTokens: last?.tokens?.cache?.read,
+          cacheWriteTokens: last?.tokens?.cache?.write,
+          contextSize: info?.limit?.context,
+          costUsd: sessionID ? context.data.session.cost(sessionID) : 0,
+        },
+        columns,
+        settings.barLevels,
+        settings.barOrder,
+      )
+    }
+
+    const StatusRow = (props: { sessionID?: string; room: number }) => (
+      <box flexDirection="row" flexShrink={0} paddingLeft={1}>
+        <text wrapMode="none" selectable={false}>
+          {statusRuns(props.sessionID, props.room).map((run) => (
+            <Tinted fg={run.color}>{run.text}</Tinted>
+          ))}
+        </text>
+      </box>
+    )
+
+    /** The row of controls, each its own box so each takes its own click. */
+    const FooterRow = (props: { room: number }) => {
+      const view = () => {
         const model = context.ui.model.current()
         const linked = SOCIALS.flatMap((social) => {
           const handle = settings.socials[social.id] ?? ""
-          return handle.trim()
-            ? [{ id: social.id, badge: social.badge, color: social.color }]
-            : []
+          return handle.trim() ? [{ id: social.id, badge: social.badge, color: social.color }] : []
         })
         const controls = footerControls({
           narrator: settings.narrator,
@@ -756,41 +818,65 @@ export default Plugin.define({
           polishing: wand.busy,
           socials: linked,
         })
-        const result = footerFit(controls, footerRoom(columns))
-        const shown = visibleControls(controls, result)
-        const hidden = hiddenGroups(controls, result)
+        const result = footerFit(controls, props.room)
+        return { shown: visibleControls(controls, result), hidden: hiddenGroups(controls, result) }
+      }
+      return (
+        <box flexDirection="row" flexShrink={0}>
+          {view().shown.map((control) => (
+            <box
+              flexShrink={0}
+              onMouseUp={control.id === undefined ? undefined : () => void runControl(control.id as string)}
+            >
+              <text wrapMode="none" selectable={false}>
+                <Tinted fg={control.color}>{control.text}</Tinted>
+              </text>
+            </box>
+          ))}
+          {view().hidden.length > 0 ? (
+            <box flexShrink={0}>
+              <text wrapMode="none" selectable={false}>
+                <Tinted fg={DISABLED_COLOR}>{" ⋯ "}</Tinted>
+              </text>
+            </box>
+          ) : null}
+        </box>
+      )
+    }
 
-        // One box per control, so each takes its own click; none shrinks or
-        // wraps, so the row stays on one line.
-        return (
-          <box flexDirection="row" flexShrink={0}>
-            {shown.map((control) => (
-              <box
-                flexShrink={0}
-                onMouseUp={
-                  control.id === undefined ? undefined : () => void runControl(control.id as string)
-                }
-              >
-                <text wrapMode="none" selectable={false}>
-                  <Tinted fg={control.color}>{control.text}</Tinted>
-                </text>
-              </box>
-            ))}
-            {hidden.length > 0 ? (
-              <box flexShrink={0}>
-                <text wrapMode="none" selectable={false}>
-                  <Tinted fg={DISABLED_COLOR}>{" ⋯ "}</Tinted>
-                </text>
-              </box>
-            ) : null}
+    const columnsNow = () => context.renderer?.terminalWidth ?? 80
+
+    // In a session both rows own the footer's status place, the status line
+    // over the controls, as the original lays them out. The host keeps the
+    // right end of that row, so both rows fit in what is left of it.
+    const HOST_ROOM = 34
+    const disposeFooter = context.ui.slot({
+      replace: "prompt.footer.status",
+      render: (input) =>
+        input.sessionID ? (
+          <box flexDirection="column" flexShrink={0}>
+            <StatusRow sessionID={input.sessionID} room={columnsNow() - HOST_ROOM} />
+            <FooterRow room={footerRoom(columnsNow() - HOST_ROOM)} />
           </box>
-        )
-      },
+        ) : null,
+    })
+    // The home screen's prompt is narrow and centered: there both rows go at
+    // the bottom of the screen, over the host's own footer.
+    const disposeHome = context.ui.slot({
+      before: "home.footer",
+      render: () => (
+        <box flexDirection="column" flexShrink={0}>
+          <StatusRow room={columnsNow()} />
+          <FooterRow room={footerRoom(columnsNow())} />
+        </box>
+      ),
     })
 
     return () => {
       disposeNarration()
       disposeFooter()
+      disposeHome()
+      clearInterval(ticking)
       void dictation.stop()
       return narration.stop()
     }
