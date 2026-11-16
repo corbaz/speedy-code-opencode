@@ -659,6 +659,13 @@ export default Plugin.define({
         "voices",
         voices.length > 0 ? { state: "ok", detail: `${voices.length} voces` } : { state: "fail", detail: "sin conexión" },
       )
+      const sidebar = (await run([python, join(PLUGIN_ROOT, "setup", "cli_prefs.py"), "--check"])).stdout.trim()
+      setCheck(
+        "sidebar",
+        sidebar.startsWith("ok ")
+          ? { state: "ok", detail: sidebar.slice(3) }
+          : { state: "fail", detail: sidebar.startsWith("fail ") ? sidebar.slice(5) : "sin revisar" },
+      )
       setCheck(
         "groq",
         process.env.GROQ_API_KEY ? { state: "ok", detail: "presente" } : { state: "fail", detail: "falta GROQ_API_KEY" },

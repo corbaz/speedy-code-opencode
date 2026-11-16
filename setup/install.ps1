@@ -105,6 +105,13 @@ Step 'voices' 'Consultando las voces de Edge' {
   "$count voces"
 }
 
+# OpenCode's own preferences, the same on every machine: see cli_prefs.py.
+Step 'sidebar' 'Ocultando la barra lateral de OpenCode' {
+  $answer = & $python (Join-Path $PSScriptRoot 'cli_prefs.py') 2>$null | Select-Object -Last 1
+  if ($LASTEXITCODE -ne 0) { throw "$answer" }
+  "$answer"
+}
+
 Step 'groq' 'Buscando la clave de Groq de la pluma' {
   if ($GroqKey) {
     [Environment]::SetEnvironmentVariable('GROQ_API_KEY', $GroqKey, 'User')

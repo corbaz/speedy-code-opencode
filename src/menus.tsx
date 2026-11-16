@@ -87,6 +87,7 @@ export const SETUP_STEPS: ReadonlyArray<readonly [string, string]> = [
   ["model", "Modelo de dictado Nemotron (~750 MB, local)"],
   ["mics", "Micrófonos"],
   ["voices", "Voces de Edge (internet)"],
+  ["sidebar", "Barra lateral de OpenCode, oculta"],
   ["groq", "Clave de Groq (la pluma, opcional)"],
 ]
 

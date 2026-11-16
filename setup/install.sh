@@ -127,12 +127,18 @@ groq_step() {
   echo 'GROQ_API_KEY presente'
 }
 
+# OpenCode's own preferences, the same on every machine: see cli_prefs.py.
+sidebar_step() {
+  "$python" "$here/cli_prefs.py"
+}
+
 step uv 'Buscando uv, el administrador de Python' uv_step
 step python 'Creando el entorno con Python 3.12' python_step
 step packages 'Instalando las voces y el dictado' packages_step
 step model 'Descargando el modelo de dictado (unos 750 MB, puede tardar)' model_step
 step mics 'Buscando micrófonos' mics_step
 step voices 'Consultando las voces de Edge' voices_step
+step sidebar 'Ocultando la barra lateral de OpenCode' sidebar_step
 step groq 'Buscando la clave de Groq de la pluma' groq_step
 
 if [ "$failed" -ne 0 ]; then echo 'done con avisos'; else echo 'done'; fi

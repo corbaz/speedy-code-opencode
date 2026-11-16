@@ -113,6 +113,10 @@ status line and the footer show under the prompt, and `opencode plugin list` nam
 ⚙️ → **Instalación** → **Instalar / reparar todo** runs the same setup again at any time. The setup keeps
 its Python environment and model under `~/.config/opencode/speedy-code`.
 
+The setup also sets `session.sidebar` to `hide` in `~/.config/opencode/cli.json`, so OpenCode's
+session sidebar stays out of the way (a copy of the file as it was is kept as `cli.json.bak`).
+`ctrl+x` then `b` shows it again.
+
 ### Update
 
 ```bash
