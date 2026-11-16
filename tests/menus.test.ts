@@ -15,6 +15,8 @@ describe("menuHeading", () => {
     expect(menuHeading("mic", settings).title).toBe("Micrófono para dictar")
     expect(menuHeading("more", settings).title).toBe("Más")
     expect(menuHeading("settings", settings).title).toBe("Configuración")
+    expect(menuHeading("socials", settings).title).toBe("Redes sociales")
+    expect(menuHeading("images", settings).title).toBe("Imágenes")
   })
 })
 

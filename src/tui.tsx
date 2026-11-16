@@ -839,14 +839,29 @@ export default Plugin.define({
     }
 
     /** The paste controls: the image on the clipboard is kept and shown as a chip, then the host pastes. */
-    const pasteFromClipboard = async () => {
+    /** 🖼️: pastes the image on the clipboard, and only an image: it is kept and shown as a chip. */
+    const pasteClipboardImage = async () => {
       const kept = await keepClipboardImage()
-      if (kept) {
-        setMenus((draft) => {
-          draft.draftImages = [...draft.draftImages, kept]
-        })
+      if (!kept) {
+        toast("no hay una imagen en el portapapeles")
+        return
       }
+      setMenus((draft) => {
+        draft.draftImages = [...draft.draftImages, kept]
+      })
       context.keymap.dispatch("prompt.paste")
+    }
+
+    /** 📥: pastes the text on the clipboard, and only text. */
+    const pasteClipboardText = async () => {
+      const text = await readClipboard()
+      if (!text) {
+        toast("no hay texto en el portapapeles")
+        return
+      }
+      const field = editor()
+      if (field?.insertText) field.insertText(text)
+      else context.keymap.dispatch("prompt.paste")
     }
 
     // The image popup open, if any: opening another closes it.
@@ -951,8 +966,11 @@ export default Plugin.define({
         // The host's own commands, run by their names: its model list changes
         // the model, which no plugin call can.
         case "paste":
+          return pasteClipboardText()
         case "image":
-          return pasteFromClipboard()
+          return pasteClipboardImage()
+        case "socials":
+          return openMenu("socials")
         case "images":
           return openMenu("images")
         case "clear":
@@ -1015,10 +1033,7 @@ export default Plugin.define({
         case "sessions":
           return openSessions()
         case "socials":
-          setMenus((draft) => {
-            draft.settingsTab = "socials"
-          })
-          return openMenu("settings")
+          return openMenu("socials")
         case "play":
           return togglePlay()
         case "stop":
@@ -1240,7 +1255,7 @@ export default Plugin.define({
         hiddenNow = hiddenGroups(controls, result) as FooterControl[]
         const shown = visibleControls(controls, result)
         // The bar after the networks goes with them.
-        const hasSocials = shown.some((control) => control.name.startsWith("social:"))
+        const hasSocials = shown.some((control) => control.name === "socials")
         return { shown: shown.filter((control) => control.name !== "divider" || hasSocials), hidden: hiddenNow }
       }
       return (
@@ -1278,6 +1293,9 @@ export default Plugin.define({
       </Show>
     )
 
+    // The theme's own background: a color object the host's elements take as they take a string.
+    const screenBackground = (context.theme as unknown as { background?: { base?: string } }).background?.base
+
     const menuApi: MenuApi = {
       settings: settings as SpeedySettings,
       state: menus,
@@ -1296,6 +1314,8 @@ export default Plugin.define({
       pasteImage: (image) => void pasteImage(image),
       clearImages: () => void clearImages(),
       systemName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux",
+      openSocial: (key) => void openSocial(key),
+      background: () => screenBackground,
       editSocial: (id) => void editSocial(id),
       addAccount: (id) => void addAccount(id),
       removeAccount: (key) => void removeAccount(key),

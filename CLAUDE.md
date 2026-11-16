@@ -141,6 +141,14 @@ anything outside this list without checking it first.
 - With no environment of its own, the engine runs with the one the Claude
   Code plugin installed (`~/.claude/speedy-code`), Python and dictation model.
 
+- The networks are one footer control, `Redes sociales ▾`, that opens a menu
+  of the accounts to click; the original draws a badge per account in the
+  footer. The maintainer asked for it, to give the row its room back.
+- `📥` pastes the clipboard's text and nothing else; `🖼️` pastes its image
+  and nothing else, and says so when it holds none.
+- A blank cell drawn with no background lets what is under it show: a text
+  that must cover the frame's line takes `context.theme.background.base`.
+
 ## Open work
 
 1. **Live checks still owed.** Dictating with a voice into the prompt, and

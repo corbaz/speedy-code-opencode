@@ -28,7 +28,7 @@ reached by name, through `/speedy <word>` or the palette. Both Spanish and Engli
 | `/speedy pulir` | Corrects what is written in the prompt, with Groq |
 | `/speedy modelo` | Opens the model list |
 | `/speedy sesiones` | Switches to another session |
-| `/speedy redes` | Settings menu, on the networks |
+| `/speedy redes` | Networks menu: a click opens a profile |
 
 Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 `alternar narrador`, `dictado`, `audios guardados`, `copiar la respuesta`,
@@ -43,7 +43,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   controls left out go to the `⋯` menu.
 - Every control takes a click. Menus open framed above the prompt, their
   title and their close mark on the border: voices, kept audios, images,
-  microphones and settings. A network takes several accounts (`GH`, `GH2`).
+  microphones, networks and settings. A network takes several accounts
+  (`GH`, `GH2`); one footer control opens them all.
 - The reply of the session on screen is read aloud when the narrator is on,
   through the original engine, with pause and resume. Every narration is kept
   under `~/.config/opencode/speedy-code/audio` and can be played back later.

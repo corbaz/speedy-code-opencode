@@ -22,7 +22,7 @@ import { SOCIALS, accountLabel, accountUrl, accountsOf, type Social } from "./so
 import { distinctVoices, micName, voiceTitle, type Voice } from "./voices"
 
 /** The menu on screen; empty when none is. */
-export type MenuName = "" | "voices" | "mic" | "history" | "images" | "settings" | "more"
+export type MenuName = "" | "voices" | "mic" | "history" | "images" | "socials" | "settings" | "more"
 
 /** One pasted image the port kept: its file and the moment it was pasted. */
 export interface KeptImage {
@@ -140,6 +140,9 @@ export interface MenuApi {
   readonly pasteImage: (image: KeptImage) => void
   readonly clearImages: () => void
   readonly systemName: string
+  readonly openSocial: (key: string) => void
+  /** The screen's own background, so a blank cell covers what is under it. */
+  readonly background: () => string | undefined
   readonly editSocial: (key: string) => void
   readonly addAccount: (id: string) => void
   readonly removeAccount: (key: string) => void
@@ -493,6 +496,56 @@ function MoreMenu(props: { api: MenuApi }) {
   )
 }
 
+/** The networks menu: every account with a user name, to open its profile; nothing is set here. */
+function SocialsMenu(props: { api: MenuApi }) {
+  const api = props.api
+  const accounts = () =>
+    SOCIALS.flatMap((social) =>
+      accountsOf(api.settings.socials, social.id)
+        .filter((key) => accountUrl(key, api.settings.socials[key] ?? ""))
+        .map((key) => ({ social, key })),
+    )
+  // As many columns as the width holds: badge, name and user name.
+  const CELL = 5 + 11 + 28
+  const columns = () => Math.max(1, Math.min(3, Math.floor((api.width() - 4 + 2) / (CELL + 2))))
+  const parts = () => {
+    const all = accounts()
+    const per = Math.max(1, Math.ceil(all.length / columns()))
+    return Array.from({ length: columns() }, (_, index) => all.slice(index * per, (index + 1) * per))
+  }
+  return (
+    <Show
+      when={accounts().length > 0}
+      fallback={<Label text="  Todavía no hay redes: cargalas en ⚙️ → Redes sociales." dim />}
+    >
+      <box flexDirection="row" columnGap={2}>
+        <For each={parts()}>
+          {(part) => (
+            <box flexDirection="column" width={CELL} flexShrink={0}>
+              <For each={part}>
+                {(row) => (
+                  <box
+                    flexDirection="row"
+                    flexShrink={0}
+                    onMouseUp={() => {
+                      api.close()
+                      api.openSocial(row.key)
+                    }}
+                  >
+                    <Label text={fit(` ${accountLabel(row.social.badge, row.key)}`, 5)} color={row.social.color} bold />
+                    <Label text={fit(row.social.name, 11)} color={row.social.color} bold />
+                    <Label text={fit(api.settings.socials[row.key] ?? "", 28).trimEnd()} />
+                  </box>
+                )}
+              </For>
+            </box>
+          )}
+        </For>
+      </box>
+    </Show>
+  )
+}
+
 /** The settings menu: the installer and its checks, the status line, and the networks. */
 function SettingsMenu(props: { api: MenuApi }) {
   const api = props.api
@@ -728,6 +781,8 @@ export function menuHeading(open: MenuName, settings: SpeedySettings): { title: 
       return { title: "📎 Audios", color: "#ffd43b" }
     case "images":
       return { title: "Imágenes", color: "#74c0fc" }
+    case "socials":
+      return { title: "Redes sociales", color: "#f783ac" }
     case "more":
       return { title: "Más", color: "#adb5bd" }
     default:
@@ -766,6 +821,9 @@ export function MenuFrame(props: { api: MenuApi }) {
         <Show when={api.state.open === "images"}>
           <ImagesMenu api={api} />
         </Show>
+        <Show when={api.state.open === "socials"}>
+          <SocialsMenu api={api} />
+        </Show>
         <Show when={api.state.open === "mic"}>
           <MicMenu api={api} />
         </Show>
@@ -777,7 +835,8 @@ export function MenuFrame(props: { api: MenuApi }) {
         </Show>
       </box>
       <box flexDirection="row" justifyContent="flex-end" flexShrink={0} width={api.width()} marginBottom={-1} zIndex={1}>
-        <Btn label=" ✕ " color="#ff6b6b" bold onPress={() => api.close()} />
+        {/* A blank on either side, on the screen's own background, cuts the line around the mark. */}
+        <Btn label=" ✕ " color="#ff6b6b" bg={api.background()} bold onPress={() => api.close()} />
         <box width={2} flexShrink={0} />
       </box>
       </box>

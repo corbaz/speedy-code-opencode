@@ -185,7 +185,7 @@ describe("footerControls", () => {
     ])
   })
 
-  test("draws the linked networks first, then the bar", () => {
+  test("draws one control for the linked networks first, then the bar", () => {
     const names = footerControls({
       ...base,
       socials: [
@@ -194,7 +194,7 @@ describe("footerControls", () => {
       ],
     }).map((control) => control.name)
 
-    expect(names.slice(0, 3)).toEqual(["social:github", "social:x", "divider"])
+    expect(names.slice(0, 2)).toEqual(["socials", "divider"])
     expect(names).toContain("copy")
   })
 
@@ -309,5 +309,28 @@ describe("visibleControls", () => {
 
     expect(result.shown.has("play")).toBe(true)
     expect(result.shown.size).toBeLessThan(controls.length)
+  })
+})
+
+describe("the networks' control", () => {
+  const base = { narrator: false, speech: "idle", listening: "off" } as const
+
+  test("is one control that opens their menu, whatever the number of networks", () => {
+    const controls = footerControls({
+      ...base,
+      socials: [
+        { id: "github", badge: "GH", color: "#e6edf3" },
+        { id: "github#2", badge: "GH2", color: "#e6edf3" },
+      ],
+    })
+    const socials = controls.filter((control) => control.name === "socials")
+    expect(socials).toHaveLength(1)
+    expect(socials[0]?.text).toBe(" Redes sociales ▾ ")
+    expect(socials[0]?.compactText).toBe(" Redes ▾ ")
+    expect(socials[0]?.id).toBe("socials")
+  })
+
+  test("is not drawn when no network has a user name", () => {
+    expect(footerControls(base).some((control) => control.name === "socials")).toBe(false)
   })
 })

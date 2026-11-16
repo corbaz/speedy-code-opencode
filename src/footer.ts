@@ -50,7 +50,7 @@ export const FOOTER_RANKS: Readonly<Record<string, number>> = {
   mic: 3,
   mics: 3,
   narrator: 4,
-  socials: 5,
+  socials: 0,
 }
 
 /** The rank a name gets: every network badge is drawn last, as one group. */
@@ -96,6 +96,9 @@ export const EFFORT_TONES: Readonly<Record<string, string>> = {
   max: "#ff6b6b",
 }
 
+/** The networks' control, in the color of their settings tab. */
+export const SOCIALS_COLOR = "#f783ac"
+
 /** A control that does nothing right now. */
 export const DISABLED_COLOR = "#495057"
 
@@ -137,7 +140,7 @@ export function footerFit(groups: readonly FooterGroup[], room: number): FooterF
   const shown = new Set(always.map((group) => group.name))
   let used = always.reduce((sum, group) => sum + group.width, MORE_WIDTH)
 
-  for (const name of ["model", "voice"]) {
+  for (const name of ["socials", "model", "voice"]) {
     const group = always.find((one) => one.name === name)
     if (used > room && group?.compactWidth !== undefined) {
       used -= group.width - group.compactWidth
@@ -235,6 +238,7 @@ export const PANEL_LABELS: Readonly<Record<string, string>> = {
   new: " + conversación nueva ",
   reload: " 🔄 recargar ",
   settings: " ⚙️ configuración ",
+  socials: " Redes sociales ",
 }
 
 /** One control, sized from the label it draws. */
@@ -256,10 +260,9 @@ export function footerControls(input: FooterInput): FooterControl[] {
   const mic = MIC_GLYPHS[input.listening]
   const controls: FooterControl[] = []
 
-  for (const social of input.socials ?? []) {
-    controls.push({ ...control(`social:${social.id}`, `social:${social.id}`, ` ${social.badge} `, social.color), bold: true })
-  }
+  // The networks are one control that opens their menu: a badge each took half the row.
   if ((input.socials?.length ?? 0) > 0) {
+    controls.push({ ...control("socials", "socials", " Redes sociales ▾ ", SOCIALS_COLOR, " Redes ▾ "), bold: true })
     controls.push({ name: "divider", text: "│", color: DISABLED_COLOR, width: cells("│") })
   }
 
