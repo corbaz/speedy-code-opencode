@@ -51,6 +51,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 - Dictation runs the original streaming model on this machine: nothing is sent
   anywhere. What it hears is written into the prompt.
 - The pen corrects what is written in the prompt.
+- `+` asks for the new session's name and opens it under that title; an
+  empty name leaves the title to OpenCode, and `esc` starts nothing.
 - A reply in another language is translated before it is read, and a long
   one is told in a few sentences, with the voice chosen.
 - An image pasted from the footer is kept: a chip over the prompt shows it,
