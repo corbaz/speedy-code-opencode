@@ -96,6 +96,19 @@ export const EFFORT_TONES: Readonly<Record<string, string>> = {
   max: "#ff6b6b",
 }
 
+/** What `+` does with the name typed: a session with that title, one the host names, or none. */
+export type NewSessionChoice =
+  | { readonly kind: "named"; readonly title: string }
+  | { readonly kind: "plain" }
+  | { readonly kind: "none" }
+
+/** Reads the answer to `+`'s dialog: closed starts nothing, empty leaves the name to the host. */
+export function newSessionChoice(typed: string | undefined): NewSessionChoice {
+  if (typed === undefined) return { kind: "none" }
+  const title = typed.trim()
+  return title ? { kind: "named", title } : { kind: "plain" }
+}
+
 /** The networks' control, in the color of their settings tab. */
 export const SOCIALS_COLOR = "#f783ac"
 

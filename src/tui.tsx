@@ -13,6 +13,7 @@ import { createListener, createPlayer, createSpeaker } from "./engine"
 import {
   DISABLED_COLOR,
   footerControls,
+  newSessionChoice,
   footerFit,
   footerRoom,
   hiddenGroups,
@@ -477,6 +478,28 @@ export default Plugin.define({
         return true
       } catch {
         return false
+      }
+    }
+
+    /** +: asks for the session's name, then opens it under that title; an empty name is the host's own. */
+    const newSession = async () => {
+      const choice = newSessionChoice(
+        await context.ui.dialog.prompt({
+          title: "speedy-code · nueva sesión",
+          description: "Nombre de la sesión (vacío: lo pone OpenCode)",
+          placeholder: "nombre",
+        }),
+      )
+      if (choice.kind === "none") return
+      if (choice.kind === "plain") return context.keymap.dispatch("session.new")
+      try {
+        const made = await context.client.session.create({
+          title: choice.title,
+          location: context.location ?? context.data.location.default(),
+        })
+        if (!context.ui.tabs.focus(made.id)) context.ui.router.navigate({ type: "session", sessionID: made.id })
+      } catch (error) {
+        toast(`no pude crear la sesión: ${error instanceof Error ? error.message : String(error)}`, "error")
       }
     }
 
@@ -987,7 +1010,7 @@ export default Plugin.define({
         case "send":
           return context.keymap.dispatch("prompt.submit")
         case "new":
-          return context.keymap.dispatch("session.new")
+          return newSession()
         case "reload":
           return context.keymap.dispatch("location.reload")
         case "exit":

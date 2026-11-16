@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import {
+  newSessionChoice,
   FOOTER_SHED,
   MORE_WIDTH,
   PLAY_GLYPHS,
@@ -332,5 +333,20 @@ describe("the networks' control", () => {
 
   test("is not drawn when no network has a user name", () => {
     expect(footerControls(base).some((control) => control.name === "socials")).toBe(false)
+  })
+})
+
+describe("the name asked for by +", () => {
+  test("a name typed starts a session with that title, trimmed", () => {
+    expect(newSessionChoice("  Facturas  ")).toEqual({ kind: "named", title: "Facturas" })
+  })
+
+  test("an empty answer starts a session the host names", () => {
+    expect(newSessionChoice("")).toEqual({ kind: "plain" })
+    expect(newSessionChoice("   ")).toEqual({ kind: "plain" })
+  })
+
+  test("a closed dialog starts nothing", () => {
+    expect(newSessionChoice(undefined)).toEqual({ kind: "none" })
   })
 })
