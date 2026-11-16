@@ -130,22 +130,22 @@ anything outside this list without checking it first.
   turn ends (`session.execution.succeeded`).
 - A pasted image is kept by the port itself, from the clipboard, when a paste
   control is clicked: the host does not list a session's images. An image
-  pasted with the keyboard is not kept. An image is viewed in the system's
-  viewer.
+  pasted with the keyboard is not kept. An image is shown by the original's
+  `engine/view.ps1` popup (Quick Look on macOS).
 - On first run the voices, the microphone, the networks and the status line
   levels are read from the Claude Code plugin's store, once (`imported`).
 - The status line is drawn by the plugin above its controls; its switch in
   the settings hides it. The 5-hour and weekly windows are the OpenCode Go
   plan's, and are absent on another plan.
-- A network has one account; the original allows several.
 - A user name is edited in the host's prompt dialog, not in a field of the menu.
 - With no environment of its own, the engine runs with the one the Claude
   Code plugin installed (`~/.claude/speedy-code`), Python and dictation model.
 
 ## Open work
 
-1. **Several accounts per network.** The original allows them; here a
-   network keeps one.
+1. **Live checks still owed.** Dictating with a voice into the prompt, and
+   pasting a real image from the footer inside the TUI, were not run by the
+   agent: only their parts were.
 2. **Narration voice report.** The maintainer heard a female English voice
    once while `Victor · ES` was chosen. It did not reproduce; every narration
    now appends its voice to `~/.config/opencode/speedy-code/narrations.log`.

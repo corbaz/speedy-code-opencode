@@ -18,7 +18,7 @@ import {
   type LevelKey,
   type SpeedySettings,
 } from "./settings"
-import { SOCIALS, socialUrl } from "./socials"
+import { SOCIALS, accountLabel, accountUrl, accountsOf, type Social } from "./socials"
 import { distinctVoices, micName, voiceTitle, type Voice } from "./voices"
 
 /** The menu on screen; empty when none is. */
@@ -140,7 +140,9 @@ export interface MenuApi {
   readonly pasteImage: (image: KeptImage) => void
   readonly clearImages: () => void
   readonly systemName: string
-  readonly editSocial: (id: string) => void
+  readonly editSocial: (key: string) => void
+  readonly addAccount: (id: string) => void
+  readonly removeAccount: (key: string) => void
   readonly runSetup: () => void
   readonly adjustLevel: (key: LevelKey, delta: number) => void
   readonly movePart: (key: BarPart, delta: -1 | 1) => void
@@ -611,13 +613,19 @@ function SettingsMenu(props: { api: MenuApi }) {
   )
 
   // Two tables of the networks side by side where the width holds them.
-  const fixed = 5 + 12 + 28
+  // A row per account: + adds another of the network on its first row, − removes an added one.
+  const fixed = 4 + 5 + 12 + 28
+  const rows = (): Array<{ social: Social; key: string; index: number }> =>
+    SOCIALS.flatMap((social) =>
+      accountsOf(api.settings.socials, social.id).map((key, index) => ({ social, key, index })),
+    )
   const tables = () => (inside() >= (fixed + 26) * 2 + 3 ? 2 : 1)
   const linkWidth = () =>
     tables() === 2 ? Math.floor((inside() - 3) / 2) - fixed : Math.max(10, inside() - fixed)
   const halves = () => {
-    const per = Math.ceil(SOCIALS.length / tables())
-    return Array.from({ length: tables() }, (_, index) => SOCIALS.slice(index * per, (index + 1) * per))
+    const all = rows()
+    const per = Math.ceil(all.length / tables())
+    return Array.from({ length: tables() }, (_, index) => all.slice(index * per, (index + 1) * per))
   }
   const socialsTab = () => (
     <box flexDirection="row" columnGap={3}>
@@ -625,36 +633,50 @@ function SettingsMenu(props: { api: MenuApi }) {
         {(part) => (
           <box flexDirection="column" flexShrink={0}>
             <Label
-              text={fit(" Red", 5 + (narrow() ? 0 : 12)) + fit("Usuario", 28) + (narrow() ? "" : fit("Link", linkWidth()))}
+              text={fit(" Red", 4 + 5 + (narrow() ? 0 : 12)) + fit("Usuario", 28) + (narrow() ? "" : fit("Link", linkWidth()))}
               bold
               color="black"
               bg="#f783ac"
             />
             <For each={part}>
-              {(social) => {
-                const handle = () => api.settings.socials[social.id] ?? ""
-                const link = () => socialUrl(social.id, handle())
+              {(row) => {
+                const handle = () => api.settings.socials[row.key] ?? ""
+                const link = () => accountUrl(row.key, handle())
+                const isFirst = row.index === 0
                 return (
                   <box flexDirection="row">
+                    <box width={4} flexShrink={0}>
+                      <Show
+                        when={isFirst}
+                        fallback={<Btn label=" − " color="#ff6b6b" bold onPress={() => api.removeAccount(row.key)} />}
+                      >
+                        <Btn label=" + " color={row.social.color} bold onPress={() => api.addAccount(row.social.id)} />
+                      </Show>
+                    </box>
                     <box width={5} flexShrink={0}>
-                      <Label text={` ${social.badge}`} color={social.color} bold />
+                      <Label text={accountLabel(row.social.badge, row.key)} color={row.social.color} bold dim={!isFirst} />
                     </box>
                     <Show when={!narrow()}>
                       <box width={12} flexShrink={0}>
-                        <Label text={social.name} color={social.color} bold />
+                        <Label
+                          text={isFirst ? row.social.name : `  cuenta ${row.index + 1}`}
+                          color={row.social.color}
+                          bold={isFirst}
+                          dim={!isFirst}
+                        />
                       </box>
                     </Show>
                     <box width={28} flexShrink={0}>
                       <Btn
                         label={fit(handle() || "usuario ✎", 26)}
                         color={handle() ? undefined : "#868e96"}
-                        onPress={() => api.editSocial(social.id)}
+                        onPress={() => api.editSocial(row.key)}
                       />
                     </box>
                     <Show when={!narrow()}>
                       <Label
                         text={fit(link() || "—", linkWidth()).trimEnd()}
-                        color={link() ? social.color : undefined}
+                        color={link() ? row.social.color : undefined}
                         dim={!link()}
                       />
                     </Show>
@@ -719,6 +741,9 @@ export function MenuFrame(props: { api: MenuApi }) {
   const heading = () => menuHeading(api.state.open, api.settings)
   return (
     <Show when={api.state.open !== ""}>
+      {/* The close mark's row comes after the frame in the tree, so it is drawn over it, and
+          column-reverse puts it on top, pulled one row down onto the border. */}
+      <box flexDirection="column-reverse" flexShrink={0} width={api.width()}>
       <box
         flexDirection="column"
         flexShrink={0}
@@ -730,10 +755,8 @@ export function MenuFrame(props: { api: MenuApi }) {
         titleAlignment="center"
         paddingLeft={1}
         paddingRight={1}
+        paddingTop={1}
       >
-        <box flexDirection="row" justifyContent="flex-end" flexShrink={0}>
-          <Btn label=" ✕ " color="#ff6b6b" bold onPress={() => api.close()} />
-        </box>
         <Show when={api.state.open === "voices"}>
           <VoiceMenu api={api} />
         </Show>
@@ -752,6 +775,11 @@ export function MenuFrame(props: { api: MenuApi }) {
         <Show when={api.state.open === "settings"}>
           <SettingsMenu api={api} />
         </Show>
+      </box>
+      <box flexDirection="row" justifyContent="flex-end" flexShrink={0} width={api.width()} marginBottom={-1} zIndex={1}>
+        <Btn label=" ✕ " color="#ff6b6b" bold onPress={() => api.close()} />
+        <box width={2} flexShrink={0} />
+      </box>
       </box>
     </Show>
   )

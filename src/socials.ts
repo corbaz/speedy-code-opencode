@@ -58,3 +58,42 @@ export function socialUrl(id: string, handle: string): string {
   if (!social || !/^[\w.-]{1,100}$/.test(user)) return ""
   return social.template.replace("{u}", user)
 }
+
+/**
+ * A network's accounts, by key: the first under the network's id, each one
+ * added after it under `id#2`, `id#3`..., in that order.
+ */
+export function accountsOf(users: Readonly<Record<string, string>>, id: string): string[] {
+  const more = Object.keys(users)
+    .filter((key) => key.startsWith(`${id}#`))
+    .sort((a, b) => Number(a.split("#")[1]) - Number(b.split("#")[1]))
+  return [id, ...more]
+}
+
+/** The network an account key belongs to: `github#2` → `github`. */
+export function networkOf(key: string): string {
+  return key.split("#")[0] ?? key
+}
+
+/** The label of an account's button: the network's, numbered past the first (`GH`, `GH2`). */
+export function accountLabel(label: string, key: string): string {
+  return label + (key.split("#")[1] ?? "")
+}
+
+/** The key another account of `id` takes: one already empty, else the next number. */
+export function nextAccount(users: Readonly<Record<string, string>>, id: string): string {
+  const added = accountsOf(users, id).slice(1)
+  const empty = added.find((key) => !(users[key] ?? "").trim())
+  if (empty) return empty
+  return `${id}#${Math.max(1, ...added.map((key) => Number(key.split("#")[1]))) + 1}`
+}
+
+/** The accounts without the added ones left empty: a network's first account always stays. */
+export function withoutEmptyAccounts(users: Readonly<Record<string, string>>): Record<string, string> {
+  return Object.fromEntries(Object.entries(users).filter(([key, user]) => !key.includes("#") || user.trim()))
+}
+
+/** The profile link of an account, whichever of its network's it is. */
+export function accountUrl(key: string, handle: string): string {
+  return socialUrl(networkOf(key), handle)
+}

@@ -50,7 +50,7 @@ import {
   voiceShortName,
   type SpeedySettings,
 } from "./settings"
-import { SOCIALS, socialUrl } from "./socials"
+import { SOCIALS, accountLabel, accountUrl, accountsOf, networkOf, nextAccount, withoutEmptyAccounts } from "./socials"
 import { statusLine, type Run, type StatusLimit } from "./statusline"
 import { nameOf, narrationRequest, parseMics, parseVoices, type Voice } from "./voices"
 
@@ -482,24 +482,42 @@ export default Plugin.define({
 
     /** Asks for a network's user name and keeps it; an empty answer clears it. */
     const editSocial = async (id: string) => {
-      const social = SOCIALS.find((one) => one.id === id)
+      const social = SOCIALS.find((one) => one.id === networkOf(id))
       if (!social) return
       const typed = await context.ui.dialog.prompt({
         title: `speedy-code · ${social.name}`,
         description: social.hint ?? "Usuario",
         placeholder: settings.socials[id] || social.hint || "usuario",
       })
-      if (typed === undefined) return
       await update((draft) => {
-        draft.socials[id] = typed.trim()
+        if (typed !== undefined) draft.socials[id] = typed.trim()
+        // An added account left empty goes.
+        draft.socials = withoutEmptyAccounts(draft.socials)
+      })
+    }
+
+    /** The + of a network: another account of it, asked for at once. */
+    const addAccount = async (id: string) => {
+      const key = nextAccount(settings.socials, id)
+      await update((draft) => {
+        draft.socials[key] = draft.socials[key] ?? ""
+      })
+      await editSocial(key)
+    }
+
+    /** The − of an added account: it goes, whatever it holds. */
+    const removeAccount = async (key: string) => {
+      if (!key.includes("#")) return
+      await update((draft) => {
+        delete draft.socials[key]
       })
     }
 
     // Clicking a badge does what the original's badge did: opens that profile.
     const openSocial = async (id: string) => {
-      const social = SOCIALS.find((one) => one.id === id)
+      const social = SOCIALS.find((one) => one.id === networkOf(id))
       if (!social) return
-      const url = socialUrl(id, settings.socials[id] ?? "")
+      const url = accountUrl(id, settings.socials[id] ?? "")
       if (!url) return editSocial(id)
       if (!openLink(url)) await copyText(url, `enlace de ${social.name}`)
     }
@@ -831,9 +849,55 @@ export default Plugin.define({
       context.keymap.dispatch("prompt.paste")
     }
 
-    /** Shows an image in the system's own viewer. */
+    // The image popup open, if any: opening another closes it.
+    let viewer: ReturnType<typeof spawn> | undefined
+
+    const closeViewer = () => {
+      const open = viewer
+      viewer = undefined
+      if (!open) return
+      try {
+        if (process.platform === "win32" && typeof open.pid === "number") {
+          spawn("taskkill", ["/pid", String(open.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true })
+        } else open.kill()
+      } catch {
+        // Already gone.
+      }
+    }
+
+    /** Shows an image in a popup in the middle of the screen, in its own proportions, as the original does. */
     const viewImage = (image: KeptImage) => {
-      if (!openLink(image.path)) toast("no pude abrir la imagen", "error")
+      closeViewer()
+      const argv =
+        process.platform === "win32"
+          ? [
+              "powershell",
+              "-NoProfile",
+              "-NonInteractive",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              join(PLUGIN_ROOT, "engine", "view.ps1"),
+            ]
+          : process.platform === "darwin"
+            ? ["qlmanage", "-p", image.path]
+            : ["xdg-open", image.path]
+      try {
+        const child = spawn(argv[0] as string, argv.slice(1), {
+          env: { ...process.env, SPEEDY_IMAGE: image.path },
+          stdio: ["ignore", "pipe", "ignore"],
+          windowsHide: true,
+        })
+        // It says a dot ten times a second while it is up: read and dropped, so it never stalls.
+        child.stdout?.on("data", () => {})
+        child.on("error", () => toast("no pude abrir la imagen", "error"))
+        child.on("exit", () => {
+          if (viewer === child) viewer = undefined
+        })
+        viewer = child
+      } catch {
+        toast("no pude abrir la imagen", "error")
+      }
     }
 
     /** Pastes a kept image again: it goes on the clipboard, then the host pastes. */
@@ -1136,7 +1200,7 @@ export default Plugin.define({
 
     const StatusRow = (props: { sessionID?: string }) => (
       <Show when={settings.statusBar}>
-        <box flexDirection="row" flexShrink={0} paddingLeft={1}>
+        <box flexDirection="row" flexShrink={0} justifyContent="center" width="100%">
           {statusRuns(props.sessionID, columnsNow()).map((run) => (
             <Tinted fg={run.color} bold={run.bold}>
               {run.text}
@@ -1150,10 +1214,12 @@ export default Plugin.define({
     const FooterRow = () => {
       const view = () => {
         const model = context.ui.model.current()
-        const linked = SOCIALS.flatMap((social) => {
-          const handle = settings.socials[social.id] ?? ""
-          return handle.trim() ? [{ id: social.id, badge: social.badge, color: social.color }] : []
-        })
+        // A badge per account with a user name that builds a link, in the networks' order.
+        const linked = SOCIALS.flatMap((social) =>
+          accountsOf(settings.socials, social.id)
+            .filter((key) => accountUrl(key, settings.socials[key] ?? ""))
+            .map((key) => ({ id: key, badge: accountLabel(social.badge, key), color: social.color })),
+        )
         const named = (context.data.location.model.list() ?? []).find(
           (one) => one.modelID === model?.modelID && one.providerID === model?.providerID,
         ) as ModelShape | undefined
@@ -1178,7 +1244,7 @@ export default Plugin.define({
         return { shown: shown.filter((control) => control.name !== "divider" || hasSocials), hidden: hiddenNow }
       }
       return (
-        <box flexDirection="row" flexShrink={0}>
+        <box flexDirection="row" flexShrink={0} justifyContent="center" width="100%">
           {view().shown.map((control) => (
             <box
               flexShrink={0}
@@ -1231,6 +1297,8 @@ export default Plugin.define({
       clearImages: () => void clearImages(),
       systemName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux",
       editSocial: (id) => void editSocial(id),
+      addAccount: (id) => void addAccount(id),
+      removeAccount: (key) => void removeAccount(key),
       runSetup,
       adjustLevel: (key, delta) =>
         void update((draft) => {
@@ -1270,7 +1338,7 @@ export default Plugin.define({
       replace: "prompt.footer",
       render: (input) => (
         <Show when={input.sessionID}>
-          <box flexDirection="column" flexShrink={0}>
+          <box flexDirection="column" flexShrink={0} flexGrow={1} width="100%">
             <StatusRow sessionID={input.sessionID} />
             <FooterRow />
           </box>
@@ -1282,7 +1350,7 @@ export default Plugin.define({
     const disposeHome = context.ui.slot({
       before: "home.footer",
       render: () => (
-        <box flexDirection="column" flexShrink={0}>
+        <box flexDirection="column" flexShrink={0} width="100%">
           <MenuFrame api={menuApi} />
           <DraftImages api={menuApi} />
           <HeardRow />
@@ -1300,6 +1368,7 @@ export default Plugin.define({
       disposeFooter()
       disposeHome()
       clearInterval(ticking)
+      closeViewer()
       void dictation.stop()
       void clipPlayer.stop()
       return narration.stop()

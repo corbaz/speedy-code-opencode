@@ -42,7 +42,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   original's order. Both shed what does not fit as the terminal narrows; the
   controls left out go to the `⋯` menu.
 - Every control takes a click. Menus open framed above the prompt, their
-  title on the border: voices, kept audios, microphones and settings.
+  title and their close mark on the border: voices, kept audios, images,
+  microphones and settings. A network takes several accounts (`GH`, `GH2`).
 - The reply of the session on screen is read aloud when the narrator is on,
   through the original engine, with pause and resume. Every narration is kept
   under `~/.config/opencode/speedy-code/audio` and can be played back later.
@@ -64,7 +65,6 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 - Translating a reply and telling a long one short need `GROQ_API_KEY`;
   without it the reply is read as written.
 - The 5-hour and weekly windows are the OpenCode Go plan's; another plan shows none.
-- A network keeps one account.
 
 ## Install on Windows
 

@@ -246,7 +246,7 @@ export function importClaude(settings: SpeedySettings, claude: unknown): SpeedyS
     if (key === "active" ? LANGUAGE_CODES.has(value) : LANGUAGE_CODES.has(key)) next.picks[key] = value
   }
   for (const [key, value] of Object.entries(isRecord(claude.socials) ? claude.socials : {})) {
-    if (typeof value === "string" && !key.includes("#")) next.socials[key] = value.trim().replace(/^@/, "")
+    if (typeof value === "string") next.socials[key] = value.trim().replace(/^@/, "")
   }
   if (typeof claude.mic === "string") next.mic = claude.mic
   if (isRecord(claude.barLevels)) next.barLevels = normalizeLevels({ ...next.barLevels, ...claude.barLevels })

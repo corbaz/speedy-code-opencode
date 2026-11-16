@@ -239,7 +239,7 @@ describe("importClaude", () => {
     expect(next.picks.xx).toBeUndefined()
     expect(next.mic).toBe("Micrófono (G432 Gaming Headset)")
     expect(next.socials.github).toBe("corbaz")
-    expect(next.socials["github#2"]).toBeUndefined()
+    expect(next.socials["github#2"]).toBe("otro")
     expect(next.barLevels.contextRed).toBe(85)
     expect(next.barLevels.contextYellow).toBe(60)
   })

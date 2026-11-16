@@ -66,3 +66,28 @@ describe("a user name as people write it", () => {
     expect(socialUrl("github", "a b/c")).toBe("")
   })
 })
+
+describe("several accounts of a network", () => {
+  test("the first is under the network's id, the added ones numbered after it", async () => {
+    const { accountsOf, accountLabel, networkOf } = await import("../src/socials")
+    const users = { github: "corbaz", "github#3": "c", "github#2": "b", x: "chipy" }
+    expect(accountsOf(users, "github")).toEqual(["github", "github#2", "github#3"])
+    expect(accountsOf(users, "x")).toEqual(["x"])
+    expect(accountLabel("GH", "github")).toBe("GH")
+    expect(accountLabel("GH", "github#2")).toBe("GH2")
+    expect(networkOf("github#2")).toBe("github")
+  })
+
+  test("another account takes the next number, or the one left empty", async () => {
+    const { nextAccount } = await import("../src/socials")
+    expect(nextAccount({ github: "corbaz" }, "github")).toBe("github#2")
+    expect(nextAccount({ github: "corbaz", "github#2": "b" }, "github")).toBe("github#3")
+    expect(nextAccount({ github: "corbaz", "github#2": " " }, "github")).toBe("github#2")
+  })
+
+  test("an added account left empty goes; a network's first stays", async () => {
+    const { withoutEmptyAccounts, accountUrl } = await import("../src/socials")
+    expect(withoutEmptyAccounts({ github: "", "github#2": "", "github#3": "c" })).toEqual({ github: "", "github#3": "c" })
+    expect(accountUrl("github#2", "otro")).toBe("https://github.com/otro")
+  })
+})
