@@ -76,6 +76,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   ⚙ → Instalación says whether they are there.
 - After the exit, the footer shows the version, `v:yy.mmdd-(hhmm)`: the moment of the clone's
   last commit, in Buenos Aires time.
+- `☰`, after `+`, opens the menu of the sessions OpenCode keeps, newest first, each with its folder and
+  when it last changed; the list scrolls, and a click goes to one.
 - `+` asks for the new session's name and opens it under that title; an
   empty name leaves the title to OpenCode, and `esc` starts nothing.
 - A reply in another language is translated before it is read, and a long
