@@ -1420,6 +1420,20 @@ export default Plugin.define({
           draft.icons = draft.icons === "nerd" ? "emoji" : "nerd"
         }),
       icons: () => settings.icons,
+      setFont: (size) => {
+        toast(`poniendo JetBrains Mono a ${size} pt en tu terminal…`)
+        void run([pythonPath(), join(PLUGIN_ROOT, "setup", "terminal_font.py"), "--size", String(size)], {
+          PYTHONIOENCODING: "utf-8",
+        }).then((result) => {
+          const said = result.stdout.trim()
+          if (result.code !== 0) return toast(said || "no pude cambiar la fuente: falta instalar", "error")
+          void update((draft) => {
+            draft.fontSize = size
+          })
+          toast(said, "success")
+        })
+      },
+      fontSize: () => settings.fontSize,
       hidden: () => hiddenNow,
       runControl: (id) => void runControl(id),
     }

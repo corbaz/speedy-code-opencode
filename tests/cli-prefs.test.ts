@@ -110,3 +110,60 @@ describe.skipIf(!python)("the icon font's check", () => {
     }
   })
 })
+
+describe.skipIf(!python)("the terminal's font", () => {
+  const script = join(import.meta.dir, "..", "setup", "terminal_font.py")
+  const run = async (...flags: string[]) => {
+    const child = Bun.spawn([python ?? "python", script, ...flags], { stdout: "pipe", stderr: "pipe" })
+    const out = (await new Response(child.stdout).text()).trim()
+    return { out, code: await child.exited }
+  }
+
+  test("Windows Terminal takes the face and the size, keeps the rest, and one copy of the file as it first was", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
+    const path = join(folder, "settings.json")
+    const before = JSON.stringify({
+      theme: "dark",
+      profiles: { defaults: { font: { face: "Cascadia Mono, Symbols Nerd Font Mono", weight: "medium" } }, list: [{ name: "A" }, { name: "B", font: { face: "Consolas", size: 11 } }] },
+    })
+    await writeFile(path, before)
+    try {
+      expect(await run("--size", "14", "--face", "JetBrainsMono NFM", "--windows-terminal", path)).toEqual({ out: "cambiada", code: 0 })
+      const after = JSON.parse(await readFile(path, "utf8"))
+      expect(after.theme).toBe("dark")
+      expect(after.profiles.defaults.font).toEqual({ face: "JetBrainsMono NFM", weight: "medium", size: 14 })
+      expect(after.profiles.list).toEqual([{ name: "A" }, { name: "B", font: { face: "JetBrainsMono NFM", size: 14 } }])
+      expect(await run("--size", "14", "--face", "JetBrainsMono NFM", "--windows-terminal", path)).toEqual({ out: "ya estaba", code: 0 })
+      expect((await run("--size", "12", "--face", "JetBrainsMono NFM", "--windows-terminal", path)).out).toBe("cambiada")
+      expect(JSON.parse(await readFile(path, "utf8")).profiles.defaults.font.size).toBe(12)
+      expect(await readFile(`${path}.speedy-font.bak`, "utf8")).toBe(before)
+    } finally {
+      await rm(folder, { recursive: true, force: true })
+    }
+  })
+
+  test("Ghostty and kitty get their two lines in place of the ones they had, and nothing else moves", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
+    const ghostty = join(folder, "config")
+    const kitty = join(folder, "kitty.conf")
+    await writeFile(ghostty, "theme = dark\nfont-family = Menlo\nfont-size = 11\n# font-size = 9\nfont-feature = -calt\n")
+    try {
+      expect((await run("--size", "14", "--face", "JetBrainsMono Nerd Font Mono", "--ghostty", ghostty)).out).toBe("cambiada")
+      expect(await readFile(ghostty, "utf8")).toBe(
+        'theme = dark\n# font-size = 9\nfont-feature = -calt\nfont-family = "JetBrainsMono Nerd Font Mono"\nfont-size = 14\n',
+      )
+      expect(await readFile(`${ghostty}.speedy-font.bak`, "utf8")).toContain("font-family = Menlo")
+      expect((await run("--size", "12", "--face", "JetBrainsMono Nerd Font Mono", "--kitty", kitty)).out).toBe("cambiada")
+      expect(await readFile(kitty, "utf8")).toBe("font_family JetBrainsMono Nerd Font Mono\nfont_size 12.0\n")
+    } finally {
+      await rm(folder, { recursive: true, force: true })
+    }
+  })
+
+  test("a size out of range changes nothing and says the range", async () => {
+    expect(await run("--size", "99", "--face", "X", "--ghostty", join(tmpdir(), "speedy-never-written"))).toEqual({
+      out: "el tamaño va de 6 a 40 puntos",
+      code: 1,
+    })
+  })
+})

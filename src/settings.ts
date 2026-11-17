@@ -136,6 +136,8 @@ export interface SpeedySettings {
   statusBar: boolean
   /** The icons drawn: emojis, or Nerd Fonts glyphs where the terminal has a Nerd Font. */
   icons: IconSet
+  /** The size, in points, the terminal's font was last set to from here; 0 while it never was. */
+  fontSize: number
   /** Whether what the Claude Code plugin keeps was already brought in. */
   imported: boolean
 }
@@ -149,6 +151,7 @@ export const DEFAULT_SETTINGS: SpeedySettings = {
   barOrder: [...DEFAULT_ORDER],
   statusBar: true,
   icons: "emoji",
+  fontSize: 0,
   imported: false,
 }
 
@@ -234,6 +237,7 @@ export function settingsFromSaved(saved: unknown): SpeedySettings {
     barOrder: barOrderOf(saved.barOrder),
     statusBar: typeof saved.statusBar === "boolean" ? saved.statusBar : DEFAULT_SETTINGS.statusBar,
     icons: saved.icons === "nerd" ? "nerd" : DEFAULT_SETTINGS.icons,
+    fontSize: Number.isInteger(saved.fontSize) && Number(saved.fontSize) > 0 ? Number(saved.fontSize) : 0,
     imported: saved.imported === true,
   }
 }

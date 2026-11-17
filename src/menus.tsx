@@ -157,6 +157,10 @@ export interface MenuApi {
   /** Changes the icon set: emojis, or Nerd Fonts glyphs. */
   readonly toggleIcons: () => void
   readonly icons: () => IconSet
+  /** Sets the terminal's font to JetBrains Mono at this size, in points. */
+  readonly setFont: (size: number) => void
+  /** The size last set from here; 0 while the terminal keeps its own font. */
+  readonly fontSize: () => number
   readonly barOn: () => boolean
   /** The controls the footer left out for want of room. */
   readonly hidden: () => readonly FooterControl[]
@@ -164,6 +168,9 @@ export interface MenuApi {
 }
 
 /** The icons every label of the menus is drawn with; the plugin's setup keeps it as the settings say. */
+/** The sizes, in points, the terminal's font can be set to from the settings. */
+export const FONT_SIZES = [11, 12, 13, 14, 16] as const
+
 export const [menuIcons, setMenuIcons] = createSignal<IconSet>("emoji")
 
 /** A label that takes a click: no fill under the pointer, as the footer's controls. */
@@ -670,6 +677,31 @@ function SettingsMenu(props: { api: MenuApi }) {
         {/* The glyphs themselves, whatever the set: they tell whether the terminal's font has them. */}
         <text wrapMode="none" selectable={false} fg="#b197fc">{"   prueba: \uf0c5 \uf0ea \uf03e \uf130 \uf013 "}</text>
         <Label text="(si ves cuadrados, elegí una Nerd Font en tu terminal)" dim />
+      </box>
+      {/* The terminal's own font: a program in a terminal has none, so the terminal's settings are changed. */}
+      <box flexDirection="row" marginBottom={1}>
+        <Label text=" Aa  Fuente de la terminal " color="#ffa94d" bold />
+        <Label
+          text={api.fontSize() ? `● JetBrains Mono · ${api.fontSize()} pt` : "○ la de tu terminal"}
+          color={api.fontSize() ? "#51cf66" : "#868e96"}
+          bold
+        />
+        <box marginLeft={3} flexDirection="row" flexShrink={0}>
+          <For each={FONT_SIZES}>
+            {(size) => (
+              <box marginRight={1} flexShrink={0}>
+                <Btn
+                  label={` ${size} `}
+                  bold
+                  color="black"
+                  bg={api.fontSize() === size ? "#51cf66" : "#ffa94d"}
+                  onPress={() => api.setFont(size)}
+                />
+              </box>
+            )}
+          </For>
+        </box>
+        <Label text=" JetBrains Mono en toda la terminal, a ese tamaño en puntos" dim />
       </box>
       <box flexDirection={sideBySide() ? "row" : "column"}>
         <box flexDirection="column" flexShrink={0} marginRight={sideBySide() ? 4 : 0}>
