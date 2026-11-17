@@ -62,6 +62,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 - Dictation runs the original streaming model on this machine: nothing is sent
   anywhere. What it hears is written into the prompt.
 - The pen corrects what is written in the prompt.
+- After the exit, the footer shows the version, `v:yy.mmdd-(hhmm)`: the moment of the clone's
+  last commit, in Buenos Aires time.
 - `+` asks for the new session's name and opens it under that title; an
   empty name leaves the title to OpenCode, and `esc` starts nothing.
 - A reply in another language is translated before it is read, and a long

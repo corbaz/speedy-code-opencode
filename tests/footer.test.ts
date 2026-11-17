@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import {
+  versionLabel,
   newSessionChoice,
   FOOTER_SHED,
   MORE_WIDTH,
@@ -348,5 +349,40 @@ describe("the name asked for by +", () => {
 
   test("a closed dialog starts nothing", () => {
     expect(newSessionChoice(undefined)).toEqual({ kind: "none" })
+  })
+})
+
+describe("the version beside the exit", () => {
+  const base = { narrator: false, speech: "idle", listening: "off" } as const
+
+  test("is the last commit's moment in Buenos Aires, as v:yy.mmdd-(hhmm)", () => {
+    // 2026-11-17 00:05 UTC is 2026-11-16 21:05 in Buenos Aires (UTC-3, no summer time).
+    expect(versionLabel(Date.UTC(2026, 10, 17, 0, 5) / 1000)).toBe("v:26.1116-(2105)")
+    expect(versionLabel(Date.UTC(2027, 0, 1, 2, 59) / 1000)).toBe("v:26.1231-(2359)")
+    expect(versionLabel(Date.UTC(2027, 0, 1, 3, 0) / 1000)).toBe("v:27.0101-(0000)")
+  })
+
+  test("says nothing of a moment it was not given", () => {
+    expect(versionLabel(Number.NaN)).toBe("")
+    expect(versionLabel(0)).toBe("")
+  })
+
+  test("is drawn right after the exit, in its own color, and runs nothing", () => {
+    const controls = footerControls({ ...base, version: "v:26.1116-(2105)" })
+    const names = controls.map((control) => control.name)
+    expect(names.slice(-2)).toEqual(["exit", "version"])
+    const version = controls.at(-1)
+    expect(version?.text).toBe(" v:26.1116-(2105) ")
+    expect(version?.color).toBe("#b197fc")
+    expect(version?.id).toBeUndefined()
+  })
+
+  test("is not drawn without a version, and is the first to go when the row is short", () => {
+    expect(footerControls(base).some((control) => control.name === "version")).toBe(false)
+    const controls = footerControls({ ...base, version: "v:26.1116-(2105)" })
+    const full = controls.reduce((sum, control) => sum + control.width, 0)
+    const fit = footerFit(controls, full - 1)
+    expect(fit.shown.has("version")).toBe(false)
+    expect(fit.shown.has("exit")).toBe(true)
   })
 })

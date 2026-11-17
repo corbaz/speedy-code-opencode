@@ -14,6 +14,7 @@ import {
   DISABLED_COLOR,
   footerControls,
   newSessionChoice,
+  versionLabel,
   footerFit,
   footerRoom,
   hiddenGroups,
@@ -174,6 +175,11 @@ export default Plugin.define({
     const [limits, setLimits] = createSignal<{ five_hour?: StatusLimit; seven_day?: StatusLimit }>({})
     // The minute the status line counts the session in: read by its render, so it redraws.
     const [clock, setClock] = createSignal(Date.now())
+    // The version beside the exit: the last commit of this clone, asked of git once.
+    const [version, setVersion] = createSignal("")
+    void run(["git", "-C", PLUGIN_ROOT, "log", "-1", "--format=%ct"]).then((result) =>
+      setVersion(result.code === 0 ? versionLabel(Number(result.stdout.trim())) : ""),
+    )
 
     // Repair an older or hand-edited value once, without writing when it is already whole.
     const repaired = settingsFromSaved(settings)
@@ -1298,6 +1304,7 @@ export default Plugin.define({
           language: settings.picks.active.toUpperCase(),
           polishing: wand.busy,
           socials: linked,
+          version: version(),
         })
         const result = footerFit(controls, footerRoom(columnsNow()))
         hiddenNow = hiddenGroups(controls, result) as FooterControl[]

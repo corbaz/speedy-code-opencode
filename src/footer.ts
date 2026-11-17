@@ -51,6 +51,7 @@ export const FOOTER_RANKS: Readonly<Record<string, number>> = {
   mics: 3,
   narrator: 4,
   socials: 0,
+  version: 6,
 }
 
 /** The rank a name gets: every network badge is drawn last, as one group. */
@@ -94,6 +95,21 @@ export const EFFORT_TONES: Readonly<Record<string, string>> = {
   high: "#ffd43b",
   xhigh: "#ffa94d",
   max: "#ff6b6b",
+}
+
+/** The version's color, beside the exit. */
+export const VERSION_COLOR = "#b197fc"
+
+/**
+ * The version the footer shows: the moment of the last commit, in Buenos Aires (UTC-3, which has
+ * no summer time), as `v:yy.mmdd-(hhmm)`. It changes with every push, and needs no file kept.
+ */
+export function versionLabel(epochSeconds: number): string {
+  if (!Number.isFinite(epochSeconds) || epochSeconds <= 0) return ""
+  const local = new Date((epochSeconds - 3 * 3600) * 1000)
+  const two = (value: number) => String(value).padStart(2, "0")
+  const day = `${two(local.getUTCFullYear() % 100)}.${two(local.getUTCMonth() + 1)}${two(local.getUTCDate())}`
+  return `v:${day}-(${two(local.getUTCHours())}${two(local.getUTCMinutes())})`
 }
 
 /** What `+` does with the name typed: a session with that title, one the host names, or none. */
@@ -225,6 +241,8 @@ export interface FooterInput {
   readonly polishing?: boolean
   /** The networks with a handle set, in the original's order. */
   readonly socials?: readonly FooterSocial[]
+  /** The version drawn after the exit, as `versionLabel` writes it; none draws nothing. */
+  readonly version?: string
 }
 
 /** The family of a model id, for the short footer label. */
@@ -318,6 +336,10 @@ export function footerControls(input: FooterInput): FooterControl[] {
   controls.push(control("reload", "reload", " 🔄 ", "#adb5bd"))
   controls.push(control("settings", "settings", " ⚙️ ", "#adb5bd"))
   controls.push(control("exit", "exit", " ✕ ", "#ff6b6b"))
+  if (input.version) {
+    const text = ` ${input.version} `
+    controls.push({ name: "version", text, color: VERSION_COLOR, width: cells(text), panel: text, bold: true })
+  }
 
   return controls
 }
