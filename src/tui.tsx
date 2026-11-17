@@ -2,7 +2,7 @@ import { spawn } from "node:child_process"
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
-import { dirname, join, resolve } from "node:path"
+import { dirname, join, resolve, sep } from "node:path"
 
 import { Plugin } from "@opencode/plugin/tui"
 import { Show, createSignal } from "solid-js"
@@ -177,7 +177,8 @@ export default Plugin.define({
     const [clock, setClock] = createSignal(Date.now())
     // The version beside the exit: the last commit of this clone, asked of git once.
     const [version, setVersion] = createSignal("")
-    void run(["git", "-C", PLUGIN_ROOT, "log", "-1", "--format=%ct"]).then((result) =>
+    // Forward slashes: a git reached through a shell wrapper loses the backslashes of a Windows path.
+    void run(["git", "-C", PLUGIN_ROOT.split(sep).join("/"), "log", "-1", "--format=%ct"]).then((result) =>
       setVersion(result.code === 0 ? versionLabel(Number(result.stdout.trim())) : ""),
     )
 
