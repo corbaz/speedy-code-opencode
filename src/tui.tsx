@@ -1064,6 +1064,8 @@ export default Plugin.define({
           return context.keymap.dispatch("prompt.submit")
         case "new":
           return openMenu("new")
+        case "sessions":
+          return openMenu("sessions")
         case "reload":
           return context.keymap.dispatch("location.reload")
         case "exit":
