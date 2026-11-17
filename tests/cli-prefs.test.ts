@@ -81,4 +81,32 @@ describe.skipIf(!python)("the icon font's check", () => {
       await rm(folder, { recursive: true, force: true })
     }
   })
+
+  test("adds the icon font after Windows Terminal's fonts, once, and keeps the file as it was", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "speedy-font-"))
+    const path = join(folder, "settings.json")
+    const before = JSON.stringify({
+      theme: "dark",
+      profiles: { defaults: {}, list: [{ name: "A" }, { name: "B", font: { face: "Consolas", size: 11 } }, { name: "C", font: { face: "JetBrainsMono NF" } }] },
+    })
+    await writeFile(path, before)
+    const run = async () => {
+      const child = Bun.spawn([python ?? "python", font, "--windows-terminal", path], { stdout: "pipe", stderr: "pipe" })
+      const out = (await new Response(child.stdout).text()).trim()
+      return { out, code: await child.exited }
+    }
+    try {
+      expect(await run()).toEqual({ out: "Windows Terminal la usa detrás de su fuente", code: 0 })
+      const after = JSON.parse(await readFile(path, "utf8"))
+      expect(after.theme).toBe("dark")
+      expect(after.profiles.defaults.font.face).toBe("Cascadia Mono, Symbols Nerd Font Mono")
+      expect(after.profiles.list[0]).toEqual({ name: "A" })
+      expect(after.profiles.list[1].font).toEqual({ face: "Consolas, Symbols Nerd Font Mono", size: 11 })
+      expect(after.profiles.list[2].font.face).toBe("JetBrainsMono NF")
+      expect(await readFile(`${path}.speedy.bak`, "utf8")).toBe(before)
+      expect(await run()).toEqual({ out: "Windows Terminal ya la usa", code: 0 })
+    } finally {
+      await rm(folder, { recursive: true, force: true })
+    }
+  })
 })
