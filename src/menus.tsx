@@ -8,7 +8,8 @@
 
 import { For, Show, createSignal } from "solid-js"
 
-import { DISABLED_COLOR, fit, type FooterControl, type SpeechState } from "./footer"
+import { DISABLED_COLOR, SESSIONS_COLOR, fit, type FooterControl, type SpeechState } from "./footer"
+import { sessionStamp, type SessionRow } from "./sessions"
 import { clipParts, type HistoryClip } from "./history"
 import { iconText, type IconSet } from "./icons"
 import {
@@ -25,7 +26,7 @@ import { SOCIALS, accountLabel, accountUrl, accountsOf, type Social } from "./so
 import { distinctVoices, micName, voiceTitle, type Voice } from "./voices"
 
 /** The menu on screen; empty when none is. */
-export type MenuName = "" | "voices" | "mic" | "history" | "images" | "socials" | "settings" | "more" | "new"
+export type MenuName = "" | "voices" | "mic" | "history" | "images" | "socials" | "settings" | "more" | "new" | "sessions"
 
 /** One pasted image the port kept: its file and the moment it was pasted. */
 export interface KeptImage {
@@ -51,6 +52,8 @@ export interface MenuState {
   voices: Voice[]
   mics: string[]
   clips: HistoryClip[]
+  /** The sessions the host keeps, newest first, read as their menu opens. */
+  sessions: SessionRow[]
   /** The kept narration playing from the history menu: its path; empty when none. */
   clipNow: string
   /** The images kept, newest first. */
@@ -74,6 +77,7 @@ export const INITIAL_MENU: MenuState = {
   voices: [],
   mics: [],
   clips: [],
+  sessions: [],
   clipNow: "",
   images: [],
   draftImages: [],
@@ -139,6 +143,10 @@ export interface MenuApi {
   readonly close: () => void
   /** Starts a session under the name typed in the `+` menu; an empty one is the host's own. */
   readonly startSession: (name: string) => void
+  /** Goes to a session of the `☰` menu. */
+  readonly openSession: (id: string) => void
+  /** The session on screen; empty when none is. */
+  readonly sessionNow: () => string
   readonly pickVoice: (voice: Voice) => void
   readonly readSelection: () => void
   readonly pressClip: (clip: HistoryClip) => void
@@ -552,6 +560,37 @@ function NewSessionMenu(props: { api: MenuApi }) {
   )
 }
 
+/** How many rows of sessions show at once: the rest scroll. */
+const SESSIONS_ROWS = 12
+
+/** The sessions menu: each one's title, its folder and when it last changed; a click goes to it. */
+function SessionsMenu(props: { api: MenuApi }) {
+  const api = props.api
+  // The title takes the room left after the mark, the folder and the stamp, so each starts in one column.
+  const FOLDER = 22
+  const titleWidth = () => Math.max(10, api.width() - 4 - 3 - FOLDER - 1 - 12 - 2)
+  return (
+    <Show when={api.state.sessions.length > 0} fallback={<Label text="  Todavía no hay sesiones guardadas." dim />}>
+      <scrollbox height={Math.min(api.state.sessions.length, SESSIONS_ROWS)} scrollY>
+        <For each={api.state.sessions}>
+          {(row) => (
+            <box flexDirection="row" flexShrink={0} onMouseUp={() => api.openSession(row.id)}>
+              <Label
+                text={row.id === api.sessionNow() ? " ● " : " ○ "}
+                color={row.id === api.sessionNow() ? "#51cf66" : "#868e96"}
+                bold
+              />
+              <Label text={fit(row.title, titleWidth())} bold={row.id === api.sessionNow()} />
+              <Label text={` ${fit(row.folder, FOLDER)}`} dim />
+              <Label text={` ${sessionStamp(row.updated)}`} color={SESSIONS_COLOR} />
+            </box>
+          )}
+        </For>
+      </scrollbox>
+    </Show>
+  )
+}
+
 /** The networks menu: every account with a user name, to open its profile; nothing is set here. */
 function SocialsMenu(props: { api: MenuApi }) {
   const api = props.api
@@ -909,6 +948,8 @@ export function menuHeading(open: MenuName, settings: SpeedySettings): { title: 
       return { title: "Imágenes", color: "#74c0fc" }
     case "socials":
       return { title: "Redes sociales", color: "#f783ac" }
+    case "sessions":
+      return { title: "Sesiones", color: SESSIONS_COLOR }
     case "new":
       return { title: "+ Sesión nueva", color: NEW_SESSION_COLOR }
     case "more":
@@ -951,6 +992,9 @@ export function MenuFrame(props: { api: MenuApi }) {
         </Show>
         <Show when={api.state.open === "socials"}>
           <SocialsMenu api={api} />
+        </Show>
+        <Show when={api.state.open === "sessions"}>
+          <SessionsMenu api={api} />
         </Show>
         <Show when={api.state.open === "new"}>
           <NewSessionMenu api={api} />

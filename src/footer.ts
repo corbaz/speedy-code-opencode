@@ -38,6 +38,7 @@ export const FOOTER_RANKS: Readonly<Record<string, number>> = {
   polish: 0,
   send: 0,
   new: 0,
+  sessions: 0,
   bar: 0,
   clear: 0,
   model: 0,
@@ -126,6 +127,9 @@ export function newSessionChoice(typed: string | undefined): NewSessionChoice {
   const title = typed.trim()
   return title ? { kind: "named", title } : { kind: "plain" }
 }
+
+/** The sessions' control and menu: the color of what was said before. */
+export const SESSIONS_COLOR = "#63e6be"
 
 /** The networks' control, in the color of their settings tab. */
 export const SOCIALS_COLOR = "#f783ac"
@@ -337,6 +341,7 @@ export function footerControls(input: FooterInput): FooterControl[] {
   controls.push(control("polish", "polish", input.polishing ? " ⏳ " : " 🖋️ ", "#da77f2"))
   controls.push(control("send", "send", " ⏎ ", "#51cf66"))
   controls.push(control("new", "new", " + ", "#51cf66"))
+  controls.push(control("sessions", "sessions", " ☰ ", SESSIONS_COLOR))
   controls.push(control("reload", "reload", " 🔄 ", "#adb5bd"))
   controls.push(control("settings", "settings", " ⚙️ ", "#adb5bd"))
   // `×` is in every font, in one color and one cell: `✕` came from a fallback font.

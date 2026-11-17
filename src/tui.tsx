@@ -55,6 +55,7 @@ import {
 } from "./settings"
 import { SOCIALS, accountLabel, accountUrl, accountsOf, networkOf, nextAccount, withoutEmptyAccounts } from "./socials"
 import { iconText } from "./icons"
+import { sessionRowsOf } from "./sessions"
 import { FONT_FAMILIES } from "./settings"
 import { statusLine, type Run, type StatusLimit } from "./statusline"
 import { nameOf, narrationRequest, parseMics, parseVoices, type Voice } from "./voices"
@@ -481,8 +482,6 @@ export default Plugin.define({
       else await copyText(result.text, "texto corregido")
     }
 
-    const openSessions = () => context.keymap.dispatch("session.list")
-
     // Opens a link in the system's browser; false when the system cannot.
     const openLink = (url: string): boolean => {
       const argv =
@@ -497,6 +496,25 @@ export default Plugin.define({
       } catch {
         return false
       }
+    }
+
+    /** Reads the sessions the host keeps, for their menu. */
+    const refreshSessions = async () => {
+      try {
+        const list = (context.client as unknown as { session: { list: (input?: object) => Promise<unknown> } }).session.list
+        const found = sessionRowsOf(await list({}))
+        setMenus((draft) => {
+          draft.sessions = found
+        })
+      } catch {
+        // No answer: the menu says there are none.
+      }
+    }
+
+    /** The `☰` menu's click: goes to that session, in its tab when it has one. */
+    const openSession = (id: string) => {
+      closeMenu()
+      if (!context.ui.tabs.focus(id)) context.ui.router.navigate({ type: "session", sessionID: id })
     }
 
     /** The `+` menu's answer: a session under the name typed; an empty name is the host's own. */
@@ -780,6 +798,7 @@ export default Plugin.define({
         await refreshClips()
       }
       if (which === "images") await refreshImages()
+      if (which === "sessions") await refreshSessions()
       if (which === "mic") void loadMics()
       if (which === "settings") void checkSetup()
       setMenus((draft) => {
@@ -1088,7 +1107,7 @@ export default Plugin.define({
         case "model":
           return context.keymap.dispatch("model.list")
         case "sessions":
-          return openSessions()
+          return openMenu("sessions")
         case "socials":
           return openMenu("socials")
         case "play":
@@ -1379,6 +1398,11 @@ export default Plugin.define({
       systemName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux",
       openSocial: (key) => void openSocial(key),
       startSession: (name) => void startSession(name),
+      openSession: (id) => openSession(id),
+      sessionNow: () => {
+        const route = context.ui.router.current() as { type?: string; sessionID?: string } | undefined
+        return route?.type === "session" ? (route.sessionID ?? "") : ""
+      },
       background: () => screenBackground,
       editSocial: (id) => void editSocial(id),
       addAccount: (id) => void addAccount(id),

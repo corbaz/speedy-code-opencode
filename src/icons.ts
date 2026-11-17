@@ -34,6 +34,7 @@ export const NERD_ICONS: Readonly<Record<string, string>> = {
   // Signs a terminal may draw as emojis, in a color and a width of their own.
   "✔": "\uf00c", // fa-check
   "⏎": "\uf1d8", // fa-paper_plane: the prompt, sent
+  "☰": "\uf1da", // fa-clock_rotate_left: the sessions before
   "✘": "\uf00d", // fa-xmark
   "⚠": "\uf071", // fa-triangle_exclamation
   "▶": "\uf04b", // fa-play
