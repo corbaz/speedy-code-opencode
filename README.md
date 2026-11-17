@@ -68,11 +68,11 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   fonts; a terminal whose font is not a Nerd Font, and that does not fall back to the fonts
   installed, needs a Nerd Font picked in its settings.
 - The terminal's font, from the same tab: **Fuente de la terminal** puts JetBrains Mono (its Nerd
-  Fonts build, so the icons are in it) at 11 to 16 points in Windows Terminal, macOS Terminal (while
+  Fonts build, so the icons are in it) at 8 to 16 points in Windows Terminal, macOS Terminal (while
   open), Ghostty and kitty, by `setup/terminal_font.py`. A program in a terminal has no font of its
   own: the terminal's settings change, and each file keeps a copy as it first was
   (`.speedy-font.bak`). iTerm2, Warp, WezTerm, Alacritty and editors take the font,
-  `JetBrainsMono NFM`, in their own settings.
+  `JetBrainsMono NF`, in their own settings.
 - After the exit, the footer shows the version, `v:yy.mmdd-(hhmm)`: the moment of the clone's
   last commit, in Buenos Aires time.
 - `+` asks for the new session's name and opens it under that title; an

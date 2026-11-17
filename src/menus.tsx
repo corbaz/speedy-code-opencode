@@ -169,7 +169,7 @@ export interface MenuApi {
 
 /** The icons every label of the menus is drawn with; the plugin's setup keeps it as the settings say. */
 /** The sizes, in points, the terminal's font can be set to from the settings. */
-export const FONT_SIZES = [11, 12, 13, 14, 16] as const
+export const FONT_SIZES = [8, 9, 10, 11, 12, 13, 14, 16] as const
 
 export const [menuIcons, setMenuIcons] = createSignal<IconSet>("emoji")
 
@@ -701,7 +701,6 @@ function SettingsMenu(props: { api: MenuApi }) {
             )}
           </For>
         </box>
-        <Label text=" JetBrains Mono en toda la terminal, a ese tamaño en puntos" dim />
       </box>
       <box flexDirection={sideBySide() ? "row" : "column"}>
         <box flexDirection="column" flexShrink={0} marginRight={sideBySide() ? 4 : 0}>
