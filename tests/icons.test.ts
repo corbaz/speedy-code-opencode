@@ -22,10 +22,10 @@ describe("the Nerd Fonts icons", () => {
   })
 
   test("a one-cell sign's glyph brings the cell it spills over", () => {
-    expect(nerdText(" × ")).toBe(" \uea76  ")
+    expect(nerdText(" × ")).toBe(" \uea76 ")
     expect(nerdText(" ⏸\ufe0e ")).toBe(" \uf04c  ")
     expect(nerdText("✔ listo · ⚠  compactar")).toBe("\uf00c  listo · \uf071   compactar")
-    for (const label of [" × ", " ⏳ ", " ✔ "]) expect(cells(nerdText(label))).toBe(cells(label) + 1)
+    for (const label of [" ⏳ ", " ✔ "]) expect(cells(nerdText(label))).toBe(cells(label) + 1)
   })
 
   test("text without emojis is left as it is, and so is everything with the emoji set", () => {
@@ -54,7 +54,7 @@ describe("the footer with each icon set", () => {
     expect(named("nerd", "copy")?.width).toBe(named("emoji", "copy")?.width)
     expect(named("nerd", "copy")?.text).toBe("   ")
     expect(named("nerd", "copy")?.color).toBe(NERD_COLORS.copy)
-    expect(named("nerd", "exit")?.text).toBe(" \uea76  ")
+    expect(named("nerd", "exit")?.text).toBe(" \uea76 ")
     expect(named("nerd", "copy")?.panel).toBe("   copiar ")
     // No emoji is left in what the footer draws.
     for (const control of nerd) expect(/[\u{1f000}-\u{1ffff}]/u.test(control.text)).toBe(false)

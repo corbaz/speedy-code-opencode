@@ -57,7 +57,8 @@ const EMOJI = new RegExp(`(${Object.keys(NERD_ICONS).join("|")})[\ufe0e\ufe0f]?`
  * width, one with a one-cell sign grows by a cell.
  */
 export function nerdText(text: string): string {
-  return text.replace(EMOJI, (_found, emoji: string) => `${NERD_ICONS[emoji]} `)
+  // The close mark is thin and stays in its cell: it takes no cell more.
+  return text.replace(EMOJI, (_found, emoji: string) => (emoji === "×" ? NERD_ICONS[emoji]! : `${NERD_ICONS[emoji]} `))
 }
 
 /** `text` as the icon set draws it. */
