@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
@@ -175,12 +175,20 @@ export default Plugin.define({
     const [limits, setLimits] = createSignal<{ five_hour?: StatusLimit; seven_day?: StatusLimit }>({})
     // The minute the status line counts the session in: read by its render, so it redraws.
     const [clock, setClock] = createSignal(Date.now())
-    // The version beside the exit: the last commit of this clone, asked of git once.
-    const [version, setVersion] = createSignal("")
-    // Forward slashes: a git reached through a shell wrapper loses the backslashes of a Windows path.
-    void run(["git", "-C", PLUGIN_ROOT.split(sep).join("/"), "log", "-1", "--format=%ct"]).then((result) =>
-      setVersion(result.code === 0 ? versionLabel(Number(result.stdout.trim())) : ""),
-    )
+    // The version beside the exit: the last commit of this clone, asked of git once, before the first draw.
+    const version = (() => {
+      try {
+        // Forward slashes: a git reached through a shell wrapper loses the backslashes of a Windows path.
+        const asked = spawnSync("git", ["-C", PLUGIN_ROOT.split(sep).join("/"), "log", "-1", "--format=%ct"], {
+          encoding: "utf8",
+          windowsHide: true,
+          timeout: 3000,
+        })
+        return asked.status === 0 ? versionLabel(Number(asked.stdout.trim())) : ""
+      } catch {
+        return ""
+      }
+    })()
 
     // Repair an older or hand-edited value once, without writing when it is already whole.
     const repaired = settingsFromSaved(settings)
@@ -1305,7 +1313,7 @@ export default Plugin.define({
           language: settings.picks.active.toUpperCase(),
           polishing: wand.busy,
           socials: linked,
-          version: version(),
+          version,
         })
         const result = footerFit(controls, footerRoom(columnsNow()))
         hiddenNow = hiddenGroups(controls, result) as FooterControl[]
