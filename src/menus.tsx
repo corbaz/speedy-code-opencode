@@ -25,7 +25,7 @@ import { SOCIALS, accountLabel, accountUrl, accountsOf, type Social } from "./so
 import { distinctVoices, micName, voiceTitle, type Voice } from "./voices"
 
 /** The menu on screen; empty when none is. */
-export type MenuName = "" | "voices" | "mic" | "history" | "images" | "socials" | "settings" | "more"
+export type MenuName = "" | "voices" | "mic" | "history" | "images" | "socials" | "settings" | "more" | "new"
 
 /** One pasted image the port kept: its file and the moment it was pasted. */
 export interface KeptImage {
@@ -137,6 +137,8 @@ export interface MenuApi {
   readonly width: () => number
   readonly rows: () => number
   readonly close: () => void
+  /** Starts a session under the name typed in the `+` menu; an empty one is the host's own. */
+  readonly startSession: (name: string) => void
   readonly pickVoice: (voice: Voice) => void
   readonly readSelection: () => void
   readonly pressClip: (clip: HistoryClip) => void
@@ -522,20 +524,14 @@ function MoreMenu(props: { api: MenuApi }) {
 /** The color of a new session: the footer's own `+`. */
 const NEW_SESSION_COLOR = "#51cf66"
 
-/** The dialog `+` opens: the new session's name, typed in a framed field; the host closes it on esc. */
-export function NewSessionDialog(props: { onSubmit: (name: string) => void; onCancel: () => void }) {
+/** The menu `+` opens: the new session's name, typed in a framed field that has the keyboard as it opens. */
+function NewSessionMenu(props: { api: MenuApi }) {
   let field: { value?: string; plainText?: string } | undefined
   const typed = () => field?.value ?? field?.plainText ?? ""
   return (
-    <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingBottom={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <Label text="✚ Nueva sesión" color={NEW_SESSION_COLOR} bold />
-        <Btn label="esc" dim onPress={props.onCancel} />
-      </box>
-      <box marginTop={1}>
-        <Label text="Nombre de la pestaña" color="#74c0fc" bold />
-      </box>
-      <box border borderStyle="rounded" borderColor={NEW_SESSION_COLOR} paddingLeft={1} paddingRight={1}>
+    <box flexDirection="column">
+      <Label text=" Nombre de la pestaña" color="#74c0fc" bold />
+      <box border borderStyle="rounded" borderColor={NEW_SESSION_COLOR} paddingLeft={1} paddingRight={1} width={48}>
         <input
           ref={(one: unknown) => {
             field = one as typeof field
@@ -546,13 +542,11 @@ export function NewSessionDialog(props: { onSubmit: (name: string) => void; onCa
           textColor="#ffd43b"
           focusedTextColor="#ffd43b"
           cursorColor={NEW_SESSION_COLOR}
-          onSubmit={() => props.onSubmit(typed())}
+          onSubmit={() => props.api.startSession(typed())}
         />
       </box>
-      <box flexDirection="row" marginTop={1}>
-        <Btn label=" ⏎ crear " color="#101113" bg={NEW_SESSION_COLOR} bold onPress={() => props.onSubmit(typed())} />
-        <Label text="  " />
-        <Btn label=" esc cancelar " color="#ff6b6b" onPress={props.onCancel} />
+      <box flexDirection="row">
+        <Btn label=" Empezar " color="#101113" bg={NEW_SESSION_COLOR} bold onPress={() => props.api.startSession(typed())} />
       </box>
     </box>
   )
@@ -915,6 +909,8 @@ export function menuHeading(open: MenuName, settings: SpeedySettings): { title: 
       return { title: "Imágenes", color: "#74c0fc" }
     case "socials":
       return { title: "Redes sociales", color: "#f783ac" }
+    case "new":
+      return { title: "+ Sesión nueva", color: NEW_SESSION_COLOR }
     case "more":
       return { title: "Más", color: "#adb5bd" }
     default:
@@ -955,6 +951,9 @@ export function MenuFrame(props: { api: MenuApi }) {
         </Show>
         <Show when={api.state.open === "socials"}>
           <SocialsMenu api={api} />
+        </Show>
+        <Show when={api.state.open === "new"}>
+          <NewSessionMenu api={api} />
         </Show>
         <Show when={api.state.open === "mic"}>
           <MicMenu api={api} />

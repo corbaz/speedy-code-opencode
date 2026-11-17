@@ -28,7 +28,6 @@ import {
   INITIAL_MENU,
   MenuFrame,
   setMenuIcons,
-  NewSessionDialog,
   SELECTION_CLIP,
   type KeptImage,
   type MenuApi,
@@ -500,32 +499,10 @@ export default Plugin.define({
       }
     }
 
-    /** +: asks for the session's name, then opens it under that title; an empty name is the host's own. */
-    const newSession = async () => {
-      const choice = newSessionChoice(
-        await new Promise<string | undefined>((resolve) => {
-          // Whichever comes first answers: the name sent, or the dialog closed.
-          let answered = false
-          const answer = (name: string | undefined) => {
-            if (answered) return
-            answered = true
-            resolve(name)
-            if (name !== undefined) context.ui.dialog.clear()
-          }
-          context.ui.dialog.show(
-            () => (
-              <NewSessionDialog
-                onSubmit={(name) => answer(name)}
-                onCancel={() => {
-                  answer(undefined)
-                  context.ui.dialog.clear()
-                }}
-              />
-            ),
-            () => answer(undefined),
-          )
-        }),
-      )
+    /** The `+` menu's answer: a session under the name typed; an empty name is the host's own. */
+    const startSession = async (name: string) => {
+      closeMenu()
+      const choice = newSessionChoice(name)
       if (choice.kind === "none") return
       if (choice.kind === "plain") return context.keymap.dispatch("session.new")
       try {
@@ -1067,7 +1044,7 @@ export default Plugin.define({
         case "send":
           return context.keymap.dispatch("prompt.submit")
         case "new":
-          return newSession()
+          return openMenu("new")
         case "reload":
           return context.keymap.dispatch("location.reload")
         case "exit":
@@ -1401,6 +1378,7 @@ export default Plugin.define({
       clearImages: () => void clearImages(),
       systemName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux",
       openSocial: (key) => void openSocial(key),
+      startSession: (name) => void startSession(name),
       background: () => screenBackground,
       editSocial: (id) => void editSocial(id),
       addAccount: (id) => void addAccount(id),

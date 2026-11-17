@@ -17,6 +17,7 @@ describe("menuHeading", () => {
     expect(menuHeading("settings", settings).title).toBe("Configuración")
     expect(menuHeading("socials", settings).title).toBe("Redes sociales")
     expect(menuHeading("images", settings).title).toBe("Imágenes")
+    expect(menuHeading("new", settings)).toEqual({ title: "+ Sesión nueva", color: "#51cf66" })
   })
 })
 
