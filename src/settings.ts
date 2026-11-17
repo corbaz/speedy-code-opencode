@@ -6,6 +6,8 @@
  * hand-edited or older value still loads.
  */
 
+import type { IconSet } from "./icons"
+
 /** The status line parts, in the order the original declares them. */
 export type BarPart = "core" | "five_hour" | "seven_day" | "context" | "time" | "cost" | "tokens" | "folder"
 
@@ -132,6 +134,8 @@ export interface SpeedySettings {
   barOrder: BarPart[]
   /** Whether the status line is drawn over the controls. */
   statusBar: boolean
+  /** The icons drawn: emojis, or Nerd Fonts glyphs where the terminal has a Nerd Font. */
+  icons: IconSet
   /** Whether what the Claude Code plugin keeps was already brought in. */
   imported: boolean
 }
@@ -144,6 +148,7 @@ export const DEFAULT_SETTINGS: SpeedySettings = {
   barLevels: { ...DEFAULT_LEVELS },
   barOrder: [...DEFAULT_ORDER],
   statusBar: true,
+  icons: "emoji",
   imported: false,
 }
 
@@ -228,6 +233,7 @@ export function settingsFromSaved(saved: unknown): SpeedySettings {
     barLevels: normalizeLevels(saved.barLevels),
     barOrder: barOrderOf(saved.barOrder),
     statusBar: typeof saved.statusBar === "boolean" ? saved.statusBar : DEFAULT_SETTINGS.statusBar,
+    icons: saved.icons === "nerd" ? "nerd" : DEFAULT_SETTINGS.icons,
     imported: saved.imported === true,
   }
 }

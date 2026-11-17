@@ -62,3 +62,23 @@ describe.skipIf(!python)("OpenCode's own preferences", () => {
     }
   })
 })
+
+describe.skipIf(!python)("the icon font's check", () => {
+  const font = join(import.meta.dir, "..", "setup", "nerd_font.py")
+  const check = async (folder: string) => {
+    const child = Bun.spawn([python ?? "python", font, "--check", folder], { stdout: "pipe", stderr: "pipe" })
+    const out = (await new Response(child.stdout).text()).trim()
+    return { out, code: await child.exited }
+  }
+
+  test("says whether the font is in the folder, and fetches nothing", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "speedy-font-"))
+    try {
+      expect(await check(folder)).toEqual({ out: "fail falta", code: 1 })
+      await writeFile(join(folder, "SymbolsNerdFontMono-Regular.ttf"), "font")
+      expect(await check(folder)).toEqual({ out: "ok instalada", code: 0 })
+    } finally {
+      await rm(folder, { recursive: true, force: true })
+    }
+  })
+})

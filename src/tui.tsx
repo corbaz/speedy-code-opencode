@@ -5,7 +5,7 @@ import { homedir } from "node:os"
 import { dirname, join, resolve, sep } from "node:path"
 
 import { Plugin } from "@opencode/plugin/tui"
-import { Show, createSignal } from "solid-js"
+import { Show, createEffect, createSignal } from "solid-js"
 
 import { COMMAND_HELP, routeCommand } from "./commands"
 import { Dictation } from "./dictation"
@@ -27,6 +27,7 @@ import {
   DraftImages,
   INITIAL_MENU,
   MenuFrame,
+  setMenuIcons,
   NewSessionDialog,
   SELECTION_CLIP,
   type KeptImage,
@@ -681,6 +682,13 @@ export default Plugin.define({
           ? { state: "ok", detail: sidebar.slice(3) }
           : { state: "fail", detail: sidebar.startsWith("fail ") ? sidebar.slice(5) : "sin revisar" },
       )
+      const font = (await run([python, join(PLUGIN_ROOT, "setup", "nerd_font.py"), "--check"])).stdout.trim()
+      setCheck(
+        "font",
+        font.startsWith("ok ")
+          ? { state: "ok", detail: font.slice(3) }
+          : { state: "fail", detail: font.startsWith("fail ") ? font.slice(5) : "sin revisar" },
+      )
       setCheck(
         "groq",
         process.env.GROQ_API_KEY ? { state: "ok", detail: "presente" } : { state: "fail", detail: "falta GROQ_API_KEY" },
@@ -1313,6 +1321,7 @@ export default Plugin.define({
           language: settings.picks.active.toUpperCase(),
           polishing: wand.busy,
           socials: linked,
+          icons: settings.icons,
           version,
         })
         const result = footerFit(controls, footerRoom(columnsNow()))
@@ -1360,6 +1369,9 @@ export default Plugin.define({
     // The theme's own background: a color object the host's elements take as they take a string.
     const screenBackground = (context.theme as unknown as { background?: { base?: string } }).background?.base
 
+    // The menus draw with the icons the settings say.
+    createEffect(() => setMenuIcons(settings.icons === "nerd" ? "nerd" : "emoji"))
+
     const menuApi: MenuApi = {
       settings: settings as SpeedySettings,
       state: menus,
@@ -1401,6 +1413,11 @@ export default Plugin.define({
           draft.statusBar = !draft.statusBar
         }),
       barOn: () => settings.statusBar,
+      toggleIcons: () =>
+        void update((draft) => {
+          draft.icons = draft.icons === "nerd" ? "emoji" : "nerd"
+        }),
+      icons: () => settings.icons,
       hidden: () => hiddenNow,
       runControl: (id) => void runControl(id),
     }

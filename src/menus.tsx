@@ -6,10 +6,11 @@
  * plugin's setup owns the state and the engine.
  */
 
-import { For, Show } from "solid-js"
+import { For, Show, createSignal } from "solid-js"
 
 import { DISABLED_COLOR, fit, type FooterControl, type SpeechState } from "./footer"
 import { clipParts, type HistoryClip } from "./history"
+import { iconText, type IconSet } from "./icons"
 import {
   BAR_PARTS,
   LANGUAGES,
@@ -88,6 +89,7 @@ export const SETUP_STEPS: ReadonlyArray<readonly [string, string]> = [
   ["mics", "Micrófonos"],
   ["voices", "Voces de Edge (internet)"],
   ["sidebar", "Barra lateral de OpenCode, oculta"],
+  ["font", "Fuente de iconos (Symbols Nerd Font)"],
   ["groq", "Clave de Groq (la pluma, opcional)"],
 ]
 
@@ -152,11 +154,17 @@ export interface MenuApi {
   readonly movePart: (key: BarPart, delta: -1 | 1) => void
   readonly resetBar: () => void
   readonly toggleBar: () => void
+  /** Changes the icon set: emojis, or Nerd Fonts glyphs. */
+  readonly toggleIcons: () => void
+  readonly icons: () => IconSet
   readonly barOn: () => boolean
   /** The controls the footer left out for want of room. */
   readonly hidden: () => readonly FooterControl[]
   readonly runControl: (id: string) => void
 }
+
+/** The icons every label of the menus is drawn with; the plugin's setup keeps it as the settings say. */
+export const [menuIcons, setMenuIcons] = createSignal<IconSet>("emoji")
 
 /** A label that takes a click: no fill under the pointer, as the footer's controls. */
 export function Btn(props: {
@@ -176,7 +184,7 @@ export function Btn(props: {
         bg={props.bg}
         attributes={(props.bold ? BOLD : 0) | (props.dim ? DIM : 0)}
       >
-        {props.label}
+        {iconText(props.label, menuIcons())}
       </text>
     </box>
   )
@@ -192,7 +200,7 @@ function Label(props: { text: string; color?: string; bg?: string; bold?: boolea
       bg={props.bg}
       attributes={(props.bold ? BOLD : 0) | (props.dim ? DIM : 0)}
     >
-      {props.text}
+      {iconText(props.text, menuIcons())}
     </text>
   )
 }
@@ -643,6 +651,26 @@ function SettingsMenu(props: { api: MenuApi }) {
           />
         </box>
       </box>
+      <box flexDirection="row" marginBottom={1}>
+        <Label text=" ◈  Iconos " color="#b197fc" bold />
+        <Label
+          text={api.icons() === "nerd" ? "● Nerd Fonts" : "○ emojis"}
+          color={api.icons() === "nerd" ? "#51cf66" : "#868e96"}
+          bold
+        />
+        <box marginLeft={3} flexShrink={0}>
+          <Btn
+            label={api.icons() === "nerd" ? " Volver a los emojis " : " Usar Nerd Fonts "}
+            bold
+            color="black"
+            bg={api.icons() === "nerd" ? "#868e96" : "#b197fc"}
+            onPress={() => api.toggleIcons()}
+          />
+        </box>
+        {/* The glyphs themselves, whatever the set: they tell whether the terminal's font has them. */}
+        <text wrapMode="none" selectable={false} fg="#b197fc">{"   prueba: \uf0c5 \uf0ea \uf03e \uf130 \uf013 "}</text>
+        <Label text="(si ves cuadrados, elegí una Nerd Font en tu terminal)" dim />
+      </box>
       <box flexDirection={sideBySide() ? "row" : "column"}>
         <box flexDirection="column" flexShrink={0} marginRight={sideBySide() ? 4 : 0}>
           <Label text="COLORES" bold dim />
@@ -876,10 +904,9 @@ export function MenuFrame(props: { api: MenuApi }) {
       </box>
       <box flexDirection="row" justifyContent="flex-end" flexShrink={0} width={api.width()} marginBottom={-1} zIndex={1}>
         {/* A blank on either side, on the screen's own background, cuts the line around the mark.
-            The mark is a box-drawing cross: it fills its one cell exactly in every font, so both
-            blanks look the same. `✕` comes from a fallback font, drawn wider than its cell, and
-            ate into the blank at its right. */}
-        <Btn label=" ╳ " color="#ff6b6b" bg={api.background()} bold onPress={() => api.close()} />
+            The mark is `×`: in every font, one cell and one color. `✕` came from a fallback font,
+            drawn wider than its cell; `╳` filled the cell but stood too tall. */}
+        <Btn label=" × " color="#ff6b6b" bg={api.background()} bold onPress={() => api.close()} />
         <box width={2} flexShrink={0} />
       </box>
       </box>

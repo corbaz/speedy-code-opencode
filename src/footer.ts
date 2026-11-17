@@ -6,6 +6,8 @@
  * hands the footer its own slot and width, so nothing here touches a host API.
  */
 
+import { NERD_COLORS, nerdText, type IconSet } from "./icons"
+
 /** The narration states the play control draws. */
 export type SpeechState = "idle" | "thinking" | "playing" | "paused"
 
@@ -241,6 +243,8 @@ export interface FooterInput {
   readonly polishing?: boolean
   /** The networks with a handle set, in the original's order. */
   readonly socials?: readonly FooterSocial[]
+  /** The icons the controls are drawn with: emojis unless Nerd Fonts glyphs are asked for. */
+  readonly icons?: IconSet
   /** The version drawn after the exit, as `versionLabel` writes it; none draws nothing. */
   readonly version?: string
 }
@@ -335,13 +339,25 @@ export function footerControls(input: FooterInput): FooterControl[] {
   controls.push(control("new", "new", " + ", "#51cf66"))
   controls.push(control("reload", "reload", " 🔄 ", "#adb5bd"))
   controls.push(control("settings", "settings", " ⚙️ ", "#adb5bd"))
-  controls.push(control("exit", "exit", " ✕ ", "#ff6b6b"))
+  // `×` is in every font, in one color and one cell: `✕` came from a fallback font.
+  controls.push(control("exit", "exit", " × ", "#ff6b6b"))
   if (input.version) {
     const text = ` ${input.version} `
     controls.push({ name: "version", text, color: VERSION_COLOR, width: cells(text), panel: text, bold: true })
   }
 
-  return controls
+  return input.icons === "nerd" ? controls.map(nerdControl) : controls
+}
+
+/** A control drawn with Nerd Fonts glyphs: the same width, and the color a glyph can take. */
+function nerdControl(control: FooterControl): FooterControl {
+  return {
+    ...control,
+    text: nerdText(control.text),
+    ...(control.compactText === undefined ? {} : { compactText: nerdText(control.compactText) }),
+    ...(control.panel === undefined ? {} : { panel: nerdText(control.panel) }),
+    color: NERD_COLORS[control.name] ?? control.color,
+  }
 }
 
 /** The footer as one string, in control order, with the short forms the fit chose. */
