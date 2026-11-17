@@ -142,6 +142,20 @@ describe.skipIf(!python)("the terminal's font", () => {
     }
   })
 
+  test("the check says which family is not whole in the folder, and fetches nothing", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
+    try {
+      expect(await run("--check", "--folder", folder)).toEqual({ out: "fail falta JetBrains Mono y Meslo", code: 1 })
+      for (const style of ["Regular", "Bold", "Italic", "BoldItalic"]) await writeFile(join(folder, `JetBrainsMonoNerdFont-${style}.ttf`), "font")
+      expect(await run("--check", "--folder", folder)).toEqual({ out: "fail falta Meslo", code: 1 })
+      for (const style of ["Regular", "Bold", "Italic", "BoldItalic"]) await writeFile(join(folder, `MesloLGSNerdFont-${style}.ttf`), "font")
+      expect(await run("--check", "--folder", folder)).toEqual({ out: "ok instaladas", code: 0 })
+      expect(await run("--size", "12", "--family", "arial")).toEqual({ out: "la fuente es una de: jetbrains, meslo", code: 1 })
+    } finally {
+      await rm(folder, { recursive: true, force: true })
+    }
+  })
+
   test("Ghostty and kitty get their two lines in place of the ones they had, and nothing else moves", async () => {
     const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
     const ghostty = join(folder, "config")

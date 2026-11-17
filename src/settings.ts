@@ -34,6 +34,13 @@ export const DEFAULT_LEVELS: BarLevels = {
 }
 
 /** The status line parts with the label the settings menu shows for each. */
+/** The fonts terminal_font.py knows, by the name it takes, and what each is called. */
+export const FONT_FAMILIES = [
+  ["jetbrains", "JetBrains Mono"],
+  ["meslo", "Meslo"],
+] as const
+export type FontFamily = (typeof FONT_FAMILIES)[number][0]
+
 export const BAR_PARTS: ReadonlyArray<readonly [BarPart, string]> = [
   ["core", "Versión, modelo y esfuerzo"],
   ["five_hour", "Límite de 5 horas"],
@@ -138,6 +145,8 @@ export interface SpeedySettings {
   icons: IconSet
   /** The size, in points, the terminal's font was last set to from here; 0 while it never was. */
   fontSize: number
+  /** The font the terminal was last set to from here. */
+  fontFamily: FontFamily
   /** Whether what the Claude Code plugin keeps was already brought in. */
   imported: boolean
 }
@@ -152,6 +161,7 @@ export const DEFAULT_SETTINGS: SpeedySettings = {
   statusBar: true,
   icons: "emoji",
   fontSize: 0,
+  fontFamily: "jetbrains",
   imported: false,
 }
 
@@ -238,6 +248,7 @@ export function settingsFromSaved(saved: unknown): SpeedySettings {
     statusBar: typeof saved.statusBar === "boolean" ? saved.statusBar : DEFAULT_SETTINGS.statusBar,
     icons: saved.icons === "nerd" ? "nerd" : DEFAULT_SETTINGS.icons,
     fontSize: Number.isInteger(saved.fontSize) && Number(saved.fontSize) > 0 ? Number(saved.fontSize) : 0,
+    fontFamily: FONT_FAMILIES.some(([id]) => id === saved.fontFamily) ? (saved.fontFamily as FontFamily) : DEFAULT_SETTINGS.fontFamily,
     imported: saved.imported === true,
   }
 }

@@ -16,6 +16,8 @@ import {
   LANGUAGES,
   LEVEL_KEYS,
   type BarPart,
+  FONT_FAMILIES,
+  type FontFamily,
   type LevelKey,
   type SpeedySettings,
 } from "./settings"
@@ -90,6 +92,7 @@ export const SETUP_STEPS: ReadonlyArray<readonly [string, string]> = [
   ["voices", "Voces de Edge (internet)"],
   ["sidebar", "Barra lateral de OpenCode, oculta"],
   ["font", "Fuente de iconos (Symbols Nerd Font)"],
+  ["fonts", "Fuentes de texto (JetBrains Mono, Meslo)"],
   ["groq", "Clave de Groq (la pluma, opcional)"],
 ]
 
@@ -157,10 +160,12 @@ export interface MenuApi {
   /** Changes the icon set: emojis, or Nerd Fonts glyphs. */
   readonly toggleIcons: () => void
   readonly icons: () => IconSet
-  /** Sets the terminal's font to JetBrains Mono at this size, in points. */
-  readonly setFont: (size: number) => void
+  /** Sets the terminal's font to this family at this size, in points. */
+  readonly setFont: (family: FontFamily, size: number) => void
   /** The size last set from here; 0 while the terminal keeps its own font. */
   readonly fontSize: () => number
+  /** The family last set from here. */
+  readonly fontFamily: () => FontFamily
   readonly barOn: () => boolean
   /** The controls the footer left out for want of room. */
   readonly hidden: () => readonly FooterControl[]
@@ -170,6 +175,8 @@ export interface MenuApi {
 /** The icons every label of the menus is drawn with; the plugin's setup keeps it as the settings say. */
 /** The sizes, in points, the terminal's font can be set to from the settings. */
 export const FONT_SIZES = [8, 9, 10, 11, 12, 13, 14, 16] as const
+/** The size a font is set at when none was picked yet. */
+export const DEFAULT_FONT_SIZE = 12
 
 export const [menuIcons, setMenuIcons] = createSignal<IconSet>("emoji")
 
@@ -643,65 +650,91 @@ function SettingsMenu(props: { api: MenuApi }) {
 
   const nameWidth = () => Math.min(26, Math.max(10, inside() - 12))
   const sideBySide = () => !narrow() && inside() >= 38 + 12 + 4 + 3 + nameWidth() + 1 + 7
+  // The settings above the tables are a table too: a name, what is in use, and what changes it.
+  const NAME_WIDTH = 28
+  const STATE_WIDTH = 27
+  const Setting = (props: { name: string; color: string; state: string; on: boolean; last?: boolean; children: unknown }) => (
+    <box flexDirection={narrow() ? "column" : "row"} marginBottom={narrow() || props.last ? 1 : 0}>
+      <box flexDirection="row" flexShrink={0}>
+        <box width={NAME_WIDTH} flexShrink={0}>
+          <Label text={props.name} color={props.color} bold />
+        </box>
+        <box width={narrow() ? undefined : STATE_WIDTH} flexShrink={0}>
+          <Label text={props.state} color={props.on ? "#51cf66" : "#868e96"} bold />
+        </box>
+      </box>
+      <box flexDirection="row" flexShrink={0} paddingLeft={narrow() ? 1 : 0}>
+        {props.children as never}
+      </box>
+    </box>
+  )
+  const familyName = () => FONT_FAMILIES.find(([id]) => id === api.fontFamily())?.[1] ?? api.fontFamily()
   const barTab = () => (
     <box flexDirection="column">
-      <box flexDirection="row" marginBottom={1}>
-        <Label text=" ▤  Barra speedy-code " color="#4dabf7" bold />
-        <Label text={api.barOn() ? "● activa" : "○ inactiva"} color={api.barOn() ? "#51cf66" : "#868e96"} bold />
-        <box marginLeft={3} flexShrink={0}>
-          <Btn
-            label={api.barOn() ? " Ocultar la barra " : " Usar barra speedy-code "}
-            bold
-            color="black"
-            bg={api.barOn() ? "#868e96" : "#4dabf7"}
-            onPress={() => api.toggleBar()}
-          />
-        </box>
-      </box>
-      <box flexDirection="row" marginBottom={1}>
-        <Label text=" ◈  Iconos " color="#b197fc" bold />
-        <Label
-          text={api.icons() === "nerd" ? "● Nerd Fonts" : "○ emojis"}
-          color={api.icons() === "nerd" ? "#51cf66" : "#868e96"}
+      <Setting name=" ▤  Barra speedy-code " color="#4dabf7" state={api.barOn() ? "● activa" : "○ inactiva"} on={api.barOn()}>
+        <Btn
+          label={api.barOn() ? " Ocultar la barra " : " Usar barra speedy-code "}
           bold
+          color="black"
+          bg={api.barOn() ? "#868e96" : "#4dabf7"}
+          onPress={() => api.toggleBar()}
         />
-        <box marginLeft={3} flexShrink={0}>
-          <Btn
-            label={api.icons() === "nerd" ? " Volver a los emojis " : " Usar Nerd Fonts "}
-            bold
-            color="black"
-            bg={api.icons() === "nerd" ? "#868e96" : "#b197fc"}
-            onPress={() => api.toggleIcons()}
-          />
-        </box>
+      </Setting>
+      <Setting
+        name=" ◈  Iconos "
+        color="#b197fc"
+        state={api.icons() === "nerd" ? "● Nerd Fonts" : "○ emojis"}
+        on={api.icons() === "nerd"}
+      >
+        <Btn
+          label={api.icons() === "nerd" ? " Volver a los emojis " : " Usar Nerd Fonts "}
+          bold
+          color="black"
+          bg={api.icons() === "nerd" ? "#868e96" : "#b197fc"}
+          onPress={() => api.toggleIcons()}
+        />
         {/* The glyphs themselves, whatever the set: they tell whether the terminal's font has them. */}
-        <text wrapMode="none" selectable={false} fg="#b197fc">{"   prueba: \uf0c5 \uf0ea \uf03e \uf130 \uf013 "}</text>
-        <Label text="(si ves cuadrados, elegí una Nerd Font en tu terminal)" dim />
-      </box>
+        <text wrapMode="none" selectable={false} fg="#b197fc">{"  prueba: \uf0c5 \uf0ea \uf03e \uf130 \uf013 "}</text>
+        <Show when={!narrow()}>
+          <Label text="(¿cuadrados? falta una Nerd Font)" dim />
+        </Show>
+      </Setting>
       {/* The terminal's own font: a program in a terminal has none, so the terminal's settings are changed. */}
-      <box flexDirection="row" marginBottom={1}>
-        <Label text=" Aa  Fuente de la terminal " color="#ffa94d" bold />
-        <Label
-          text={api.fontSize() ? `● JetBrains Mono · ${api.fontSize()} pt` : "○ la de tu terminal"}
-          color={api.fontSize() ? "#51cf66" : "#868e96"}
-          bold
-        />
-        <box marginLeft={3} flexDirection="row" flexShrink={0}>
-          <For each={FONT_SIZES}>
-            {(size) => (
-              <box marginRight={1} flexShrink={0}>
-                <Btn
-                  label={` ${size} `}
-                  bold
-                  color="black"
-                  bg={api.fontSize() === size ? "#51cf66" : "#ffa94d"}
-                  onPress={() => api.setFont(size)}
-                />
-              </box>
-            )}
-          </For>
-        </box>
-      </box>
+      <Setting
+        name=" Aa  Fuente de la terminal "
+        color="#ffa94d"
+        state={api.fontSize() ? `● ${familyName()} · ${api.fontSize()} pt` : "○ la de tu terminal"}
+        on={api.fontSize() > 0}
+      >
+        <For each={FONT_FAMILIES}>
+          {([id, name]) => (
+            <box marginRight={1} flexShrink={0}>
+              <Btn
+                label={` ${name} `}
+                bold
+                color="black"
+                bg={api.fontSize() && api.fontFamily() === id ? "#51cf66" : "#ffa94d"}
+                onPress={() => api.setFont(id, api.fontSize() || DEFAULT_FONT_SIZE)}
+              />
+            </box>
+          )}
+        </For>
+      </Setting>
+      <Setting name="     Tamaño en puntos " color="#ffa94d" state="" on={false} last>
+        <For each={FONT_SIZES}>
+          {(size) => (
+            <box marginRight={1} flexShrink={0}>
+              <Btn
+                label={` ${String(size).padStart(2)} `}
+                bold
+                color="black"
+                bg={api.fontSize() === size ? "#51cf66" : "#ffa94d"}
+                onPress={() => api.setFont(api.fontFamily(), size)}
+              />
+            </box>
+          )}
+        </For>
+      </Setting>
       <box flexDirection={sideBySide() ? "row" : "column"}>
         <box flexDirection="column" flexShrink={0} marginRight={sideBySide() ? 4 : 0}>
           <Label text="COLORES" bold dim />

@@ -56,6 +56,7 @@ import {
 } from "./settings"
 import { SOCIALS, accountLabel, accountUrl, accountsOf, networkOf, nextAccount, withoutEmptyAccounts } from "./socials"
 import { iconText } from "./icons"
+import { FONT_FAMILIES } from "./settings"
 import { statusLine, type Run, type StatusLimit } from "./statusline"
 import { nameOf, narrationRequest, parseMics, parseVoices, type Voice } from "./voices"
 
@@ -689,6 +690,13 @@ export default Plugin.define({
         font.startsWith("ok ")
           ? { state: "ok", detail: font.slice(3) }
           : { state: "fail", detail: font.startsWith("fail ") ? font.slice(5) : "sin revisar" },
+      )
+      const fonts = (await run([python, join(PLUGIN_ROOT, "setup", "terminal_font.py"), "--check"])).stdout.trim()
+      setCheck(
+        "fonts",
+        fonts.startsWith("ok ")
+          ? { state: "ok", detail: fonts.slice(3) }
+          : { state: "fail", detail: fonts.startsWith("fail ") ? fonts.slice(5) : "sin revisar" },
       )
       setCheck(
         "groq",
@@ -1420,20 +1428,22 @@ export default Plugin.define({
           draft.icons = draft.icons === "nerd" ? "emoji" : "nerd"
         }),
       icons: () => settings.icons,
-      setFont: (size) => {
-        toast(`poniendo JetBrains Mono a ${size} pt en tu terminal…`)
-        void run([pythonPath(), join(PLUGIN_ROOT, "setup", "terminal_font.py"), "--size", String(size)], {
+      setFont: (family, size) => {
+        toast(`poniendo ${FONT_FAMILIES.find(([id]) => id === family)?.[1] ?? family} a ${size} pt en tu terminal…`)
+        void run([pythonPath(), join(PLUGIN_ROOT, "setup", "terminal_font.py"), "--family", family, "--size", String(size)], {
           PYTHONIOENCODING: "utf-8",
         }).then((result) => {
           const said = result.stdout.trim()
           if (result.code !== 0) return toast(said || "no pude cambiar la fuente: falta instalar", "error")
           void update((draft) => {
             draft.fontSize = size
+            draft.fontFamily = family
           })
           toast(said, "success")
         })
       },
       fontSize: () => settings.fontSize,
+      fontFamily: () => settings.fontFamily,
       hidden: () => hiddenNow,
       runControl: (id) => void runControl(id),
     }

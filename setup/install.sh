@@ -137,6 +137,11 @@ font_step() {
   "$python" "$here/nerd_font.py"
 }
 
+# The fonts for the text, JetBrains Mono and Meslo with the icons in them: see terminal_font.py.
+fonts_step() {
+  "$python" "$here/terminal_font.py" --install
+}
+
 step uv 'Buscando uv, el administrador de Python' uv_step
 step python 'Creando el entorno con Python 3.12' python_step
 step packages 'Instalando las voces y el dictado' packages_step
@@ -145,6 +150,7 @@ step mics 'Buscando micrófonos' mics_step
 step voices 'Consultando las voces de Edge' voices_step
 step sidebar 'Ocultando la barra lateral de OpenCode' sidebar_step
 step font 'Instalando la fuente de iconos (Symbols Nerd Font)' font_step
+step fonts 'Instalando las fuentes de texto (JetBrains Mono, Meslo)' fonts_step
 step groq 'Buscando la clave de Groq de la pluma' groq_step
 
 if [ "$failed" -ne 0 ]; then echo 'done con avisos'; else echo 'done'; fi
