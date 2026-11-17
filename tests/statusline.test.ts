@@ -84,6 +84,13 @@ describe("statusLine", () => {
     expect(text(statusLine({ ...input, cacheReadTokens: 800000 }, 0, levels))).toContain("⚠  compactar")
   })
 
+  test("with Nerd Fonts the signs are glyphs, and the folder gets one", () => {
+    expect(text(statusLine({ ...input, branch: "main", icons: "nerd" }, 0, levels))).toBe(
+      "\uf07b ~\\.claude\\local-mods \uf126 main » v2.3.0 \uf2db GLM-5.3 · high │ \uf017 43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04",
+    )
+    expect(text(statusLine({ ...input, cacheReadTokens: 800000, icons: "nerd" }, 0, levels))).toContain("\uf071  compactar")
+  })
+
   test("with nothing known it still draws zeros", () => {
     expect(text(statusLine({}, 0, levels))).toBe(" » ◆  │ ⏱  0m │ in 0 out 0 caché 0 │ ctx: ▱▱▱▱ 0% │ sesión $0.00")
   })

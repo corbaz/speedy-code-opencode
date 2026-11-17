@@ -56,7 +56,19 @@ export const DEFAULT_PRIORITY: readonly string[] = [
 ]
 
 /** What the line is drawn from. Every number may be missing: it counts as zero. */
+/**
+ * The signs of the line in each icon set. The Nerd Fonts ones are Font Awesome's
+ * glyphs: folder, code_branch, microchip, clock, arrow_rotate_right and
+ * triangle_exclamation.
+ */
+const SIGNS = {
+  emoji: { folder: "", branch: "⎇", model: "◆", time: "⏱ ", reset: "↻", warning: "⚠" },
+  nerd: { folder: "\uf07b ", branch: "\uf126", model: "\uf2db", time: "\uf017", reset: "\uf01e", warning: "\uf071" },
+} as const
+
 export interface StatusInput {
+  /** The icon set the signs are drawn with: emojis unless Nerd Fonts glyphs are asked for. */
+  readonly icons?: keyof typeof SIGNS
   readonly cwd?: string
   readonly home?: string
   readonly branch?: string
@@ -155,6 +167,7 @@ export function statusLine(
   priority: readonly string[] = DEFAULT_PRIORITY,
 ): Run[] {
   const C = STATUS_COLORS
+  const sign = SIGNS[input.icons ?? "emoji"]
   const order = priorityOf(priority)
   const rank = (key: string) => order.indexOf(key) + 1
   const run = (text: string, color: string): Run => ({ text, color })
@@ -162,8 +175,8 @@ export function statusLine(
 
   let cwd = input.cwd ?? ""
   if (input.home && cwd.toLowerCase().startsWith(input.home.toLowerCase())) cwd = `~${cwd.slice(input.home.length)}`
-  const folder: Run[] = [{ ...run(cwd, C.folder), bold: true }]
-  if (input.branch) folder.push(run(` ⎇ ${input.branch}`, C.branch))
+  const folder: Run[] = [{ ...run(`${sign.folder}${cwd}`, C.folder), bold: true }]
+  if (input.branch) folder.push(run(` ${sign.branch} ${input.branch}`, C.branch))
 
   const tokens: Run[] = [
     ...part("in", formatTokens(input.inputTokens), C.input),
@@ -186,11 +199,11 @@ export function statusLine(
     run(` ${used}%`, tone),
   ]
   if (size) context.push(run(` ${formatTokens(held)}/${formatTokens(size)}`, tone))
-  if (used >= levels.contextRed) context.push(run(" ⚠  compactar", C.red))
+  if (used >= levels.contextRed) context.push(run(` ${sign.warning}  compactar`, C.red))
 
   const core: Run[] = []
   if (input.version) core.push(run(`v${input.version} `, C.time))
-  core.push({ ...run(`◆ ${input.model ?? ""}`, C.model), bold: true })
+  core.push({ ...run(`${sign.model} ${input.model ?? ""}`, C.model), bold: true })
   if (input.effort) {
     core.push(run(" · ", C.label), run(input.effort, EFFORT_COLORS[input.effort] ?? C.label))
   }
@@ -203,7 +216,7 @@ export function statusLine(
   const parts: Array<{ key: string; runs: Run[]; short?: Run[]; shown?: Run[] }> = [
     { key: "folder", runs: folder },
     { key: "core", runs: core },
-    { key: "time", runs: [run(`⏱  ${formatDuration(input.durationMs)}`, C.time)] },
+    { key: "time", runs: [run(`${sign.time} ${formatDuration(input.durationMs)}`, C.time)] },
     { key: "tokens", runs: tokens },
     { key: "context", runs: context },
     { key: "cost", runs: [run("sesión ", C.label), { ...run(formatCost(input.costUsd), C.cost), bold: true }] },
@@ -218,9 +231,9 @@ export function statusLine(
     const usedLimit = Math.round(limit.percent)
     const limitTone = usedLimit >= levels.limitRed ? C.red : usedLimit >= levels.limitYellow ? C.yellow : C.green
     const short: Run[] = [run(`${label} `, color), ...meter(usedLimit, limitTone), run(` ${usedLimit}%`, limitTone)]
-    if (usedLimit >= levels.limitRed) short.push(run(" ⚠ ", C.red))
+    if (usedLimit >= levels.limitRed) short.push(run(` ${sign.warning} `, C.red))
     const reset = formatReset(limit.resetsAt, input.now)
-    parts.push({ key, short, runs: reset ? [...short, run(` ↻ ${reset}`, C.label)] : short })
+    parts.push({ key, short, runs: reset ? [...short, run(` ${sign.reset} ${reset}`, C.label)] : short })
   }
 
   // The parts in rank order, each in its short form, until one does not fit;

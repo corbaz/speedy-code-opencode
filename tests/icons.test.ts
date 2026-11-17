@@ -22,7 +22,9 @@ describe("the Nerd Fonts icons", () => {
   })
 
   test("the close mark is one cell in both sets", () => {
-    expect(nerdText(" × ")).toBe("  ")
+    expect(nerdText(" × ")).toBe(" \uea76 ")
+    expect(nerdText(" ⏸\ufe0e ")).toBe(" \uf04c ")
+    expect(nerdText("✔ listo · ⚠  compactar")).toBe("\uf00c listo · \uf071  compactar")
   })
 
   test("text without emojis is left as it is, and so is everything with the emoji set", () => {
@@ -50,7 +52,7 @@ describe("the footer with each icon set", () => {
     expect(nerd.map((control) => control.width)).toEqual(emoji.map((control) => control.width))
     expect(named("nerd", "copy")?.text).toBe("   ")
     expect(named("nerd", "copy")?.color).toBe(NERD_COLORS.copy)
-    expect(named("nerd", "exit")?.text).toBe("  ")
+    expect(named("nerd", "exit")?.text).toBe(" \uea76 ")
     expect(named("nerd", "copy")?.panel).toBe("   copiar ")
     // No emoji is left in what the footer draws.
     for (const control of nerd) expect(/[\u{1f000}-\u{1ffff}]/u.test(control.text)).toBe(false)

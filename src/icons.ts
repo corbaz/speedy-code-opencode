@@ -4,8 +4,8 @@
  *
  * A Nerd Fonts glyph is one color, takes the color of its control and is as
  * wide as any other: an emoji is drawn by another font, in its own colors and
- * at its own width. The code points are Font Awesome's in Nerd Fonts 3
- * (`glyphnames.json`), all in the basic private use area.
+ * at its own width. The code points are Font Awesome's and Codicons' in Nerd
+ * Fonts 3 (`glyphnames.json`), all in the basic private use area.
  */
 
 /** Which icons are drawn. */
@@ -13,28 +13,45 @@ export type IconSet = "emoji" | "nerd"
 
 /** Each emoji the plugin writes, with the Nerd Fonts glyph that stands for it. */
 export const NERD_ICONS: Readonly<Record<string, string>> = {
-  "📋": "", // fa-copy
-  "📥": "", // fa-paste
-  "🖼": "", // fa-image
-  "👁": "", // fa-eye
-  "🗑": "", // fa-trash
-  "🗣": "", // fa-comment
-  "🗜": "", // fa-compress
-  "🔊": "", // fa-volume_high
-  "🔇": "", // fa-volume_off
-  "📎": "", // fa-paperclip
-  "🎙": "", // fa-microphone
-  "🔵": "", // the microphone loading: its color says so
-  "🔴": "", // the microphone open: its color says so
-  "🖋": "", // fa-pencil
-  "⏳": "", // fa-hourglass_half
-  "🔄": "", // fa-refresh
-  "⚙": "", // fa-gear
-  "×": "", // fa-xmark
+  "📋": "\uf0c5", // fa-copy
+  "📥": "\uf0ea", // fa-paste
+  "🖼": "\uf03e", // fa-image
+  "👁": "\uf06e", // fa-eye
+  "🗑": "\uf1f8", // fa-trash
+  "🗣": "\uf075", // fa-comment
+  "🗜": "\ued4d", // fa-down_left_and_up_right_to_center
+  "🔊": "\uf028", // fa-volume_high
+  "🔇": "\uf026", // fa-volume_off
+  "📎": "\uf0c6", // fa-paperclip
+  "🎙": "\uf130", // fa-microphone
+  "🔵": "\uf130", // the microphone loading: its color says so
+  "🔴": "\uf130", // the microphone open: its color says so
+  "🖋": "\uf040", // fa-pencil
+  "⏳": "\uf252", // fa-hourglass_half
+  "🔄": "\uf021", // fa-refresh
+  "⚙": "\uf013", // fa-gear
+  "×": "\uea76", // cod-close: thin, and no wider than its cell
+  // Signs a terminal may draw as emojis, in a color and a width of their own.
+  "✔": "\uf00c", // fa-check
+  "✘": "\uf00d", // fa-xmark
+  "⚠": "\uf071", // fa-triangle_exclamation
+  "▶": "\uf04b", // fa-play
+  "⏵": "\uf04b", // fa-play
+  "⏸": "\uf04c", // fa-pause
+  "⧗": "\uf252", // fa-hourglass_half
+  "⋯": "\uf141", // fa-ellipsis
+  "♀": "\uf221", // fa-venus
+  "♂": "\uf222", // fa-mars
+  "♪": "\uf001", // fa-music
+  "✦": "\uf005", // fa-star
+  "✎": "\uf044", // fa-edit
+  "✚": "\uf067", // fa-plus
+  "▤": "\uf1de", // fa-sliders
+  "◈": "\uefcc", // fa-palette
 }
 
-const VARIATION = "️"
-const EMOJI = new RegExp(`(${Object.keys(NERD_ICONS).join("|")})${VARIATION}?`, "gu")
+const VARIATION = "\ufe0f"
+const EMOJI = new RegExp(`(${Object.keys(NERD_ICONS).join("|")})[\ufe0e\ufe0f]?`, "gu")
 
 /** Whether the layout counts this emoji as two cells: the astral ones, and any said with U+FE0F. */
 const isWide = (emoji: string) => (emoji.codePointAt(0) ?? 0) >= 0x1f000 || emoji.endsWith(VARIATION)

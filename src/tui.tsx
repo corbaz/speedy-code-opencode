@@ -55,6 +55,7 @@ import {
   type SpeedySettings,
 } from "./settings"
 import { SOCIALS, accountLabel, accountUrl, accountsOf, networkOf, nextAccount, withoutEmptyAccounts } from "./socials"
+import { iconText } from "./icons"
 import { statusLine, type Run, type StatusLimit } from "./statusline"
 import { nameOf, narrationRequest, parseMics, parseVoices, type Voice } from "./voices"
 
@@ -1277,6 +1278,7 @@ export default Plugin.define({
           costUsd: sessionID ? context.data.session.cost(sessionID) : 0,
           limits: limits(),
           now: clock(),
+          icons: settings.icons,
         },
         columns,
         settings.barLevels,
@@ -1346,7 +1348,7 @@ export default Plugin.define({
           {view().hidden.length > 0 ? (
             <box flexShrink={0} onMouseUp={() => void runControl("more")}>
               <Tinted fg="#adb5bd" bold>
-                {" ⋯ "}
+                {iconText(" ⋯ ", settings.icons)}
               </Tinted>
             </box>
           ) : null}
@@ -1359,7 +1361,7 @@ export default Plugin.define({
       <Show when={listen.state !== "off"}>
         <box flexDirection="row" flexShrink={0} paddingLeft={1}>
           <Tinted fg={listen.state === "on" ? "#ff6b6b" : "#748ffc"}>
-            {listen.state === "on" ? "🔴 dictando " : "🔵 cargando el modelo… "}
+            {iconText(listen.state === "on" ? "🔴 dictando " : "🔵 cargando el modelo… ", settings.icons)}
           </Tinted>
           <Tinted fg="#868e96">{`${listen.heard}${listen.partial}`.slice(-Math.max(20, columnsNow() - 16))}</Tinted>
         </box>
