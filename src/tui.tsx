@@ -501,8 +501,8 @@ export default Plugin.define({
     /** Reads the sessions the host keeps, for their menu. */
     const refreshSessions = async () => {
       try {
-        const list = (context.client as unknown as { session: { list: (input?: object) => Promise<unknown> } }).session.list
-        const found = sessionRowsOf(await list({}))
+        const sessions = (context.client as unknown as { session: { list: (input?: object) => Promise<unknown> } }).session
+        const found = sessionRowsOf(await sessions.list({}))
         setMenus((draft) => {
           draft.sessions = found
         })
