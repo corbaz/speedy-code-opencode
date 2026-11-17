@@ -59,11 +59,12 @@ export const DEFAULT_PRIORITY: readonly string[] = [
 /**
  * The signs of the line in each icon set. The Nerd Fonts ones are Font Awesome's
  * glyphs: folder, code_branch, microchip, clock, arrow_rotate_right and
- * triangle_exclamation.
+ * triangle_exclamation, each followed by a blank to spill over, since a
+ * terminal draws a glyph wider than its cell.
  */
 const SIGNS = {
   emoji: { folder: "", branch: "⎇", model: "◆", time: "⏱ ", reset: "↻", warning: "⚠" },
-  nerd: { folder: "\uf07b ", branch: "\uf126", model: "\uf2db", time: "\uf017", reset: "\uf01e", warning: "\uf071" },
+  nerd: { folder: "\uf07b  ", branch: "\uf126 ", model: "\uf2db ", time: "\uf017 ", reset: "\uf01e ", warning: "\uf071 " },
 } as const
 
 export interface StatusInput {

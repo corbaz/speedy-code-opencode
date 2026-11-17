@@ -349,12 +349,15 @@ export function footerControls(input: FooterInput): FooterControl[] {
   return input.icons === "nerd" ? controls.map(nerdControl) : controls
 }
 
-/** A control drawn with Nerd Fonts glyphs: the same width, and the color a glyph can take. */
+/** A control drawn with Nerd Fonts glyphs: as wide as its glyphs make it, in the color a glyph can take. */
 function nerdControl(control: FooterControl): FooterControl {
   return {
     ...control,
     text: nerdText(control.text),
-    ...(control.compactText === undefined ? {} : { compactText: nerdText(control.compactText) }),
+    width: cells(nerdText(control.text)),
+    ...(control.compactText === undefined
+      ? {}
+      : { compactText: nerdText(control.compactText), compactWidth: cells(nerdText(control.compactText)) }),
     ...(control.panel === undefined ? {} : { panel: nerdText(control.panel) }),
     color: NERD_COLORS[control.name] ?? control.color,
   }

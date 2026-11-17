@@ -39,10 +39,8 @@ export const NERD_ICONS: Readonly<Record<string, string>> = {
   "⏵": "\uf04b", // fa-play
   "⏸": "\uf04c", // fa-pause
   "⧗": "\uf252", // fa-hourglass_half
-  "⋯": "\uf141", // fa-ellipsis
   "♀": "\uf221", // fa-venus
   "♂": "\uf222", // fa-mars
-  "♪": "\uf001", // fa-music
   "✦": "\uf005", // fa-star
   "✎": "\uf044", // fa-edit
   "✚": "\uf067", // fa-plus
@@ -50,19 +48,16 @@ export const NERD_ICONS: Readonly<Record<string, string>> = {
   "◈": "\uefcc", // fa-palette
 }
 
-const VARIATION = "\ufe0f"
 const EMOJI = new RegExp(`(${Object.keys(NERD_ICONS).join("|")})[\ufe0e\ufe0f]?`, "gu")
 
-/** Whether the layout counts this emoji as two cells: the astral ones, and any said with U+FE0F. */
-const isWide = (emoji: string) => (emoji.codePointAt(0) ?? 0) >= 0x1f000 || emoji.endsWith(VARIATION)
-
 /**
- * `text` with every emoji replaced by its Nerd Fonts glyph. A glyph is one
- * cell, so one that replaces a two-cell emoji is followed by a blank: every
- * label keeps its width, and a glyph drawn wide has the room.
+ * `text` with every emoji and sign replaced by its Nerd Fonts glyph. A terminal
+ * draws a glyph wider than its cell, so each one is followed by a blank of its
+ * own to spill over, in its color: a text with a two-cell emoji keeps its
+ * width, one with a one-cell sign grows by a cell.
  */
 export function nerdText(text: string): string {
-  return text.replace(EMOJI, (found, emoji: string) => `${NERD_ICONS[emoji]}${isWide(found) ? " " : ""}`)
+  return text.replace(EMOJI, (_found, emoji: string) => `${NERD_ICONS[emoji]} `)
 }
 
 /** `text` as the icon set draws it. */
