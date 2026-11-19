@@ -8,8 +8,9 @@
 
 import { For, Show, createSignal } from "solid-js"
 
-import { DISABLED_COLOR, SESSIONS_COLOR, fit, type FooterControl, type SpeechState } from "./footer"
+import { AGENT_COLOR, DISABLED_COLOR, SESSIONS_COLOR, fit, type FooterControl, type SpeechState } from "./footer"
 import { sessionStamp, type SessionRow } from "./sessions"
+import type { AgentRow } from "./agents"
 import { clipParts, type HistoryClip } from "./history"
 import { iconText, type IconSet } from "./icons"
 import {
@@ -26,7 +27,7 @@ import { SOCIALS, accountLabel, accountUrl, accountsOf, type Social } from "./so
 import { distinctVoices, micName, voiceTitle, type Voice } from "./voices"
 
 /** The menu on screen; empty when none is. */
-export type MenuName = "" | "voices" | "mic" | "history" | "images" | "socials" | "settings" | "more" | "new" | "sessions"
+export type MenuName = "" | "voices" | "mic" | "history" | "images" | "socials" | "settings" | "more" | "new" | "sessions" | "agent"
 
 /** One pasted image the port kept: its file and the moment it was pasted. */
 export interface KeptImage {
@@ -54,6 +55,8 @@ export interface MenuState {
   clips: HistoryClip[]
   /** The sessions the host keeps, newest first, read as their menu opens. */
   sessions: SessionRow[]
+  /** The agents a person picks, read as their menu opens. */
+  agents: AgentRow[]
   /** The kept narration playing from the history menu: its path; empty when none. */
   clipNow: string
   /** The images kept, newest first. */
@@ -78,6 +81,7 @@ export const INITIAL_MENU: MenuState = {
   mics: [],
   clips: [],
   sessions: [],
+  agents: [],
   clipNow: "",
   images: [],
   draftImages: [],
@@ -145,6 +149,10 @@ export interface MenuApi {
   readonly startSession: (name: string) => void
   /** Goes to a session of the `☰` menu. */
   readonly openSession: (id: string) => void
+  /** Goes to the next agent, as Tab does. */
+  readonly cycleAgent: () => void
+  /** Opens the host's own list of agents, to pick one. */
+  readonly pickAgent: () => void
   /** The session on screen; empty when none is. */
   readonly sessionNow: () => string
   readonly pickVoice: (voice: Voice) => void
@@ -591,6 +599,37 @@ function SessionsMenu(props: { api: MenuApi }) {
   )
 }
 
+/**
+ * The agents menu: OpenCode's way of saying what runs without asking. Each agent with what the host
+ * says of it and what its rules let it do; a click on one opens the host's list, where it is picked.
+ */
+function AgentsMenu(props: { api: MenuApi }) {
+  const api = props.api
+  const room = () => Math.max(20, api.width() - 4 - 4)
+  return (
+    <box flexDirection="column">
+      <Show when={api.state.agents.length > 0} fallback={<Label text="  OpenCode no listó agentes." dim />}>
+        <For each={api.state.agents}>
+          {(row) => (
+            <box flexDirection="column" flexShrink={0} onMouseUp={() => api.pickAgent()}>
+              <Label text={` ○ ${row.name}`} color={AGENT_COLOR} bold />
+              <Show when={row.description}>
+                <Label text={`    ${fit(row.description, room()).trimEnd()}`} dim />
+              </Show>
+              <Label text={`    ${fit(row.scope, room()).trimEnd()}`} />
+            </box>
+          )}
+        </For>
+      </Show>
+      <box flexDirection="row" columnGap={1} marginTop={1}>
+        <Btn label=" Siguiente agente (Tab) " color="#101113" bg={AGENT_COLOR} bold onPress={() => api.cycleAgent()} />
+        <Btn label=" Elegir… " color={AGENT_COLOR} bold onPress={() => api.pickAgent()} />
+      </box>
+      <Label text="  El agente en uso figura debajo del prompt. Tab lo cambia, como siempre." dim />
+    </box>
+  )
+}
+
 /** The networks menu: every account with a user name, to open its profile; nothing is set here. */
 function SocialsMenu(props: { api: MenuApi }) {
   const api = props.api
@@ -950,6 +989,8 @@ export function menuHeading(open: MenuName, settings: SpeedySettings): { title: 
       return { title: "Redes sociales", color: "#f783ac" }
     case "sessions":
       return { title: "Sesiones", color: SESSIONS_COLOR }
+    case "agent":
+      return { title: "Agentes y permisos", color: AGENT_COLOR }
     case "new":
       return { title: "+ Sesión nueva", color: NEW_SESSION_COLOR }
     case "more":
@@ -992,6 +1033,9 @@ export function MenuFrame(props: { api: MenuApi }) {
         </Show>
         <Show when={api.state.open === "socials"}>
           <SocialsMenu api={api} />
+        </Show>
+        <Show when={api.state.open === "agent"}>
+          <AgentsMenu api={api} />
         </Show>
         <Show when={api.state.open === "sessions"}>
           <SessionsMenu api={api} />

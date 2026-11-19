@@ -56,6 +56,7 @@ import {
 import { SOCIALS, accountLabel, accountUrl, accountsOf, networkOf, nextAccount, withoutEmptyAccounts } from "./socials"
 import { iconText } from "./icons"
 import { sessionRowsOf } from "./sessions"
+import { agentRowsOf } from "./agents"
 import { FONT_FAMILIES } from "./settings"
 import { statusLine, type Run, type StatusLimit } from "./statusline"
 import { nameOf, narrationRequest, parseMics, parseVoices, type Voice } from "./voices"
@@ -799,6 +800,12 @@ export default Plugin.define({
       }
       if (which === "images") await refreshImages()
       if (which === "sessions") await refreshSessions()
+      if (which === "agent") {
+        const found = agentRowsOf((context.data.location.agent as unknown as { list: () => unknown }).list())
+        setMenus((draft) => {
+          draft.agents = found
+        })
+      }
       if (which === "mic") void loadMics()
       if (which === "settings") void checkSetup()
       setMenus((draft) => {
@@ -1066,6 +1073,8 @@ export default Plugin.define({
           return openMenu("new")
         case "sessions":
           return openMenu("sessions")
+        case "agent":
+          return openMenu("agent")
         case "reload":
           return context.keymap.dispatch("location.reload")
         case "exit":
@@ -1401,6 +1410,14 @@ export default Plugin.define({
       openSocial: (key) => void openSocial(key),
       startSession: (name) => void startSession(name),
       openSession: (id) => openSession(id),
+      cycleAgent: () => {
+        closeMenu()
+        context.keymap.dispatch("agent.cycle")
+      },
+      pickAgent: () => {
+        closeMenu()
+        context.keymap.dispatch("agent.list")
+      },
       sessionNow: () => {
         const route = context.ui.router.current() as { type?: string; sessionID?: string } | undefined
         return route?.type === "session" ? (route.sessionID ?? "") : ""

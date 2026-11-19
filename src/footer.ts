@@ -47,6 +47,7 @@ export const FOOTER_RANKS: Readonly<Record<string, number>> = {
   compact: 0,
   exit: 0,
   divider: 0,
+  agent: 1,
   settings: 1,
   reload: 2,
   history: 3,
@@ -127,6 +128,9 @@ export function newSessionChoice(typed: string | undefined): NewSessionChoice {
   const title = typed.trim()
   return title ? { kind: "named", title } : { kind: "plain" }
 }
+
+/** The agents' control and menu: the color of who does the work. */
+export const AGENT_COLOR = "#ffa94d"
 
 /** The sessions' control and menu: the color of what was said before. */
 export const SESSIONS_COLOR = "#63e6be"
@@ -328,6 +332,9 @@ export function footerControls(input: FooterInput): FooterControl[] {
   const voice = ` 🗣  ${input.voice ?? "Español"}${language} ▾`
   const voiceShort = input.language ? ` 🗣  ${input.language} ▾` : undefined
   controls.push(control("voice", "voice", voice, input.voiceColor ?? "#adb5bd", voiceShort))
+
+  // The agent decides what runs without asking: the host tells no plugin which one is picked, so none is named.
+  controls.push(control("agent", "agent", " Agente ▾ ", AGENT_COLOR))
 
   controls.push(control("compact", "compact", " 🗜️ ", "#ff6b6b"))
 
