@@ -601,7 +601,7 @@ function SessionsMenu(props: { api: MenuApi }) {
 
 /**
  * The agents menu: OpenCode's way of saying what runs without asking. Each agent with what the host
- * says of it and what its rules let it do; a click on one opens the host's list, where it is picked.
+ * says of it; a click on one opens the host's list, where it is picked.
  */
 function AgentsMenu(props: { api: MenuApi }) {
   const api = props.api
@@ -616,7 +616,6 @@ function AgentsMenu(props: { api: MenuApi }) {
               <Show when={row.description}>
                 <Label text={`    ${fit(row.description, room()).trimEnd()}`} dim />
               </Show>
-              <Label text={`    ${fit(row.scope, room()).trimEnd()}`} />
             </box>
           )}
         </For>
@@ -625,7 +624,8 @@ function AgentsMenu(props: { api: MenuApi }) {
         <Btn label=" Siguiente agente (Tab) " color="#101113" bg={AGENT_COLOR} bold onPress={() => api.cycleAgent()} />
         <Btn label=" Elegir… " color={AGENT_COLOR} bold onPress={() => api.pickAgent()} />
       </box>
-      <Label text="  El agente en uso figura debajo del prompt. Tab lo cambia, como siempre." dim />
+      <Label text="  En OpenCode los permisos son de cada agente (opencode.json). El que está en uso figura debajo" dim />
+      <Label text="  del prompt; Tab lo cambia, como siempre." dim />
     </box>
   )
 }

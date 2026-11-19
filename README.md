@@ -77,9 +77,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 - After the exit, the footer shows the version, `v:yy.mmdd-(hhmm)`: the moment of the clone's
   last commit, in Buenos Aires time.
 - `Agente ▾`, beside the voice, opens the menu of the agents a person picks: OpenCode has no permission
-  modes, what runs without asking is the agent's. Each one with the host's description and what its rules
-  let it do (editing, commands, how many exceptions); a button goes to the next one, as Tab, and another
-  opens the host's own list. The host tells no plugin which agent is picked, so the control names none.
+  modes, what runs without asking is the agent's. Each one with the host's description; a button goes
+  to the next one, as Tab, and another opens the host's own list. The host tells no plugin which agent is picked, so the control names none.
 - `☰`, after `+`, opens the menu of the sessions OpenCode keeps, newest first, each with its folder and
   when it last changed; the list scrolls, and a click goes to one.
 - `+` asks for the new session's name and opens it under that title; an
