@@ -179,13 +179,44 @@ describe.skipIf(!python)("the terminal's font", () => {
       expect(await run("--size", "13", "--face", "MesloLGSNF-Regular", "--iterm", profiles)).toEqual({ out: "cambiada", code: 0 })
       const written = JSON.parse(await readFile(join(profiles, "speedy-code.json"), "utf8"))
       expect(written.Profiles).toEqual([
-        { Name: "speedy-code", Guid: "speedy-code-font-profile", "Normal Font": "MesloLGSNF-Regular 13", "Non Ascii Font": "MesloLGSNF-Regular 13" },
+        {
+          Name: "speedy-code",
+          Guid: "speedy-code-font-profile",
+          "Normal Font": "MesloLGSNF-Regular 13",
+          "Non Ascii Font": "MesloLGSNF-Regular 13",
+          "Window Type": 15,
+        },
       ])
       expect(await run("--size", "13", "--face", "MesloLGSNF-Regular", "--iterm", profiles)).toEqual({ out: "ya estaba", code: 0 })
       expect((await run("--size", "15", "--face", "JetBrainsMonoNF-Regular", "--iterm", profiles)).out).toBe("cambiada")
       expect(JSON.parse(await readFile(join(profiles, "speedy-code.json"), "utf8")).Profiles[0]["Normal Font"]).toBe("JetBrainsMonoNF-Regular 15")
     } finally {
       await rm(folder, { recursive: true, force: true })
+    }
+  })
+
+  test("only an editor's own terminal, by TERM_PROGRAM, changes the editors: Ghostty with a VS Code variable left over does not", async () => {
+    const base = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
+    const code = "import sys, terminal_font; print(terminal_font.editors_here(sys.argv[1]))"
+    const here = async (env: Record<string, string>) => {
+      const clean = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "TERM_PROGRAM" && !key.startsWith("VSCODE_")))
+      const child = Bun.spawn([python ?? "python", "-c", code, base], {
+        cwd: join(import.meta.dir, "..", "setup"),
+        env: { ...clean, ...env },
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      await child.exited
+      return (await new Response(child.stdout).text()).trim()
+    }
+    try {
+      await Bun.write(join(base, "Code", "User", "settings.json"), "{}")
+      expect(await here({ TERM_PROGRAM: "ghostty", VSCODE_INJECTION: "1" })).toBe("None")
+      expect(await here({ TERM_PROGRAM: "iTerm.app" })).toBe("None")
+      expect(await here({ TERM_PROGRAM: "vscode" })).toContain("VS Code")
+      expect(await here({ TERM_PROGRAM: "kiro" })).toContain("VS Code")
+    } finally {
+      await rm(base, { recursive: true, force: true })
     }
   })
 
