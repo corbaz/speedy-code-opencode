@@ -305,7 +305,7 @@ export function footerControls(input: FooterInput): FooterControl[] {
 
   // The networks are one control that opens their menu: a badge each took half the row.
   if ((input.socials?.length ?? 0) > 0) {
-    controls.push({ ...control("socials", "socials", " Redes sociales ▾ ", SOCIALS_COLOR, " Redes ▾ "), bold: true })
+    controls.push({ ...control("socials", "socials", " Redes ▾ ", SOCIALS_COLOR), bold: true })
     controls.push({ name: "divider", text: "│", color: DISABLED_COLOR, width: cells("│") })
   }
 

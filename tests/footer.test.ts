@@ -331,8 +331,8 @@ describe("the networks' control", () => {
     })
     const socials = controls.filter((control) => control.name === "socials")
     expect(socials).toHaveLength(1)
-    expect(socials[0]?.text).toBe(" Redes sociales ▾ ")
-    expect(socials[0]?.compactText).toBe(" Redes ▾ ")
+    expect(socials[0]?.text).toBe(" Redes ▾ ")
+    expect(socials[0]?.compactText).toBeUndefined()
     expect(socials[0]?.id).toBe("socials")
   })
 
