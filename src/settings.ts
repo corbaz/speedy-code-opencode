@@ -42,7 +42,7 @@ export const FONT_FAMILIES = [
 export type FontFamily = (typeof FONT_FAMILIES)[number][0]
 
 export const BAR_PARTS: ReadonlyArray<readonly [BarPart, string]> = [
-  ["core", "Versión, modelo y esfuerzo"],
+  ["core", "Versión de OpenCode"],
   ["five_hour", "Límite de 5 horas"],
   ["seven_day", "Límite semanal"],
   ["context", "Contexto"],
