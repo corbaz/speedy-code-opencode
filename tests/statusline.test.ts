@@ -18,8 +18,6 @@ const input = {
   cwd: "C:\\Users\\Sancho\\.claude\\local-mods",
   home: "C:\\Users\\Sancho",
   version: "2.3.0",
-  model: "GLM-5.3",
-  effort: "high",
   durationMs: 43 * 60000,
   inputTokens: 2,
   outputTokens: 995,
@@ -52,7 +50,7 @@ describe("status line numbers", () => {
 describe("statusLine", () => {
   test("draws every part, in the original order and wording, when it fits", () => {
     expect(text(statusLine(input, 0, levels))).toBe(
-      "~\\.claude\\local-mods » v2.3.0 ◆ GLM-5.3 · high │ ⏱  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04",
+      "~\\.claude\\local-mods » v2.3.0 │ ⏱  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04",
     )
   })
 
@@ -61,18 +59,18 @@ describe("statusLine", () => {
   })
 
   test("a narrow terminal keeps the parts by priority and never cuts one", () => {
-    const line = text(statusLine(input, 64, levels))
-    expect(line).toBe("v2.3.0 ◆ GLM-5.3 · high │ ⏱  43m │ ctx: ▰▱▱▱ 15% 149.5k/1M")
-    expect(line.length).toBeLessThanOrEqual(60)
+    const line = text(statusLine(input, 47, levels))
+    expect(line).toBe("v2.3.0 │ ⏱  43m │ ctx: ▰▱▱▱ 15% 149.5k/1M")
+    expect(line.length).toBeLessThanOrEqual(43)
   })
 
   test("the first part by priority is drawn however narrow the terminal is", () => {
-    expect(text(statusLine(input, 5, levels))).toBe("v2.3.0 ◆ GLM-5.3 · high")
+    expect(text(statusLine(input, 5, levels))).toBe("v2.3.0")
   })
 
   test("the saved order decides what stays", () => {
     const line = text(statusLine(input, 44, levels, ["cost", "core"]))
-    expect(line).toBe("v2.3.0 ◆ GLM-5.3 · high │ sesión $2.04")
+    expect(line).toBe("v2.3.0 │ sesión $2.04")
   })
 
   test("context turns yellow and red at the saved levels, and red asks to compact", () => {
@@ -86,13 +84,13 @@ describe("statusLine", () => {
 
   test("with Nerd Fonts the signs are glyphs, and the folder gets one", () => {
     expect(text(statusLine({ ...input, branch: "main", icons: "nerd" }, 0, levels))).toBe(
-      "\uf07b  ~\\.claude\\local-mods \uf126  main » v2.3.0 \uf2db  GLM-5.3 · high │ \uf017  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04",
+      "\uf07b  ~\\.claude\\local-mods \uf126  main » v2.3.0 │ \uf017  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04",
     )
     expect(text(statusLine({ ...input, cacheReadTokens: 800000, icons: "nerd" }, 0, levels))).toContain("\uf071   compactar")
   })
 
   test("with nothing known it still draws zeros", () => {
-    expect(text(statusLine({}, 0, levels))).toBe(" » ◆  │ ⏱  0m │ in 0 out 0 caché 0 │ ctx: ▱▱▱▱ 0% │ sesión $0.00")
+    expect(text(statusLine({}, 0, levels))).toBe(" » ⏱  0m │ in 0 out 0 caché 0 │ ctx: ▱▱▱▱ 0% │ sesión $0.00")
   })
 })
 
@@ -110,8 +108,8 @@ describe("limits", () => {
   })
 
   test("a narrow terminal keeps the windows short before it drops a part", () => {
-    expect(text(statusLine({ ...input, limits, now }, 62, levels))).toBe(
-      "v2.3.0 ◆ GLM-5.3 · high │ 5hs ▱▱▱▱ 1% │ semana ▱▱▱▱ 0%",
+    expect(text(statusLine({ ...input, limits, now }, 45, levels))).toBe(
+      "v2.3.0 │ 5hs ▱▱▱▱ 1% │ semana ▱▱▱▱ 0%",
     )
   })
 

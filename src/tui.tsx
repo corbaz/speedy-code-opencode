@@ -760,6 +760,8 @@ export default Plugin.define({
 
     // What the 📎 menu reads from its first row: taken when the menu opens.
     let pendingSelection = ""
+    // The clipboard while it is still being read for the 📎 menu: its first row waits for it.
+    let pendingRead: Promise<void> | undefined
 
     const closeMenu = () =>
       setMenus((draft) => {
@@ -794,8 +796,14 @@ export default Plugin.define({
             .getSelection?.()
             ?.getSelectedText?.()
             ?.trim() ?? ""
-        // A click leaves a selection of a glyph or two behind: only one that holds words counts.
-        pendingSelection = /\p{L}{3,}/u.test(selected) ? selected : await readClipboard()
+        // A click leaves a selection of a glyph or two behind: only one that holds words counts. The
+        // clipboard is read after the menu is open: PowerShell takes seconds to start on a busy machine.
+        pendingSelection = /\p{L}{3,}/u.test(selected) ? selected : ""
+        pendingRead = pendingSelection
+          ? undefined
+          : readClipboard().then((text) => {
+              pendingSelection = text
+            })
         await refreshClips()
       }
       if (which === "images") await refreshImages()
@@ -824,6 +832,7 @@ export default Plugin.define({
 
     /** The first row of the 📎 menu: reads the selection taken when 📎 was pressed. */
     const readSelection = async () => {
+      await pendingRead?.catch(() => {})
       if (!plain(pendingSelection).trim()) {
         toast("seleccioná o copiá un texto primero")
         return
@@ -1282,8 +1291,6 @@ export default Plugin.define({
           home: homedir(),
           branch: context.data.location.vcs.info()?.branch?.current,
           version: context.app.version,
-          model: info?.name ?? modelID,
-          effort: picked?.variant ?? session?.model?.variant,
           durationMs: session?.time?.created ? clock() - session.time.created : 0,
           inputTokens: last?.tokens?.input,
           outputTokens: last?.tokens?.output,

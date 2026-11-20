@@ -1,6 +1,6 @@
 /**
  * The status line, ported from the original `statusline.py`: folder, branch,
- * version, model, effort, time, tokens, context used and cost, in color. In a
+ * version, time, tokens, context used and cost, in color. In a
  * narrow terminal it keeps what matters most, in the order the settings give.
  *
  * Pure: it turns what the host knows into colored runs and touches no host API.
@@ -33,17 +33,6 @@ export const STATUS_COLORS = {
   red: "#ff5f5f",
 } as const
 
-/** The effort color, from calm to hot, as the original paints it. */
-export const EFFORT_COLORS: Readonly<Record<string, string>> = {
-  none: "#8a8a8a",
-  minimal: "#87d787",
-  low: "#87d787",
-  medium: "#afd75f",
-  high: "#ffd75f",
-  xhigh: "#ffaf5f",
-  max: "#ff5f5f",
-}
-
 export const DEFAULT_PRIORITY: readonly string[] = [
   "core",
   "five_hour",
@@ -74,8 +63,6 @@ export interface StatusInput {
   readonly home?: string
   readonly branch?: string
   readonly version?: string
-  readonly model?: string
-  readonly effort?: string
   readonly durationMs?: number
   readonly inputTokens?: number
   readonly outputTokens?: number
@@ -202,12 +189,8 @@ export function statusLine(
   if (size) context.push(run(` ${formatTokens(held)}/${formatTokens(size)}`, tone))
   if (used >= levels.contextRed) context.push(run(` ${sign.warning}  compactar`, C.red))
 
-  const core: Run[] = []
-  if (input.version) core.push(run(`v${input.version} `, C.time))
-  core.push({ ...run(`${sign.model} ${input.model ?? ""}`, C.model), bold: true })
-  if (input.effort) {
-    core.push(run(" · ", C.label), run(input.effort, EFFORT_COLORS[input.effort] ?? C.label))
-  }
+  // The model and its variant are the footer's, where a click changes them: the line keeps the version.
+  const core: Run[] = input.version ? [run(`v${input.version}`, C.time)] : []
 
   const meter = (percent: number, color: string): Run[] => {
     const filled = Math.round((Math.min(100, Math.max(0, percent)) / 100) * 4)
@@ -216,7 +199,7 @@ export function statusLine(
 
   const parts: Array<{ key: string; runs: Run[]; short?: Run[]; shown?: Run[] }> = [
     { key: "folder", runs: folder },
-    { key: "core", runs: core },
+    ...(core.length > 0 ? [{ key: "core", runs: core }] : []),
     { key: "time", runs: [run(`${sign.time} ${formatDuration(input.durationMs)}`, C.time)] },
     { key: "tokens", runs: tokens },
     { key: "context", runs: context },
