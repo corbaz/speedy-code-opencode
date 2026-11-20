@@ -190,7 +190,8 @@ export function statusLine(
   if (used >= levels.contextRed) context.push(run(` ${sign.warning}  compactar`, C.red))
 
   // The model and its variant are the footer's, where a click changes them: the line keeps the version.
-  const core: Run[] = input.version ? [run(`v${input.version}`, C.time)] : []
+  // The version closes the line, named: opencode:v2.3.2.
+  const core: Run[] = input.version ? [run("opencode:", C.label), run(`v${input.version}`, C.time)] : []
 
   const meter = (percent: number, color: string): Run[] => {
     const filled = Math.round((Math.min(100, Math.max(0, percent)) / 100) * 4)
@@ -199,7 +200,6 @@ export function statusLine(
 
   const parts: Array<{ key: string; runs: Run[]; short?: Run[]; shown?: Run[] }> = [
     { key: "folder", runs: folder },
-    ...(core.length > 0 ? [{ key: "core", runs: core }] : []),
     { key: "time", runs: [run(`${sign.time} ${formatDuration(input.durationMs)}`, C.time)] },
     { key: "tokens", runs: tokens },
     { key: "context", runs: context },
@@ -219,6 +219,8 @@ export function statusLine(
     const reset = formatReset(limit.resetsAt, input.now)
     parts.push({ key, short, runs: reset ? [...short, run(` ${sign.reset} ${reset}`, C.label)] : short })
   }
+
+  if (core.length > 0) parts.push({ key: "core", runs: core })
 
   // The parts in rank order, each in its short form, until one does not fit;
   // then the limits get their reset time back with the room left.

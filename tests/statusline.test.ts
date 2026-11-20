@@ -50,7 +50,7 @@ describe("status line numbers", () => {
 describe("statusLine", () => {
   test("draws every part, in the original order and wording, when it fits", () => {
     expect(text(statusLine(input, 0, levels))).toBe(
-      "~\\.claude\\local-mods » v2.3.0 │ ⏱  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04",
+      "~\\.claude\\local-mods » ⏱  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04 │ opencode:v2.3.0",
     )
   })
 
@@ -59,18 +59,18 @@ describe("statusLine", () => {
   })
 
   test("a narrow terminal keeps the parts by priority and never cuts one", () => {
-    const line = text(statusLine(input, 47, levels))
-    expect(line).toBe("v2.3.0 │ ⏱  43m │ ctx: ▰▱▱▱ 15% 149.5k/1M")
-    expect(line.length).toBeLessThanOrEqual(43)
+    const line = text(statusLine(input, 56, levels))
+    expect(line).toBe("⏱  43m │ ctx: ▰▱▱▱ 15% 149.5k/1M │ opencode:v2.3.0")
+    expect(line.length).toBeLessThanOrEqual(52)
   })
 
   test("the first part by priority is drawn however narrow the terminal is", () => {
-    expect(text(statusLine(input, 5, levels))).toBe("v2.3.0")
+    expect(text(statusLine(input, 5, levels))).toBe("opencode:v2.3.0")
   })
 
   test("the saved order decides what stays", () => {
-    const line = text(statusLine(input, 44, levels, ["cost", "core"]))
-    expect(line).toBe("v2.3.0 │ sesión $2.04")
+    const line = text(statusLine(input, 53, levels, ["cost", "core"]))
+    expect(line).toBe("sesión $2.04 │ opencode:v2.3.0")
   })
 
   test("context turns yellow and red at the saved levels, and red asks to compact", () => {
@@ -84,7 +84,7 @@ describe("statusLine", () => {
 
   test("with Nerd Fonts the signs are glyphs, and the folder gets one", () => {
     expect(text(statusLine({ ...input, branch: "main", icons: "nerd" }, 0, levels))).toBe(
-      "\uf07b  ~\\.claude\\local-mods \uf126  main » v2.3.0 │ \uf017  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04",
+      "\uf07b  ~\\.claude\\local-mods \uf126  main » \uf017  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04 │ opencode:v2.3.0",
     )
     expect(text(statusLine({ ...input, cacheReadTokens: 800000, icons: "nerd" }, 0, levels))).toContain("\uf071   compactar")
   })
@@ -103,13 +103,13 @@ describe("limits", () => {
 
   test("the 5-hour and weekly windows close the line, with when each starts over", () => {
     expect(text(statusLine({ ...input, limits, now }, 0, levels))).toEndWith(
-      " │ sesión $2.04 │ 5hs ▱▱▱▱ 1% ↻ hoy 13:40 │ semana ▱▱▱▱ 0% ↻ Dom 13:00",
+      " │ sesión $2.04 │ 5hs ▱▱▱▱ 1% ↻ hoy 13:40 │ semana ▱▱▱▱ 0% ↻ Dom 13:00 │ opencode:v2.3.0",
     )
   })
 
   test("a narrow terminal keeps the windows short before it drops a part", () => {
-    expect(text(statusLine({ ...input, limits, now }, 45, levels))).toBe(
-      "v2.3.0 │ 5hs ▱▱▱▱ 1% │ semana ▱▱▱▱ 0%",
+    expect(text(statusLine({ ...input, limits, now }, 54, levels))).toBe(
+      "5hs ▱▱▱▱ 1% │ semana ▱▱▱▱ 0% │ opencode:v2.3.0",
     )
   })
 
