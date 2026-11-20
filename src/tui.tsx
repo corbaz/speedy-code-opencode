@@ -1272,8 +1272,14 @@ export default Plugin.define({
       if (ticks % 2 === 0) void askLimits()
     }, 30000)
 
-    const columnsNow = () => context.renderer?.terminalWidth ?? 80
-    const rowsNow = () => (context.renderer as unknown as { terminalHeight?: number }).terminalHeight ?? 40
+    // The terminal's size, read again when it changes: a window made smaller or larger (a font changed
+    // in a terminal that keeps its rows and columns) fits the footer and the status line again.
+    const [resized, setResized] = createSignal(0)
+    ;(context.renderer as unknown as { on?: (event: string, listener: () => void) => void } | undefined)?.on?.("resize", () =>
+      setResized((count) => count + 1),
+    )
+    const columnsNow = () => (resized(), context.renderer?.terminalWidth ?? 80)
+    const rowsNow = () => (resized(), (context.renderer as unknown as { terminalHeight?: number }).terminalHeight ?? 40)
 
     /** The status line of the session on screen, or of none on the home screen. */
     const statusRuns = (sessionID: string | undefined, columns: number): Run[] => {
