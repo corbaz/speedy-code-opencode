@@ -93,6 +93,7 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 
 ## Known limitations
 
+- In VS Code (and its forks) the window's zoom must be a whole level (`window.zoomLevel` 0, 1, 2…): at a fractional one the terminal places the clicks in the wrong cells, and the footer's controls do not answer or answer for their neighbor. A terminal opened before the zoom changed keeps the old measures: open a new one.
 - Only an image pasted with the 🖼️ or 📥 control is kept for the 👁️ menu; one
   pasted with the keyboard is not.
 - Translating a reply and telling a long one short need `GROQ_API_KEY`;
