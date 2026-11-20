@@ -156,6 +156,23 @@ describe.skipIf(!python)("the terminal's font", () => {
     }
   })
 
+  test("iTerm2 gets a profile of its own with the font, written again only when it changes", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
+    const profiles = join(folder, "DynamicProfiles")
+    try {
+      expect(await run("--size", "13", "--face", "MesloLGSNF-Regular", "--iterm", profiles)).toEqual({ out: "cambiada", code: 0 })
+      const written = JSON.parse(await readFile(join(profiles, "speedy-code.json"), "utf8"))
+      expect(written.Profiles).toEqual([
+        { Name: "speedy-code", Guid: "speedy-code-font-profile", "Normal Font": "MesloLGSNF-Regular 13", "Non Ascii Font": "MesloLGSNF-Regular 13" },
+      ])
+      expect(await run("--size", "13", "--face", "MesloLGSNF-Regular", "--iterm", profiles)).toEqual({ out: "ya estaba", code: 0 })
+      expect((await run("--size", "15", "--face", "JetBrainsMonoNF-Regular", "--iterm", profiles)).out).toBe("cambiada")
+      expect(JSON.parse(await readFile(join(profiles, "speedy-code.json"), "utf8")).Profiles[0]["Normal Font"]).toBe("JetBrainsMonoNF-Regular 15")
+    } finally {
+      await rm(folder, { recursive: true, force: true })
+    }
+  })
+
   test("Ghostty and kitty get their two lines in place of the ones they had, and nothing else moves", async () => {
     const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
     const ghostty = join(folder, "config")
