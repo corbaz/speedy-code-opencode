@@ -156,6 +156,22 @@ describe.skipIf(!python)("the terminal's font", () => {
     }
   })
 
+  test("an editor's settings get the terminal's font and size in place of theirs, comments and the rest kept", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
+    const path = join(folder, "settings.json")
+    await writeFile(path, '{\n  // mine\n  "editor.fontSize": 13,\n  "terminal.integrated.fontFamily": "monospace",\n}\n')
+    try {
+      expect(await run("--size", "14", "--face", "MesloLGS Nerd Font", "--editor", path)).toEqual({ out: "cambiada", code: 0 })
+      expect(await readFile(path, "utf8")).toBe(
+        `{\n  "terminal.integrated.fontSize": 14,\n  // mine\n  "editor.fontSize": 13,\n  "terminal.integrated.fontFamily": "'MesloLGS Nerd Font'",\n}\n`,
+      )
+      expect(await run("--size", "14", "--face", "MesloLGS Nerd Font", "--editor", path)).toEqual({ out: "ya estaba", code: 0 })
+      expect(await readFile(`${path}.speedy-font.bak`, "utf8")).toContain('"monospace"')
+    } finally {
+      await rm(folder, { recursive: true, force: true })
+    }
+  })
+
   test("iTerm2 gets a profile of its own with the font, written again only when it changes", async () => {
     const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
     const profiles = join(folder, "DynamicProfiles")

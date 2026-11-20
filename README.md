@@ -69,7 +69,7 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   installed, needs a Nerd Font picked in its settings.
 - The terminal's font, from the same tab: **Fuente de la terminal** puts JetBrains Mono or Meslo
   (their Nerd Fonts builds, so the icons are in them) at 8 to 16 points in Windows Terminal, macOS Terminal (while
-  open), Ghostty, kitty and iTerm2 (a profile of its own, `speedy-code`, that the tab is put on; set it as the default for new tabs), by `setup/terminal_font.py`. A program in a terminal has no font of its
+  open), Ghostty, kitty, the terminal of VS Code, Kiro, Cursor or Windsurf (their own settings, when it runs there) and iTerm2 (a profile of its own, `speedy-code`, that the tab is put on; set it as the default for new tabs), by `setup/terminal_font.py`. A program in a terminal has no font of its
   own: the terminal's settings change, and each file keeps a copy as it first was
   (`.speedy-font.bak`). Warp, WezTerm, Alacritty and editors take the font,
   `JetBrainsMono NF` or `MesloLGS Nerd Font`, in their own settings. The setup installs both, and
