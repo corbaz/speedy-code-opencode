@@ -15,6 +15,7 @@
 import { posix, win32 } from "node:path"
 
 import type { SpeechState } from "./footer"
+import { POWERSHELL } from "./powershell"
 import { SpeechSession, type SpeakingProcess } from "./speech"
 
 export type { SpeakingProcess } from "./speech"
@@ -108,7 +109,7 @@ export function speakCommand(input: {
   const argv =
     platform === "win32"
       ? [
-          "powershell",
+          POWERSHELL,
           "-NoProfile",
           "-NonInteractive",
           "-ExecutionPolicy",

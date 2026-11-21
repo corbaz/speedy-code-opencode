@@ -11,6 +11,7 @@ import { readdir, stat } from "node:fs/promises"
 import { join, posix, win32 } from "node:path"
 
 import type { SpeechState } from "./footer"
+import { POWERSHELL } from "./powershell"
 import { SpeechSession, type SpeakingProcess } from "./speech"
 
 /** How many of the newest narrations the history lists and plays. */
@@ -107,7 +108,7 @@ export function playCommand(input: {
   const argv =
     platform === "win32"
       ? [
-          "powershell",
+          POWERSHELL,
           "-NoProfile",
           "-NonInteractive",
           "-ExecutionPolicy",

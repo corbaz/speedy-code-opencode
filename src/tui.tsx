@@ -25,6 +25,7 @@ import {
   type FooterControl,
   type SpeechState,
 } from "./footer"
+import { POWERSHELL } from "./powershell"
 import { ClipPlayer, listClips, type HistoryClip } from "./history"
 import {
   DraftImages,
@@ -327,7 +328,7 @@ export default Plugin.define({
     const writeClipboard = async (text: string): Promise<boolean> => {
       const argv =
         process.platform === "win32"
-          ? ["powershell", "-NoProfile", "-NonInteractive", "-Command", "Set-Clipboard -Value $env:SPEEDY_TEXT"]
+          ? [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", "Set-Clipboard -Value $env:SPEEDY_TEXT"]
           : process.platform === "darwin"
             ? ["/bin/sh", "-c", 'printf %s "$SPEEDY_TEXT" | pbcopy']
             : ["/bin/sh", "-c", 'printf %s "$SPEEDY_TEXT" | xclip -selection clipboard']
@@ -339,7 +340,7 @@ export default Plugin.define({
       const argv =
         process.platform === "win32"
           ? [
-              "powershell",
+              POWERSHELL,
               "-NoProfile",
               "-NonInteractive",
               "-Command",
@@ -716,7 +717,7 @@ export default Plugin.define({
       const argv =
         process.platform === "win32"
           ? [
-              "powershell",
+              POWERSHELL,
               "-NoProfile",
               "-NonInteractive",
               "-ExecutionPolicy",
@@ -918,7 +919,7 @@ export default Plugin.define({
       const argv =
         process.platform === "win32"
           ? [
-              "powershell",
+              POWERSHELL,
               "-NoProfile",
               "-NonInteractive",
               "-STA",
@@ -984,7 +985,7 @@ export default Plugin.define({
       const argv =
         process.platform === "win32"
           ? [
-              "powershell",
+              POWERSHELL,
               "-NoProfile",
               "-NonInteractive",
               "-ExecutionPolicy",
@@ -1018,7 +1019,7 @@ export default Plugin.define({
       const argv =
         process.platform === "win32"
           ? [
-              "powershell",
+              POWERSHELL,
               "-NoProfile",
               "-NonInteractive",
               "-STA",

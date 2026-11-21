@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
+import { POWERSHELL } from "../src/powershell"
+
 import {
   MAX_TEXT,
   Narration,
@@ -101,7 +103,7 @@ describe("speakCommand", () => {
 
   test("runs the PowerShell engine on Windows", () => {
     const command = speakCommand({ platform: "win32", root: "C:/plugin", python: "python.exe", request })
-    expect(command.argv[0]).toBe("powershell")
+    expect(command.argv[0]).toBe(POWERSHELL)
     expect(command.argv.at(-1)?.replaceAll("\\", "/")).toBe("C:/plugin/engine/speak.ps1")
   })
 

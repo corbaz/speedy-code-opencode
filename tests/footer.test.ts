@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
+import { POWERSHELL } from "../src/powershell"
+
 import {
   versionLabel,
   folderLabel,
@@ -408,7 +410,7 @@ describe("the version, and the place after the exit", () => {
 
   test("folderCommand: Windows runs open_folder.ps1 with the folder in its environment; macOS and Linux open it", () => {
     expect(folderCommand("win32", "C:/Users/me/x y", "C:/plugin")).toEqual({
-      argv: ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "C:/plugin/engine/open_folder.ps1"],
+      argv: [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "C:/plugin/engine/open_folder.ps1"],
       env: { SPEEDY_FOLDER: "C:\\Users\\me\\x y" },
     })
     expect(folderCommand("darwin", "/Users/me/x", "/plugin")).toEqual({ argv: ["open", "/Users/me/x"], env: {} })

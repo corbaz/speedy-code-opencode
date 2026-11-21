@@ -7,6 +7,7 @@
  */
 
 import { NERD_COLORS, nerdText, type IconSet } from "./icons"
+import { POWERSHELL } from "./powershell"
 
 /** The narration states the play control draws. */
 export type SpeechState = "idle" | "thinking" | "playing" | "paused"
@@ -132,7 +133,7 @@ export function folderCommand(
   if (platform === "win32") {
     return {
       argv: [
-        "powershell",
+        POWERSHELL,
         "-NoProfile",
         "-NonInteractive",
         "-ExecutionPolicy",

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
+import { POWERSHELL } from "../src/powershell"
+
 import { ClipPlayer, HISTORY_LENGTH, clipParts, listClips, playCommand, type Directory } from "../src/history"
 import type { SpeakingProcess } from "../src/speech"
 
@@ -32,7 +34,7 @@ describe("playCommand", () => {
     })
 
     expect(command.argv).toEqual([
-      "powershell",
+      POWERSHELL,
       "-NoProfile",
       "-NonInteractive",
       "-ExecutionPolicy",
