@@ -82,9 +82,10 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   lists at most 500 entries, then `… y N más`. Each disk keeps the folders open in it.
   `↗ abrir en el sistema` still opens the session's folder in Explorer, or in Finder; so does the
   folder's click where the host has no side panel to open, as on the home screen. A click on a `.md`,
-  `.markdown`, `.txt`, `.sh`, `.bat`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.ico`, `.tif`,
-  `.tiff` file or a `.gitignore` shows it in a popup in the middle of the screen, with scroll bars when
-  it does not fit (`engine/view_file.ps1`; Quick Look on macOS); other files are listed dimmed. One
+  `.markdown`, `.txt`, `.sh`, `.bat`, `.ps1`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.ico`, `.tif`,
+  `.tiff` file or a `.gitignore`, drawn yellow, shows it in a popup in the middle of the screen, with scroll bars when
+  it does not fit (`engine/view_file.ps1`; Quick Look on macOS); markdown opens drawn, with a
+  Preview/MD switch beside the title; other files are listed dimmed. One
   popup at a time: another closes it. In the status line, a click on `opencode:v…` opens that version's
   release notes and one on `5hs`, `semana` or `mes` the console of the workspace the host names: the links are in Claude's orange. speedy-code's version,
   `vyy.mmdd(hhmm)` (the moment of the clone's last commit, in Buenos Aires time), closes the

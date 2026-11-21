@@ -35,11 +35,14 @@ export interface ExplorerPanelApi {
   close(): void
 }
 
+/** A file the viewer opens: yellow, so it reads as one that does something when pressed. */
+const VIEWABLE_COLOR = "#ffd43b"
+
 /** How a row is drawn: folders in blue, the session's bold in the folder's color, the rest by what a press does. */
 function rowLook(row: TreeRow): { color?: string; attributes: number } {
   if (row.kind === "note") return { attributes: DIM | ITALIC }
   if (row.kind === "dir") return row.isHere ? { color: FOLDER_COLOR, attributes: BOLD } : { color: DIR_COLOR, attributes: 0 }
-  return { attributes: rowAction(row) === "view" ? 0 : DIM }
+  return rowAction(row) === "view" ? { color: VIEWABLE_COLOR, attributes: 0 } : { attributes: DIM }
 }
 
 export function ExplorerPanel(props: { api: ExplorerPanelApi }) {

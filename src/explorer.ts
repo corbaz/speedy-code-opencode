@@ -154,7 +154,7 @@ export function windowTop(rows: readonly TreeRow[], top: number, room: number): 
 }
 
 /** The files the explorer opens in the viewer when pressed: text, scripts, PDF and pictures. */
-const VIEWABLE_EXTENSIONS = new Set(["md", "markdown", "txt", "sh", "bat", "pdf", "png", "jpg", "jpeg", "gif", "bmp", "ico", "tif", "tiff"])
+const VIEWABLE_EXTENSIONS = new Set(["md", "markdown", "txt", "sh", "bat", "ps1", "pdf", "png", "jpg", "jpeg", "gif", "bmp", "ico", "tif", "tiff"])
 const VIEWABLE_NAMES = new Set([".gitignore"])
 
 /** Whether the explorer opens a file of this name in the viewer. */

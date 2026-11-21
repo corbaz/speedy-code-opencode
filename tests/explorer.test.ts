@@ -109,7 +109,7 @@ describe("explorer helpers", () => {
   })
 
   test("isViewable: text, scripts, PDF and pictures open in the viewer, whatever their case; .gitignore too; other files do not", () => {
-    for (const name of ["a.md", "b.MARKDOWN", "c.txt", "d.sh", "e.bat", "f.pdf", "g.png", "h.JPG", "i.jpeg", "j.gif", "k.bmp", "l.ico", "m.tif", "n.tiff", ".gitignore", ".GITIGNORE"]) {
+    for (const name of ["a.md", "b.MARKDOWN", "c.txt", "d.sh", "e.bat", "install.PS1", "f.pdf", "g.png", "h.JPG", "i.jpeg", "j.gif", "k.bmp", "l.ico", "m.tif", "n.tiff", ".gitignore", ".GITIGNORE"]) {
       expect([name, isViewable(name)]).toEqual([name, true])
     }
     for (const name of ["pagefile.sys", "a.exe", "md", ".md", "notes.md.bak", ".env", "Makefile"]) {
