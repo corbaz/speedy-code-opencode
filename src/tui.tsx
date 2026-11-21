@@ -1059,10 +1059,10 @@ export default Plugin.define({
     const openFolder = (folder: string): void => {
       const { argv, env } = folderCommand(process.platform, folder, PLUGIN_ROOT)
       try {
+        // Not detached: Windows PowerShell started with no console at all ends at once, its script unread.
         const child = spawn(argv[0] as string, argv.slice(1), {
           stdio: "ignore",
           windowsHide: true,
-          detached: true,
           env: { ...process.env, ...env },
         })
         child.on("error", () => {})
