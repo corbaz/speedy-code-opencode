@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process"
+import { execFile, spawn, spawnSync } from "node:child_process"
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
@@ -186,11 +186,13 @@ export default Plugin.define({
     const [usageUrl, setUsageUrl] = createSignal("")
     // The minute the status line counts the session in: read by its render, so it redraws.
     const [clock, setClock] = createSignal(Date.now())
-    // The version beside the exit: the last commit of this clone, asked of git once, before the first draw.
-    const version = (() => {
+    // The version that closes the status line: the last commit of this clone, asked of git before the
+    // first draw and again every minute, so a pull shows without a new session.
+    const versionArgs = ["-C", PLUGIN_ROOT.split(sep).join("/"), "log", "-1", "--format=%ct"]
+    const [version, setVersion] = createSignal((() => {
       try {
         // Forward slashes: a git reached through a shell wrapper loses the backslashes of a Windows path.
-        const asked = spawnSync("git", ["-C", PLUGIN_ROOT.split(sep).join("/"), "log", "-1", "--format=%ct"], {
+        const asked = spawnSync("git", versionArgs, {
           encoding: "utf8",
           windowsHide: true,
           timeout: 3000,
@@ -199,7 +201,18 @@ export default Plugin.define({
       } catch {
         return ""
       }
-    })()
+    })())
+    /** Asks git again, apart from the draw: the label changes only when the clone's last commit did. */
+    const askVersion = (): void => {
+      try {
+        execFile("git", versionArgs, { windowsHide: true, timeout: 3000 }, (error, stdout) => {
+          const label = error ? "" : versionLabel(Number(String(stdout).trim()))
+          if (label && label !== version()) setVersion(label)
+        })
+      } catch {
+        // No git to run: the label stays as it was.
+      }
+    }
 
     // Repair an older or hand-edited value once, without writing when it is already whole.
     const repaired = settingsFromSaved(settings)
@@ -1303,7 +1316,10 @@ export default Plugin.define({
     const ticking = setInterval(() => {
       setClock(Date.now())
       ticks += 1
-      if (ticks % 2 === 0) void askLimits()
+      if (ticks % 2 === 0) {
+        void askLimits()
+        askVersion()
+      }
     }, 30000)
 
     // The terminal's size, read again when it changes: a window made smaller or larger (a font changed
@@ -1331,7 +1347,7 @@ export default Plugin.define({
           home: homedir(),
           branch: context.data.location.vcs.info()?.branch?.current,
           version: context.app.version,
-          app: version,
+          app: version(),
           durationMs: session?.time?.created ? clock() - session.time.created : 0,
           inputTokens: last?.tokens?.input,
           outputTokens: last?.tokens?.output,
