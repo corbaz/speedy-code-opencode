@@ -225,6 +225,24 @@ describe.skipIf(!python)("the terminal's font", () => {
     }
   })
 
+  test("Terminal, when this runs in it, is not looked for among the processes: it is changed at once", async () => {
+    const code = [
+      "import subprocess, terminal_font",
+      "asked = []",
+      "def run(argv, **_):",
+      "    asked.append(argv[0])",
+      "    return subprocess.CompletedProcess(argv, 1 if argv[0] == 'pgrep' else 0, '', '')",
+      "terminal_font.subprocess.run = run",
+      "print(terminal_font.mac_terminal('MesloLGSNF-Regular', 12, True), asked)",
+      "asked.clear()",
+      "print(terminal_font.mac_terminal('MesloLGSNF-Regular', 12, False), asked)",
+    ].join(String.fromCharCode(10))
+    const child = Bun.spawn([python ?? "python", "-c", code], { cwd: join(import.meta.dir, "..", "setup"), stdout: "pipe", stderr: "pipe" })
+    await child.exited
+    const lines = (await new Response(child.stdout).text()).trim().split(/\r?\n/)
+    expect(lines).toEqual(["True ['osascript']", "False ['pgrep']"])
+  })
+
   test("Ghostty and kitty get their two lines in place of the ones they had, and nothing else moves", async () => {
     const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
     const ghostty = join(folder, "config")
