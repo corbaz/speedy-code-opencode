@@ -215,6 +215,11 @@ describe.skipIf(!python)("the terminal's font", () => {
       expect(await here({ TERM_PROGRAM: "iTerm.app" })).toBe("None")
       expect(await here({ TERM_PROGRAM: "vscode" })).toContain("VS Code")
       expect(await here({ TERM_PROGRAM: "kiro" })).toContain("VS Code")
+      // Antigravity says it is VS Code too: its own paths tell it apart, and its settings change.
+      await Bun.write(join(base, "Antigravity IDE", "User", "settings.json"), "{}")
+      const antigravity = await here({ TERM_PROGRAM: "vscode", VSCODE_GIT_ASKPASS_NODE: "C:\Programs\Antigravity IDE\Antigravity IDE.exe" })
+      expect(antigravity).toContain("Antigravity")
+      expect(antigravity).not.toContain("'VS Code'")
     } finally {
       await rm(base, { recursive: true, force: true })
     }
