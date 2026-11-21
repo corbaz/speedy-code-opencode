@@ -116,6 +116,18 @@ describe("limits", () => {
     )
   })
 
+  test("the links are the version and the windows' labels, in Claude's orange: the release notes and the plan's usage", () => {
+    const line = statusLine({ ...input, limits, now }, 0, levels)
+    const linked = line.filter((run) => run.link !== undefined)
+    expect(linked.map((run) => [run.text, run.link, run.color])).toEqual([
+      ["opencode:", "https://github.com/anomalyco/opencode/releases/tag/v2.3.0", STATUS_COLORS.link],
+      ["v2.3.0", "https://github.com/anomalyco/opencode/releases/tag/v2.3.0", STATUS_COLORS.link],
+      ["5hs ", "https://opencode.ai/go", STATUS_COLORS.link],
+      ["semana ", "https://opencode.ai/go", STATUS_COLORS.link],
+    ])
+    expect(STATUS_COLORS.link).toBe("#d77757")
+  })
+
   test("a window turns red at the saved level and warns", () => {
     const line = statusLine({ ...input, limits: { five_hour: { percent: 95 } }, now }, 0, levels)
     expect(text(line)).toContain("5hs ▰▰▰▰ 95% ⚠ ")

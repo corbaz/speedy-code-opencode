@@ -376,7 +376,8 @@ export function footerControls(input: FooterInput): FooterControl[] {
   controls.push(control("exit", "exit", " × ", "#ff6b6b"))
   if (input.folder) {
     const text = ` ${input.folder}${input.branch ? "" : " "}`
-    controls.push({ name: "place", text, color: FOLDER_COLOR, width: cells(text), panel: text, bold: true })
+    // A click opens the folder in the system's file manager.
+    controls.push({ name: "place", id: "place", text, color: FOLDER_COLOR, width: cells(text), panel: text, bold: true })
     if (input.branch) {
       const branch = ` ⎇ ${input.branch} `
       controls.push({ name: "branch", text: branch, color: BRANCH_COLOR, width: cells(branch), panel: branch })

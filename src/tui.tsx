@@ -1089,6 +1089,9 @@ export default Plugin.define({
           return context.keymap.dispatch("location.reload")
         case "exit":
           return context.keymap.dispatch("app.exit")
+        case "place":
+          // The folder after the exit: the system's file manager opens it.
+          return void openLink(context.location?.directory ?? process.cwd())
         case "voice":
           return openMenu("voices")
         case "narrator":
@@ -1320,9 +1323,21 @@ export default Plugin.define({
       <Show when={settings.statusBar}>
         <box flexDirection="row" flexShrink={0} justifyContent="center" width="100%">
           {statusRuns(props.sessionID, columnsNow()).map((run) => (
-            <Tinted fg={run.color} bold={run.bold}>
-              {run.text}
-            </Tinted>
+            <Show
+              when={run.link}
+              fallback={
+                <Tinted fg={run.color} bold={run.bold}>
+                  {run.text}
+                </Tinted>
+              }
+            >
+              {/* A link: its own box, so it takes its own click. */}
+              <box flexShrink={0} onMouseUp={() => void openLink(run.link as string)}>
+                <Tinted fg={run.color} bold={run.bold}>
+                  {run.text}
+                </Tinted>
+              </box>
+            </Show>
           ))}
         </box>
       </Show>

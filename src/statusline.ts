@@ -13,18 +13,24 @@ export interface Run {
   readonly text: string
   readonly color: string
   readonly bold?: boolean
+  /** Where a click on it goes; none for a stretch that is not a link. */
+  readonly link?: string
 }
+
+/** Where a click on a part goes: the notes of the version running, and the plan's usage. */
+export const RELEASES = "https://github.com/anomalyco/opencode/releases/tag/v"
+export const USAGE = "https://opencode.ai/go"
 
 export const STATUS_COLORS = {
   app: "#afafff",
+  /** Every link: Claude's orange. */
+  link: "#d77757",
   model: "#ffaf5f",
   time: "#87d7ff",
   input: "#5fd7af",
   output: "#ff87af",
   cache: "#afafff",
   cost: "#ffd700",
-  five: "#87afff",
-  week: "#d7afff",
   label: "#8a8a8a",
   dim: "#585858",
   green: "#87d787",
@@ -188,7 +194,14 @@ export function statusLine(
   // The model and its variant are the footer's, where a click changes them: the line keeps the version.
   // OpenCode's version opens the line, named: opencode:v2.3.2. speedy-code's closes it; the folder and
   // the branch are the footer's.
-  const core: Run[] = input.version ? [run("opencode:", C.label), run(`v${input.version}`, C.time)] : []
+  // A click on it opens the notes of that version.
+  const notes = `${RELEASES}${input.version}`
+  const core: Run[] = input.version
+    ? [
+        { ...run("opencode:", C.link), bold: true, link: notes },
+        { ...run(`v${input.version}`, C.link), bold: true, link: notes },
+      ]
+    : []
 
   const meter = (percent: number, color: string): Run[] => {
     const filled = Math.round((Math.min(100, Math.max(0, percent)) / 100) * 4)
@@ -203,15 +216,17 @@ export function statusLine(
     { key: "cost", runs: [run("sesión ", C.label), { ...run(formatCost(input.costUsd), C.cost), bold: true }] },
   ]
 
-  for (const [key, label, color] of [
-    ["five_hour", "5hs", C.five],
-    ["seven_day", "semana", C.week],
+  for (const [key, label] of [
+    ["five_hour", "5hs"],
+    ["seven_day", "semana"],
   ] as const) {
     const limit = input.limits?.[key]
     if (!limit || !Number.isFinite(limit.percent)) continue
     const usedLimit = Math.round(limit.percent)
     const limitTone = usedLimit >= levels.limitRed ? C.red : usedLimit >= levels.limitYellow ? C.yellow : C.green
-    const short: Run[] = [run(`${label} `, color), ...meter(usedLimit, limitTone), run(` ${usedLimit}%`, limitTone)]
+    // The label is the link, in the links' color: a click opens the plan's usage. The meter and the
+    // share keep the colors that say how much is used.
+    const short: Run[] = [{ ...run(`${label} `, C.link), bold: true, link: USAGE }, ...meter(usedLimit, limitTone), run(` ${usedLimit}%`, limitTone)]
     if (usedLimit >= levels.limitRed) short.push(run(` ${sign.warning} `, C.red))
     const reset = formatReset(limit.resetsAt, input.now)
     parts.push({ key, short, runs: reset ? [...short, run(` ${sign.reset} ${reset}`, C.label)] : short })

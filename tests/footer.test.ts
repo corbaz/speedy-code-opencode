@@ -380,7 +380,8 @@ describe("the version, and the place after the exit", () => {
     expect(place?.color).toBe("#5fd7ff")
     expect(branch?.text).toBe(" ⎇ main ")
     expect(branch?.color).toBe("#d787ff")
-    expect(place?.id).toBeUndefined()
+    // A click on the folder opens it in the file manager; the branch runs nothing.
+    expect(place?.id).toBe("place")
     expect(branch?.id).toBeUndefined()
     // No branch: the folder closes the row with its own blank.
     expect(footerControls({ ...base, folder: "~" }).at(-1)?.text).toBe(" ~ ")
