@@ -75,7 +75,17 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   `JetBrainsMono NF` or `MesloLGS Nerd Font`, in their own settings. The setup installs both, and
   ⚙ → Instalación says whether they are there.
 - After the exit, the footer shows the folder, home as `~`, and its git branch; a click on the folder
-  opens it in Explorer, or in Finder. In the status line, a click on `opencode:v…` opens that version's
+  opens the explorer in OpenCode's side panel, beside the chat, and another click closes it. On top
+  are the disks (each lettered drive on Windows; `/` and each mounted volume on macOS); under them the
+  chosen disk's tree, open down to the session's folder, which is marked `●` and put in the middle. A
+  folder opens or closes on a click and is read afresh; links show `↪` and are not followed; a folder
+  lists at most 500 entries, then `… y N más`. Each disk keeps the folders open in it.
+  `↗ abrir en el sistema` still opens the session's folder in Explorer, or in Finder; so does the
+  folder's click where the host has no side panel to open, as on the home screen. A click on a `.md`,
+  `.markdown`, `.txt`, `.sh`, `.bat`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.ico`, `.tif`,
+  `.tiff` file or a `.gitignore` shows it in a popup in the middle of the screen, with scroll bars when
+  it does not fit (`engine/view_file.ps1`; Quick Look on macOS); other files are listed dimmed. One
+  popup at a time: another closes it. In the status line, a click on `opencode:v…` opens that version's
   release notes and one on `5hs`, `semana` or `mes` the console of the workspace the host names: the links are in Claude's orange. speedy-code's version,
   `vyy.mmdd(hhmm)` (the moment of the clone's last commit, in Buenos Aires time), closes the
   status line; it is asked of git every minute. Every hour the plugin asks GitHub (a `git fetch`,

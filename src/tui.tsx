@@ -1,5 +1,5 @@
 import { execFile, spawn, spawnSync } from "node:child_process"
-import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join, resolve, sep } from "node:path"
@@ -26,6 +26,9 @@ import {
   type SpeechState,
 } from "./footer"
 import { POWERSHELL } from "./powershell"
+import { viewerCommand, type ViewerScript } from "./viewer"
+import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
+import { EXPLORER_PANEL, ExplorerPanel } from "./explorer-panel"
 import { behindOrigin, takeUpdate, type Git } from "./update"
 import { ClipPlayer, listClips, type HistoryClip } from "./history"
 import {
@@ -1038,40 +1041,33 @@ export default Plugin.define({
       }
     }
 
-    /** Shows an image in a popup in the middle of the screen, in its own proportions, as the original does. */
-    const viewImage = (image: KeptImage) => {
+    /**
+     * Shows a file in a popup in the middle of the screen, as the original does: `view.ps1` a pasted
+     * image in its own proportions, `view_file.ps1` a file the explorer lists. One at a time.
+     */
+    const viewFile = (path: string, script: ViewerScript, failure: string) => {
       closeViewer()
-      const argv =
-        process.platform === "win32"
-          ? [
-              POWERSHELL,
-              "-NoProfile",
-              "-NonInteractive",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              join(PLUGIN_ROOT, "engine", "view.ps1"),
-            ]
-          : process.platform === "darwin"
-            ? ["qlmanage", "-p", image.path]
-            : ["xdg-open", image.path]
+      const { argv, env } = viewerCommand(process.platform, script, path, PLUGIN_ROOT)
       try {
         const child = spawn(argv[0] as string, argv.slice(1), {
-          env: { ...process.env, SPEEDY_IMAGE: image.path },
+          env: { ...process.env, ...env },
           stdio: ["ignore", "pipe", "ignore"],
           windowsHide: true,
         })
         // It says a dot ten times a second while it is up: read and dropped, so it never stalls.
         child.stdout?.on("data", () => {})
-        child.on("error", () => toast("no pude abrir la imagen", "error"))
+        child.on("error", () => toast(failure, "error"))
         child.on("exit", () => {
           if (viewer === child) viewer = undefined
         })
         viewer = child
       } catch {
-        toast("no pude abrir la imagen", "error")
+        toast(failure, "error")
       }
     }
+
+    /** Shows an image in a popup in the middle of the screen, in its own proportions, as the original does. */
+    const viewImage = (image: KeptImage) => viewFile(image.path, "view.ps1", "no pude abrir la imagen")
 
     /** Pastes a kept image again: it goes on the clipboard, then the host pastes. */
     const pasteImage = async (image: KeptImage) => {
@@ -1132,6 +1128,42 @@ export default Plugin.define({
     }
     // When the folder after the exit was last opened: see opensFolder.
     let folderOpened = 0
+    /** The session's folder in the system's file manager, once per pause however often it is asked. */
+    const openSystemFolder = (folder: string): void => {
+      if (!opensFolder(folderOpened, Date.now())) return
+      folderOpened = Date.now()
+      openFolder(folder)
+    }
+
+    // The explorer the folder after the exit opens beside the chat, in the host's side panel.
+    const [explorerState, setExplorerState] = createSignal<ExplorerState>(EMPTY_EXPLORER)
+    const explorerIO: ExplorerIO = {
+      list: async (path) =>
+        (await readdir(path, { withFileTypes: true })).map((entry) => ({
+          name: entry.name,
+          kind: entry.isDirectory() ? "dir" : entry.isFile() ? "file" : "other",
+          isLink: entry.isSymbolicLink(),
+        })),
+      isDir: async (path) => (await stat(path)).isDirectory(),
+      openFolder: openSystemFolder,
+      view: (path) => viewFile(path, "view_file.ps1", "no pude abrir el archivo"),
+    }
+    const explorer = createExplorer(explorerIO, process.platform, (state) => setExplorerState(() => state))
+
+    /**
+     * The folder after the exit: opens the explorer beside the chat, read afresh down to the session's
+     * folder; clicked while it is open, it closes it. Where the host has no side panel to open, as on the
+     * home screen, the system's file manager opens the folder, as before.
+     */
+    const toggleExplorer = async (): Promise<void> => {
+      if (context.ui.panel.current()?.name === EXPLORER_PANEL) {
+        context.ui.panel.close()
+        return
+      }
+      const folder = context.location?.directory ?? process.cwd()
+      await explorer.open(folder)
+      if (!context.ui.panel.open(EXPLORER_PANEL)) openSystemFolder(folder)
+    }
     const runControl = async (id: string): Promise<void> => {
       if (id.startsWith("social:")) return openSocial(id.slice("social:".length))
       switch (id) {
@@ -1174,10 +1206,8 @@ export default Plugin.define({
         case "exit":
           return context.keymap.dispatch("app.exit")
         case "place":
-          // The folder after the exit: the system's file manager opens it.
-          if (!opensFolder(folderOpened, Date.now())) return
-          folderOpened = Date.now()
-          return openFolder(context.location?.directory ?? process.cwd())
+          // The folder after the exit: the explorer beside the chat.
+          return toggleExplorer()
         case "voice":
           return openMenu("voices")
         case "narrator":
@@ -1636,7 +1666,28 @@ export default Plugin.define({
       ),
     })
 
+    // The explorer, in the side panel the host opens for it beside the chat.
+    const disposeExplorer = context.ui.slot({
+      append: "session.panel",
+      render: (input) => (
+        <Show when={input.name === EXPLORER_PANEL}>
+          <ExplorerPanel
+            api={{
+              state: explorerState,
+              width: () => input.width,
+              pickDrive: (drive) => void explorer.pickDrive(drive),
+              toggleFolder: (path) => void explorer.toggleFolder(path),
+              pressFile: (path) => explorer.pressFile(path),
+              openSystem: () => explorer.openSystem(),
+              close: () => input.close(),
+            }}
+          />
+        </Show>
+      ),
+    })
+
     return () => {
+      disposeExplorer()
       disposeNarration()
       disposeTurn()
       disposeSent()
