@@ -7,7 +7,7 @@
  */
 export function powershellPath(env: Record<string, string | undefined> = process.env): string {
   const root = env.SystemRoot || env.windir
-  return root ? `${root}\System32\WindowsPowerShell\v1.0\powershell.exe` : "powershell"
+  return root ? [root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"].join("\\") : "powershell"
 }
 
 /** Windows PowerShell on this system: what every command of the plugin runs it by. */
