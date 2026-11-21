@@ -213,6 +213,7 @@ describe.skipIf(!python)("the terminal's font", () => {
       await Bun.write(join(base, "Code", "User", "settings.json"), "{}")
       expect(await here({ TERM_PROGRAM: "ghostty", VSCODE_INJECTION: "1" })).toBe("None")
       expect(await here({ TERM_PROGRAM: "iTerm.app" })).toBe("None")
+      expect(await here({ TERM_PROGRAM: "zed" })).toBe("None")
       expect(await here({ TERM_PROGRAM: "vscode" })).toContain("VS Code")
       expect(await here({ TERM_PROGRAM: "kiro" })).toContain("VS Code")
       // Antigravity says it is VS Code too: its own paths tell it apart, and its settings change.
@@ -241,6 +242,28 @@ describe.skipIf(!python)("the terminal's font", () => {
     await child.exited
     const lines = (await new Response(child.stdout).text()).trim().split(/\r?\n/)
     expect(lines).toEqual(["True ['osascript']", "False ['pgrep']"])
+  })
+
+  test("Zed gets the terminal's font in its own settings, inside `terminal`, comments and the rest kept", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "speedy-termfont-"))
+    const path = join(folder, "settings.json")
+    try {
+      // No `terminal` yet: it is added first.
+      await writeFile(path, '// Zed settings\n{\n  "buffer_font_size": 15,\n}\n')
+      expect(await run("--size", "13", "--face", "JetBrainsMono NF", "--zed", path)).toEqual({ out: "cambiada", code: 0 })
+      expect(await readFile(path, "utf8")).toBe(
+        '// Zed settings\n{\n  "terminal": { "font_family": "JetBrainsMono NF", "font_size": 13 },\n  "buffer_font_size": 15,\n}\n',
+      )
+      expect(await run("--size", "13", "--face", "JetBrainsMono NF", "--zed", path)).toEqual({ out: "ya estaba", code: 0 })
+      // A `terminal` of its own: its values change in place, a missing one is added, the rest kept.
+      await writeFile(path, '{\n  "font_size": 20,\n  "terminal": {\n    // mine\n    "font_size": 11,\n    "dock": "bottom"\n  }\n}\n')
+      expect(await run("--size", "14", "--face", "MesloLGS Nerd Font", "--zed", path)).toEqual({ out: "cambiada", code: 0 })
+      expect(await readFile(path, "utf8")).toBe(
+        '{\n  "font_size": 20,\n  "terminal": { "font_family": "MesloLGS Nerd Font",\n    // mine\n    "font_size": 14,\n    "dock": "bottom"\n  }\n}\n',
+      )
+    } finally {
+      await rm(folder, { recursive: true, force: true })
+    }
   })
 
   test("Ghostty and kitty get their two lines in place of the ones they had, and nothing else moves", async () => {
