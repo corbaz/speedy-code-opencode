@@ -122,8 +122,8 @@ describe("limits", () => {
     expect(linked.map((run) => [run.text, run.link, run.color])).toEqual([
       ["opencode:", "https://github.com/anomalyco/opencode/releases/tag/v2.3.0", STATUS_COLORS.link],
       ["v2.3.0", "https://github.com/anomalyco/opencode/releases/tag/v2.3.0", STATUS_COLORS.link],
-      ["5hs ", "https://opencode.ai/go", STATUS_COLORS.link],
-      ["semana ", "https://opencode.ai/go", STATUS_COLORS.link],
+      ["5hs ", "https://opencode.ai/console", STATUS_COLORS.link],
+      ["semana ", "https://opencode.ai/console", STATUS_COLORS.link],
     ])
     expect(STATUS_COLORS.link).toBe("#d77757")
   })

@@ -76,7 +76,7 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   ⚙ → Instalación says whether they are there.
 - After the exit, the footer shows the folder, home as `~`, and its git branch; a click on the folder
   opens it in Explorer, or in Finder. In the status line, a click on `opencode:v…` opens that version's
-  release notes and one on `5hs` or `semana` the plan's usage: the links are in Claude's orange. speedy-code's version,
+  release notes and one on `5hs` or `semana` the console, where the workspace's usage is: the links are in Claude's orange. speedy-code's version,
   `vyy.mmdd(hhmm)` (the moment of the clone's last commit, in Buenos Aires time), closes the
   status line.
 - `Agente ▾`, beside the voice, opens the menu of the agents a person picks: OpenCode has no permission

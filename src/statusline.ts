@@ -19,7 +19,7 @@ export interface Run {
 
 /** Where a click on a part goes: the notes of the version running, and the plan's usage. */
 export const RELEASES = "https://github.com/anomalyco/opencode/releases/tag/v"
-export const USAGE = "https://opencode.ai/go"
+export const USAGE = "https://opencode.ai/console"
 
 export const STATUS_COLORS = {
   app: "#afafff",
