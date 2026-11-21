@@ -125,14 +125,14 @@ export const BRANCH_COLOR = "#d787ff"
 
 /**
  * The version the footer shows: the moment of the last commit, in Buenos Aires (UTC-3, which has
- * no summer time), as `v:yy.mmdd-(hhmm)`. It changes with every push, and needs no file kept.
+ * no summer time), as `vyy.mmdd(hhmm)`. It changes with every push, and needs no file kept.
  */
 export function versionLabel(epochSeconds: number): string {
   if (!Number.isFinite(epochSeconds) || epochSeconds <= 0) return ""
   const local = new Date((epochSeconds - 3 * 3600) * 1000)
   const two = (value: number) => String(value).padStart(2, "0")
   const day = `${two(local.getUTCFullYear() % 100)}.${two(local.getUTCMonth() + 1)}${two(local.getUTCDate())}`
-  return `v:${day}-(${two(local.getUTCHours())}${two(local.getUTCMinutes())})`
+  return `v${day}(${two(local.getUTCHours())}${two(local.getUTCMinutes())})`
 }
 
 /** What `+` does with the name typed: a session with that title, one the host names, or none. */

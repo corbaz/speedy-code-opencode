@@ -360,11 +360,11 @@ describe("the name asked for by +", () => {
 describe("the version, and the place after the exit", () => {
   const base = { narrator: false, speech: "idle", listening: "off" } as const
 
-  test("is the last commit's moment in Buenos Aires, as v:yy.mmdd-(hhmm)", () => {
+  test("is the last commit's moment in Buenos Aires, as vyy.mmdd(hhmm)", () => {
     // 2026-11-17 00:05 UTC is 2026-11-16 21:05 in Buenos Aires (UTC-3, no summer time).
-    expect(versionLabel(Date.UTC(2026, 10, 17, 0, 5) / 1000)).toBe("v:26.1116-(2105)")
-    expect(versionLabel(Date.UTC(2027, 0, 1, 2, 59) / 1000)).toBe("v:26.1231-(2359)")
-    expect(versionLabel(Date.UTC(2027, 0, 1, 3, 0) / 1000)).toBe("v:27.0101-(0000)")
+    expect(versionLabel(Date.UTC(2026, 10, 17, 0, 5) / 1000)).toBe("v26.1116(2105)")
+    expect(versionLabel(Date.UTC(2027, 0, 1, 2, 59) / 1000)).toBe("v26.1231(2359)")
+    expect(versionLabel(Date.UTC(2027, 0, 1, 3, 0) / 1000)).toBe("v27.0101(0000)")
   })
 
   test("says nothing of a moment it was not given", () => {

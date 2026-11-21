@@ -75,7 +75,7 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   `JetBrainsMono NF` or `MesloLGS Nerd Font`, in their own settings. The setup installs both, and
   ⚙ → Instalación says whether they are there.
 - After the exit, the footer shows the folder, home as `~`, and its git branch. speedy-code's version,
-  `v:yy.mmdd-(hhmm)` (the moment of the clone's last commit, in Buenos Aires time), closes the
+  `vyy.mmdd(hhmm)` (the moment of the clone's last commit, in Buenos Aires time), closes the
   status line.
 - `Agente ▾`, beside the voice, opens the menu of the agents a person picks: OpenCode has no permission
   modes, what runs without asking is the agent's. Each one with the host's description; a button goes
