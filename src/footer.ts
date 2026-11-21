@@ -119,6 +119,33 @@ export function folderLabel(cwd: string, home: string, separator: "\\" | "/", mo
   return shown.length > most ? `…${shown.slice(shown.length - most + 1)}` : shown
 }
 
+/**
+ * What opens `folder` in the system's file manager, and the environment it runs with. On Windows it is
+ * open_folder.ps1, which finds the folder's window, or opens one, and puts it in front: `start` only
+ * flashes a window the folder already has. The folder goes in by the environment, never in a command.
+ */
+export function folderCommand(
+  platform: string,
+  folder: string,
+  root: string,
+): { argv: string[]; env: Record<string, string> } {
+  if (platform === "win32") {
+    return {
+      argv: [
+        "powershell",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        `${root.replace(/\\/g, "/")}/engine/open_folder.ps1`,
+      ],
+      env: { SPEEDY_FOLDER: folder.replace(/\//g, "\\") },
+    }
+  }
+  return { argv: [platform === "darwin" ? "open" : "xdg-open", folder], env: {} }
+}
+
 /** How long a click on the folder opens nothing after one that opened it. */
 export const FOLDER_PAUSE_MS = 3000
 

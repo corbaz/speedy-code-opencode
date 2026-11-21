@@ -17,6 +17,7 @@ import {
   versionLabel,
   folderLabel,
   opensFolder,
+  folderCommand,
   footerFit,
   footerRoom,
   hiddenGroups,
@@ -1053,6 +1054,22 @@ export default Plugin.define({
     let hiddenNow: readonly FooterControl[] = []
 
     // Every control the footer draws runs the same thing its command runs.
+    // Opens a folder in the system's file manager, its window in front: see folderCommand.
+    const openFolder = (folder: string): void => {
+      const { argv, env } = folderCommand(process.platform, folder, PLUGIN_ROOT)
+      try {
+        const child = spawn(argv[0] as string, argv.slice(1), {
+          stdio: "ignore",
+          windowsHide: true,
+          detached: true,
+          env: { ...process.env, ...env },
+        })
+        child.on("error", () => {})
+        child.unref()
+      } catch {
+        // No file manager to run: nothing opens.
+      }
+    }
     // When the folder after the exit was last opened: see opensFolder.
     let folderOpened = 0
     const runControl = async (id: string): Promise<void> => {
@@ -1099,7 +1116,7 @@ export default Plugin.define({
           // The folder after the exit: the system's file manager opens it.
           if (!opensFolder(folderOpened, Date.now())) return
           folderOpened = Date.now()
-          return void openLink(context.location?.directory ?? process.cwd())
+          return openFolder(context.location?.directory ?? process.cwd())
         case "voice":
           return openMenu("voices")
         case "narrator":

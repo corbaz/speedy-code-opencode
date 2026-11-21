@@ -4,6 +4,7 @@ import {
   versionLabel,
   folderLabel,
   opensFolder,
+  folderCommand,
   FOLDER_PAUSE_MS,
   newSessionChoice,
   FOOTER_SHED,
@@ -403,6 +404,15 @@ describe("the version, and the place after the exit", () => {
     expect(opensFolder(5000, 5100)).toBe(false)
     expect(opensFolder(5000, 5000 + FOLDER_PAUSE_MS - 1)).toBe(false)
     expect(opensFolder(5000, 5000 + FOLDER_PAUSE_MS)).toBe(true)
+  })
+
+  test("folderCommand: Windows runs open_folder.ps1 with the folder in its environment; macOS and Linux open it", () => {
+    expect(folderCommand("win32", "C:/Users/me/x y", "C:/plugin")).toEqual({
+      argv: ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "C:/plugin/engine/open_folder.ps1"],
+      env: { SPEEDY_FOLDER: "C:\\Users\\me\\x y" },
+    })
+    expect(folderCommand("darwin", "/Users/me/x", "/plugin")).toEqual({ argv: ["open", "/Users/me/x"], env: {} })
+    expect(folderCommand("linux", "/home/me/x", "/plugin")).toEqual({ argv: ["xdg-open", "/home/me/x"], env: {} })
   })
 
   test("the folder is not drawn without one, and keeps its room before the controls ranked lowest", () => {
