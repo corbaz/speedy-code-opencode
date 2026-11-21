@@ -119,6 +119,13 @@ describe("limits", () => {
     expect(line).not.toContain("$")
   })
 
+  test("a newer version on GitHub puts a yellow down arrow after speedy-code's version", () => {
+    const line = statusLine({ ...input, limits, now, update: true }, 0, levels)
+    expect(text(line)).toEndWith(" │ v26.1121(1012) ↓")
+    expect(line.at(-1)?.color).toBe(STATUS_COLORS.update)
+    expect(text(statusLine({ ...input, limits, now }, 0, levels))).toEndWith(" │ v26.1121(1012)")
+  })
+
   test("the windows' labels open the workspace's own page when the host tells which it is", () => {
     const usageUrl = "https://opencode.ai/console/wrk_1"
     const line = statusLine({ ...input, limits, now, usageUrl }, 0, levels)

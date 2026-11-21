@@ -26,6 +26,7 @@ import {
   type SpeechState,
 } from "./footer"
 import { POWERSHELL } from "./powershell"
+import { behindOrigin, takeUpdate, type Git } from "./update"
 import { ClipPlayer, listClips, type HistoryClip } from "./history"
 import {
   DraftImages,
@@ -241,6 +242,51 @@ export default Plugin.define({
 
     const toast = (message: string, variant: "info" | "success" | "error" | "warning" = "info") =>
       context.ui.toast.show({ message: `speedy-code: ${message}`, variant })
+
+    // A newer version on GitHub: the commits main has that this clone lacks. More than none puts a yellow
+    // down arrow after the version, and 🔄 takes them: see update.ts.
+    const [behind, setBehind] = createSignal(0)
+    const git: Git = (args) =>
+      new Promise((done) => {
+        try {
+          execFile(
+            "git",
+            ["-C", PLUGIN_ROOT.split(sep).join("/"), ...args],
+            { windowsHide: true, timeout: 120000 },
+            (error, stdout, stderr) => {
+              const code = error ? (typeof error.code === "number" ? error.code : 1) : 0
+              done({ code, stdout: String(stdout), stderr: String(stderr) })
+            },
+          )
+        } catch (error) {
+          done({ code: 1, stdout: "", stderr: String(error) })
+        }
+      })
+    const checkUpdate = async (): Promise<void> => {
+      setBehind(await behindOrigin(git))
+    }
+    /** 🔄 with a newer version waiting: it is taken, the packages installed again if they changed, then reloaded. */
+    const updateAndReload = async (): Promise<void> => {
+      toast("actualizando desde GitHub…")
+      const taken = await takeUpdate(git)
+      if (!taken.ok) {
+        toast(`no pude actualizar: ${taken.why}`, "error")
+        return
+      }
+      setBehind(0)
+      if (taken.install) {
+        await new Promise<void>((done) => {
+          try {
+            execFile("bun", ["install"], { cwd: PLUGIN_ROOT, windowsHide: true, timeout: 300000 }, () => done())
+          } catch {
+            done()
+          }
+        })
+      }
+      askVersion()
+      toast("actualizado; recargando.", "success")
+      context.keymap.dispatch("location.reload")
+    }
 
     const writeControl = async (path: string, asked: "pause" | "play") => {
       await mkdir(dirname(path), { recursive: true })
@@ -1123,6 +1169,7 @@ export default Plugin.define({
         case "agent":
           return openMenu("agent")
         case "reload":
+          if (behind() > 0) return updateAndReload()
           return context.keymap.dispatch("location.reload")
         case "exit":
           return context.keymap.dispatch("app.exit")
@@ -1320,7 +1367,10 @@ export default Plugin.define({
         void askLimits()
         askVersion()
       }
+      // GitHub every hour: 120 ticks of 30 seconds.
+      if (ticks % 120 === 0) void checkUpdate()
     }, 30000)
+    void checkUpdate()
 
     // The terminal's size, read again when it changes: a window made smaller or larger (a font changed
     // in a terminal that keeps its rows and columns) fits the footer and the status line again.
@@ -1348,6 +1398,7 @@ export default Plugin.define({
           branch: context.data.location.vcs.info()?.branch?.current,
           version: context.app.version,
           app: version(),
+          update: behind() > 0,
           durationMs: session?.time?.created ? clock() - session.time.created : 0,
           inputTokens: last?.tokens?.input,
           outputTokens: last?.tokens?.output,

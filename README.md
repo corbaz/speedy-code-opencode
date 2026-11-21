@@ -78,7 +78,10 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   opens it in Explorer, or in Finder. In the status line, a click on `opencode:v…` opens that version's
   release notes and one on `5hs`, `semana` or `mes` the console of the workspace the host names: the links are in Claude's orange. speedy-code's version,
   `vyy.mmdd(hhmm)` (the moment of the clone's last commit, in Buenos Aires time), closes the
-  status line.
+  status line; it is asked of git every minute. Every hour the plugin asks GitHub (a `git fetch`,
+  which changes no file) whether main has commits the clone lacks: then a yellow `↓` follows the
+  version, and 🔄 takes them (a fast-forward that never overwrites a change of your own, then
+  `bun install` when the packages changed) before it reloads.
 - `Agente ▾`, beside the voice, opens the menu of the agents a person picks: OpenCode has no permission
   modes, what runs without asking is the agent's. Each one with the host's description; a button goes
   to the next one, as Tab, and another opens the host's own list. The host tells no plugin which agent is picked, so the control names none.
@@ -148,7 +151,8 @@ git pull
 bun install
 ```
 
-Then restart OpenCode (or 🔄 in the footer). Run the setup script again only when the engine's
+Then restart OpenCode (or 🔄 in the footer). With a yellow `↓` after the version, 🔄 does all of
+this by itself. Run the setup script again only when the engine's
 dependencies change.
 
 ### For an AI agent installing it

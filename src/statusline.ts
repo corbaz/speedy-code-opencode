@@ -23,6 +23,8 @@ export const USAGE = "https://opencode.ai/console"
 
 export const STATUS_COLORS = {
   app: "#afafff",
+  /** The arrow that says a newer version waits on GitHub. */
+  update: "#ffd700",
   /** Every link: Claude's orange. */
   link: "#d77757",
   model: "#ffaf5f",
@@ -70,6 +72,8 @@ export interface StatusInput {
   readonly version?: string
   /** speedy-code's version, as `versionLabel` writes it: it closes the line. */
   readonly app?: string
+  /** A newer version waits on GitHub: a yellow down arrow after speedy-code's version. */
+  readonly update?: boolean
   readonly durationMs?: number
   readonly inputTokens?: number
   readonly outputTokens?: number
@@ -240,7 +244,10 @@ export function statusLine(
     parts.push({ key, short, runs: reset ? [...short, run(` ${sign.reset} ${reset}`, C.label)] : short })
   }
 
-  if (input.app) parts.push({ key: "app", runs: [{ ...run(input.app, C.app), bold: true }] })
+  if (input.app) {
+    const mark: Run[] = input.update ? [run(" ", C.dim), { ...run("↓", C.update), bold: true }] : []
+    parts.push({ key: "app", runs: [{ ...run(input.app, C.app), bold: true }, ...mark] })
+  }
 
   // The parts in rank order, each in its short form, until one does not fit;
   // then the limits get their reset time back with the room left.
