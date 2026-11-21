@@ -16,6 +16,7 @@ import {
   newSessionChoice,
   versionLabel,
   folderLabel,
+  opensFolder,
   footerFit,
   footerRoom,
   hiddenGroups,
@@ -1049,6 +1050,8 @@ export default Plugin.define({
     let hiddenNow: readonly FooterControl[] = []
 
     // Every control the footer draws runs the same thing its command runs.
+    // When the folder after the exit was last opened: see opensFolder.
+    let folderOpened = 0
     const runControl = async (id: string): Promise<void> => {
       if (id.startsWith("social:")) return openSocial(id.slice("social:".length))
       switch (id) {
@@ -1091,6 +1094,8 @@ export default Plugin.define({
           return context.keymap.dispatch("app.exit")
         case "place":
           // The folder after the exit: the system's file manager opens it.
+          if (!opensFolder(folderOpened, Date.now())) return
+          folderOpened = Date.now()
           return void openLink(context.location?.directory ?? process.cwd())
         case "voice":
           return openMenu("voices")

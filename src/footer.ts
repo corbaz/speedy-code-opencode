@@ -119,6 +119,17 @@ export function folderLabel(cwd: string, home: string, separator: "\\" | "/", mo
   return shown.length > most ? `…${shown.slice(shown.length - most + 1)}` : shown
 }
 
+/** How long a click on the folder opens nothing after one that opened it. */
+export const FOLDER_PAUSE_MS = 3000
+
+/**
+ * Whether a click on the folder opens it: not while the pause since the last one runs. Each opening
+ * starts another window, and a dozen of them in a row slow the system down.
+ */
+export function opensFolder(lastMs: number, nowMs: number): boolean {
+  return nowMs - lastMs >= FOLDER_PAUSE_MS
+}
+
 /** The colors of the folder and the branch after the exit: the status line's own. */
 export const FOLDER_COLOR = "#5fd7ff"
 export const BRANCH_COLOR = "#d787ff"

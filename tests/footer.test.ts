@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test"
 import {
   versionLabel,
   folderLabel,
+  opensFolder,
+  FOLDER_PAUSE_MS,
   newSessionChoice,
   FOOTER_SHED,
   MORE_WIDTH,
@@ -394,6 +396,13 @@ describe("the version, and the place after the exit", () => {
     expect(folderLabel("/Users/jcx", "/Users/jc", "/")).toBe("/Users/jcx")
     expect(folderLabel("/opt/a/very/long/path/to/somewhere", "/Users/jc", "/", 12)).toBe("…o/somewhere")
     expect(folderLabel("", "/Users/jc", "/")).toBe("")
+  })
+
+  test("a run of clicks on the folder opens it once: another only after the pause", () => {
+    expect(opensFolder(0, 5000)).toBe(true)
+    expect(opensFolder(5000, 5100)).toBe(false)
+    expect(opensFolder(5000, 5000 + FOLDER_PAUSE_MS - 1)).toBe(false)
+    expect(opensFolder(5000, 5000 + FOLDER_PAUSE_MS)).toBe(true)
   })
 
   test("the folder is not drawn without one, and keeps its room before the controls ranked lowest", () => {
