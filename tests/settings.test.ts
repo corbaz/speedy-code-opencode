@@ -27,7 +27,7 @@ describe("settings defaults", () => {
   })
 
   test("keeps every status line part in its default priority", () => {
-    expect(DEFAULT_ORDER).toEqual(["core", "five_hour", "seven_day", "context", "time", "cost", "tokens", "folder"])
+    expect(DEFAULT_ORDER).toEqual(["core", "app", "five_hour", "seven_day", "context", "time", "cost", "tokens"])
     expect(BAR_PARTS.map(([key]) => key)).toEqual(DEFAULT_ORDER)
   })
 
@@ -48,12 +48,12 @@ describe("settings defaults", () => {
 describe("barOrderOf", () => {
   test("returns the default order for a missing or invalid value", () => {
     expect(barOrderOf(undefined)).toEqual(DEFAULT_ORDER)
-    expect(barOrderOf("folder")).toEqual(DEFAULT_ORDER)
+    expect(barOrderOf("app")).toEqual(DEFAULT_ORDER)
   })
 
   test("keeps known parts once each in the saved order then appends the rest", () => {
-    expect(barOrderOf(["folder", "folder", "bogus", "core"])).toEqual([
-      "folder",
+    expect(barOrderOf(["app", "app", "bogus", "core", "folder"])).toEqual([
+      "app",
       "core",
       "five_hour",
       "seven_day",
@@ -95,16 +95,16 @@ describe("movePart", () => {
   test("swaps a part with its neighbour", () => {
     expect(movePart(DEFAULT_ORDER, "context", -1).slice(0, 5)).toEqual([
       "core",
+      "app",
       "five_hour",
       "context",
       "seven_day",
-      "time",
     ])
   })
 
   test("does nothing at either end or for an unknown part", () => {
     expect(movePart(DEFAULT_ORDER, "core", -1)).toEqual(DEFAULT_ORDER)
-    expect(movePart(DEFAULT_ORDER, "folder", 1)).toEqual(DEFAULT_ORDER)
+    expect(movePart(DEFAULT_ORDER, "tokens", 1)).toEqual(DEFAULT_ORDER)
     expect(movePart(DEFAULT_ORDER, "missing" as never, 1)).toEqual(DEFAULT_ORDER)
   })
 })
@@ -148,8 +148,8 @@ describe("settingsFromSaved", () => {
   })
 
   test("repairs a saved status line order and levels", () => {
-    const merged = settingsFromSaved({ barOrder: ["folder"], barLevels: { contextYellow: 10 } })
-    expect(merged.barOrder).toEqual(barOrderOf(["folder"]))
+    const merged = settingsFromSaved({ barOrder: ["app"], barLevels: { contextYellow: 10 } })
+    expect(merged.barOrder).toEqual(barOrderOf(["app"]))
     expect(merged.barLevels.contextRed).toBe(80)
   })
 
@@ -180,7 +180,7 @@ describe("resetSettings", () => {
     const broken: SpeedySettings = {
       ...DEFAULT_SETTINGS,
       barLevels: { ...DEFAULT_LEVELS, contextYellow: 10 },
-      barOrder: ["folder"],
+      barOrder: ["app"],
     }
     expect(resetSettings(broken)).toEqual(DEFAULT_SETTINGS)
   })

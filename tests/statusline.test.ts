@@ -18,6 +18,7 @@ const input = {
   cwd: "C:\\Users\\Sancho\\.claude\\local-mods",
   home: "C:\\Users\\Sancho",
   version: "2.3.0",
+  app: "v:26.1121-(1012)",
   durationMs: 43 * 60000,
   inputTokens: 2,
   outputTokens: 995,
@@ -50,17 +51,19 @@ describe("status line numbers", () => {
 describe("statusLine", () => {
   test("draws every part, in the original order and wording, when it fits", () => {
     expect(text(statusLine(input, 0, levels))).toBe(
-      "~\\.claude\\local-mods » ⏱  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04 │ opencode:v2.3.0",
+      "opencode:v2.3.0 » ⏱  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04 │ v:26.1121-(1012)",
     )
   })
 
-  test("names the branch beside the folder", () => {
-    expect(text(statusLine({ ...input, branch: "main" }, 0, levels))).toStartWith("~\\.claude\\local-mods ⎇ main » ")
+  test("the folder and the branch are the footer's: the line has neither", () => {
+    const line = text(statusLine({ ...input, branch: "main" }, 0, levels))
+    expect(line).not.toContain("local-mods")
+    expect(line).not.toContain("main")
   })
 
   test("a narrow terminal keeps the parts by priority and never cuts one", () => {
     const line = text(statusLine(input, 56, levels))
-    expect(line).toBe("⏱  43m │ ctx: ▰▱▱▱ 15% 149.5k/1M │ opencode:v2.3.0")
+    expect(line).toBe("opencode:v2.3.0 » v:26.1121-(1012)")
     expect(line.length).toBeLessThanOrEqual(52)
   })
 
@@ -70,7 +73,7 @@ describe("statusLine", () => {
 
   test("the saved order decides what stays", () => {
     const line = text(statusLine(input, 53, levels, ["cost", "core"]))
-    expect(line).toBe("sesión $2.04 │ opencode:v2.3.0")
+    expect(line).toBe("opencode:v2.3.0 » sesión $2.04 │ v:26.1121-(1012)")
   })
 
   test("context turns yellow and red at the saved levels, and red asks to compact", () => {
@@ -82,15 +85,15 @@ describe("statusLine", () => {
     expect(text(statusLine({ ...input, cacheReadTokens: 800000 }, 0, levels))).toContain("⚠  compactar")
   })
 
-  test("with Nerd Fonts the signs are glyphs, and the folder gets one", () => {
+  test("with Nerd Fonts the signs are glyphs", () => {
     expect(text(statusLine({ ...input, branch: "main", icons: "nerd" }, 0, levels))).toBe(
-      "\uf07b  ~\\.claude\\local-mods \uf126  main » \uf017  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04 │ opencode:v2.3.0",
+      "opencode:v2.3.0 » \uf017  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04 │ v:26.1121-(1012)",
     )
     expect(text(statusLine({ ...input, cacheReadTokens: 800000, icons: "nerd" }, 0, levels))).toContain("\uf071   compactar")
   })
 
   test("with nothing known it still draws zeros", () => {
-    expect(text(statusLine({}, 0, levels))).toBe(" » ⏱  0m │ in 0 out 0 caché 0 │ ctx: ▱▱▱▱ 0% │ sesión $0.00")
+    expect(text(statusLine({}, 0, levels))).toBe("⏱  0m │ in 0 out 0 caché 0 │ ctx: ▱▱▱▱ 0% │ sesión $0.00")
   })
 })
 
@@ -103,13 +106,13 @@ describe("limits", () => {
 
   test("the 5-hour and weekly windows close the line, with when each starts over", () => {
     expect(text(statusLine({ ...input, limits, now }, 0, levels))).toEndWith(
-      " │ sesión $2.04 │ 5hs ▱▱▱▱ 1% ↻ hoy 13:40 │ semana ▱▱▱▱ 0% ↻ Dom 13:00 │ opencode:v2.3.0",
+      " │ sesión $2.04 │ 5hs ▱▱▱▱ 1% ↻ hoy 13:40 │ semana ▱▱▱▱ 0% ↻ Dom 13:00 │ v:26.1121-(1012)",
     )
   })
 
   test("a narrow terminal keeps the windows short before it drops a part", () => {
-    expect(text(statusLine({ ...input, limits, now }, 54, levels))).toBe(
-      "5hs ▱▱▱▱ 1% │ semana ▱▱▱▱ 0% │ opencode:v2.3.0",
+    expect(text(statusLine({ ...input, limits, now }, 70, levels))).toBe(
+      "opencode:v2.3.0 » 5hs ▱▱▱▱ 1% │ semana ▱▱▱▱ 0% │ v:26.1121-(1012)",
     )
   })
 
@@ -127,7 +130,7 @@ describe("limits", () => {
 
 describe("priorityOf", () => {
   test("keeps the known keys once, then the rest in the default order", () => {
-    expect(priorityOf(["cost", "nope", "cost", "core"]).slice(0, 3)).toEqual(["cost", "core", "five_hour"])
+    expect(priorityOf(["cost", "nope", "cost", "core"]).slice(0, 3)).toEqual(["cost", "core", "app"])
     expect(priorityOf(undefined)[0]).toBe("core")
   })
 })

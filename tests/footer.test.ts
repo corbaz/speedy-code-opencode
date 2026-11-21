@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 
 import {
   versionLabel,
+  folderLabel,
   newSessionChoice,
   FOOTER_SHED,
   MORE_WIDTH,
@@ -356,7 +357,7 @@ describe("the name asked for by +", () => {
   })
 })
 
-describe("the version beside the exit", () => {
+describe("the version, and the place after the exit", () => {
   const base = { narrator: false, speech: "idle", listening: "off" } as const
 
   test("is the last commit's moment in Buenos Aires, as v:yy.mmdd-(hhmm)", () => {
@@ -371,22 +372,36 @@ describe("the version beside the exit", () => {
     expect(versionLabel(0)).toBe("")
   })
 
-  test("is drawn right after the exit, in its own color, and runs nothing", () => {
-    const controls = footerControls({ ...base, version: "v:26.1116-(2105)" })
-    const names = controls.map((control) => control.name)
-    expect(names.slice(-2)).toEqual(["exit", "version"])
-    const version = controls.at(-1)
-    expect(version?.text).toBe(" v:26.1116-(2105) ")
-    expect(version?.color).toBe("#b197fc")
-    expect(version?.id).toBeUndefined()
+  test("the folder, home as ~, and the git branch are drawn right after the exit, each in its color, and run nothing", () => {
+    const controls = footerControls({ ...base, folder: "~\\.claude\\local-mods", branch: "main" })
+    expect(controls.map((control) => control.name).slice(-3)).toEqual(["exit", "place", "branch"])
+    const [place, branch] = controls.slice(-2)
+    expect(place?.text).toBe(" ~\\.claude\\local-mods")
+    expect(place?.color).toBe("#5fd7ff")
+    expect(branch?.text).toBe(" ⎇ main ")
+    expect(branch?.color).toBe("#d787ff")
+    expect(place?.id).toBeUndefined()
+    expect(branch?.id).toBeUndefined()
+    // No branch: the folder closes the row with its own blank.
+    expect(footerControls({ ...base, folder: "~" }).at(-1)?.text).toBe(" ~ ")
+    expect(controls.some((control) => control.name === "version")).toBe(false)
   })
 
-  test("is not drawn without a version, and is the first to go when the row is short", () => {
-    expect(footerControls(base).some((control) => control.name === "version")).toBe(false)
-    const controls = footerControls({ ...base, version: "v:26.1116-(2105)" })
+  test("folderLabel: home as ~, the system's separator, and the end alone after a … when it is long", () => {
+    expect(folderLabel("C:\\Users\\Sancho\\.claude\\local-mods", "C:\\Users\\Sancho", "\\")).toBe("~\\.claude\\local-mods")
+    expect(folderLabel("/Users/jc/proyectos", "/Users/jc", "/")).toBe("~/proyectos")
+    expect(folderLabel("/Users/jcx", "/Users/jc", "/")).toBe("/Users/jcx")
+    expect(folderLabel("/opt/a/very/long/path/to/somewhere", "/Users/jc", "/", 12)).toBe("…o/somewhere")
+    expect(folderLabel("", "/Users/jc", "/")).toBe("")
+  })
+
+  test("the folder is not drawn without one, and keeps its room before the controls ranked lowest", () => {
+    expect(footerControls(base).some((control) => control.name === "place")).toBe(false)
+    const controls = footerControls({ ...base, folder: "~\\.claude\\local-mods", branch: "main" })
     const full = controls.reduce((sum, control) => sum + control.width, 0)
     const fit = footerFit(controls, full - 1)
-    expect(fit.shown.has("version")).toBe(false)
+    expect(fit.shown.has("place")).toBe(true)
+    expect(fit.shown.has("branch")).toBe(true)
     expect(fit.shown.has("exit")).toBe(true)
   })
 })

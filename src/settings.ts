@@ -9,7 +9,7 @@
 import type { IconSet } from "./icons"
 
 /** The status line parts, in the order the original declares them. */
-export type BarPart = "core" | "five_hour" | "seven_day" | "context" | "time" | "cost" | "tokens" | "folder"
+export type BarPart = "core" | "five_hour" | "seven_day" | "context" | "time" | "cost" | "tokens" | "app"
 
 /** The four thresholds the status line colors. */
 export type LevelKey = "contextYellow" | "contextRed" | "limitYellow" | "limitRed"
@@ -43,13 +43,13 @@ export type FontFamily = (typeof FONT_FAMILIES)[number][0]
 
 export const BAR_PARTS: ReadonlyArray<readonly [BarPart, string]> = [
   ["core", "Versión de OpenCode"],
+  ["app", "Versión de speedy-code"],
   ["five_hour", "Límite de 5 horas"],
   ["seven_day", "Límite semanal"],
   ["context", "Contexto"],
   ["time", "Tiempo de sesión"],
   ["cost", "Costo de sesión"],
   ["tokens", "Tokens in, out y caché"],
-  ["folder", "Carpeta y rama"],
 ]
 
 export const DEFAULT_ORDER: BarPart[] = BAR_PARTS.map(([key]) => key)

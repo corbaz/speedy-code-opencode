@@ -16,8 +16,7 @@ export interface Run {
 }
 
 export const STATUS_COLORS = {
-  folder: "#5fd7ff",
-  branch: "#d787ff",
+  app: "#afafff",
   model: "#ffaf5f",
   time: "#87d7ff",
   input: "#5fd7af",
@@ -35,13 +34,13 @@ export const STATUS_COLORS = {
 
 export const DEFAULT_PRIORITY: readonly string[] = [
   "core",
+  "app",
   "five_hour",
   "seven_day",
   "context",
   "time",
   "cost",
   "tokens",
-  "folder",
 ]
 
 /** What the line is drawn from. Every number may be missing: it counts as zero. */
@@ -63,6 +62,8 @@ export interface StatusInput {
   readonly home?: string
   readonly branch?: string
   readonly version?: string
+  /** speedy-code's version, as `versionLabel` writes it: it closes the line. */
+  readonly app?: string
   readonly durationMs?: number
   readonly inputTokens?: number
   readonly outputTokens?: number
@@ -161,11 +162,6 @@ export function statusLine(
   const run = (text: string, color: string): Run => ({ text, color })
   const part = (name: string, value: string, tone: string): Run[] => [run(`${name} `, C.label), run(value, tone)]
 
-  let cwd = input.cwd ?? ""
-  if (input.home && cwd.toLowerCase().startsWith(input.home.toLowerCase())) cwd = `~${cwd.slice(input.home.length)}`
-  const folder: Run[] = [{ ...run(`${sign.folder}${cwd}`, C.folder), bold: true }]
-  if (input.branch) folder.push(run(` ${sign.branch} ${input.branch}`, C.branch))
-
   const tokens: Run[] = [
     ...part("in", formatTokens(input.inputTokens), C.input),
     run(" ", C.label),
@@ -190,7 +186,8 @@ export function statusLine(
   if (used >= levels.contextRed) context.push(run(` ${sign.warning}  compactar`, C.red))
 
   // The model and its variant are the footer's, where a click changes them: the line keeps the version.
-  // The version closes the line, named: opencode:v2.3.2.
+  // OpenCode's version opens the line, named: opencode:v2.3.2. speedy-code's closes it; the folder and
+  // the branch are the footer's.
   const core: Run[] = input.version ? [run("opencode:", C.label), run(`v${input.version}`, C.time)] : []
 
   const meter = (percent: number, color: string): Run[] => {
@@ -199,7 +196,7 @@ export function statusLine(
   }
 
   const parts: Array<{ key: string; runs: Run[]; short?: Run[]; shown?: Run[] }> = [
-    { key: "folder", runs: folder },
+    { key: "core", runs: core },
     { key: "time", runs: [run(`${sign.time} ${formatDuration(input.durationMs)}`, C.time)] },
     { key: "tokens", runs: tokens },
     { key: "context", runs: context },
@@ -220,7 +217,7 @@ export function statusLine(
     parts.push({ key, short, runs: reset ? [...short, run(` ${sign.reset} ${reset}`, C.label)] : short })
   }
 
-  if (core.length > 0) parts.push({ key: "core", runs: core })
+  if (input.app) parts.push({ key: "app", runs: [{ ...run(input.app, C.app), bold: true }] })
 
   // The parts in rank order, each in its short form, until one does not fit;
   // then the limits get their reset time back with the room left.
@@ -244,10 +241,10 @@ export function statusLine(
   }
 
   const line: Run[] = []
-  const shown = parts.filter((one) => one.shown)
+  const shown = parts.filter((one) => one.shown && runsWidth(one.shown) > 0)
   shown.forEach((one, index) => {
     if (index > 0) {
-      line.push(shown[index - 1]?.key === "folder" ? run(" » ", C.dim) : run(" │ ", C.dim))
+      line.push(shown[index - 1]?.key === "core" ? run(" » ", C.dim) : run(" │ ", C.dim))
     }
     line.push(...(one.shown ?? one.runs))
   })

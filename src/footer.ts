@@ -55,7 +55,8 @@ export const FOOTER_RANKS: Readonly<Record<string, number>> = {
   mics: 3,
   narrator: 4,
   socials: 0,
-  version: 6,
+  place: 1,
+  branch: 1,
 }
 
 /** The rank a name gets: every network badge is drawn last, as one group. */
@@ -101,8 +102,26 @@ export const EFFORT_TONES: Readonly<Record<string, string>> = {
   max: "#ff6b6b",
 }
 
-/** The version's color, beside the exit. */
-export const VERSION_COLOR = "#b197fc"
+/** The most cells the folder takes after the exit: a longer one keeps its end, after a …. */
+export const FOLDER_CELLS = 40
+
+/**
+ * The folder as the footer shows it: home as ~, with the system's own separator, and its end alone
+ * after a … when it is longer than `most` cells.
+ */
+export function folderLabel(cwd: string, home: string, separator: "\\" | "/", most = FOLDER_CELLS): string {
+  if (!cwd) return ""
+  const plain = cwd.replace(/\\/g, "/")
+  const homePlain = home.replace(/\\/g, "/").replace(/\/$/, "")
+  const inHome =
+    homePlain !== "" && (plain === homePlain || plain.toLowerCase().startsWith(`${homePlain.toLowerCase()}/`))
+  const shown = (inHome ? `~${plain.slice(homePlain.length)}` : plain).replace(/\//g, separator)
+  return shown.length > most ? `…${shown.slice(shown.length - most + 1)}` : shown
+}
+
+/** The colors of the folder and the branch after the exit: the status line's own. */
+export const FOLDER_COLOR = "#5fd7ff"
+export const BRANCH_COLOR = "#d787ff"
 
 /**
  * The version the footer shows: the moment of the last commit, in Buenos Aires (UTC-3, which has
@@ -253,8 +272,10 @@ export interface FooterInput {
   readonly socials?: readonly FooterSocial[]
   /** The icons the controls are drawn with: emojis unless Nerd Fonts glyphs are asked for. */
   readonly icons?: IconSet
-  /** The version drawn after the exit, as `versionLabel` writes it; none draws nothing. */
-  readonly version?: string
+  /** The folder drawn after the exit, home as ~; none draws nothing. */
+  readonly folder?: string
+  /** Its git branch, beside it. */
+  readonly branch?: string
 }
 
 /** The family of a model id, for the short footer label. */
@@ -353,9 +374,13 @@ export function footerControls(input: FooterInput): FooterControl[] {
   controls.push(control("settings", "settings", " ⚙️ ", "#adb5bd"))
   // `×` is in every font, in one color and one cell: `✕` came from a fallback font.
   controls.push(control("exit", "exit", " × ", "#ff6b6b"))
-  if (input.version) {
-    const text = ` ${input.version} `
-    controls.push({ name: "version", text, color: VERSION_COLOR, width: cells(text), panel: text, bold: true })
+  if (input.folder) {
+    const text = ` ${input.folder}${input.branch ? "" : " "}`
+    controls.push({ name: "place", text, color: FOLDER_COLOR, width: cells(text), panel: text, bold: true })
+    if (input.branch) {
+      const branch = ` ⎇ ${input.branch} `
+      controls.push({ name: "branch", text: branch, color: BRANCH_COLOR, width: cells(branch), panel: branch })
+    }
   }
 
   return input.icons === "nerd" ? controls.map(nerdControl) : controls

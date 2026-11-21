@@ -48,8 +48,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 ## What the port does
 
 - Two rows under the prompt, and nothing of the host beside them: the status
-  line (folder, branch, version, model, effort, time, tokens, context, cost
-  and the plan's 5-hour and weekly windows) and the controls, in the
+  line (OpenCode's version, time, tokens, context, cost, the plan's 5-hour
+  and weekly windows and speedy-code's version) and the controls, in the
   original's order. Both shed what does not fit as the terminal narrows; the
   controls left out go to the `⋯` menu.
 - Every control takes a click. Menus open framed above the prompt, their
@@ -74,8 +74,9 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   (`.speedy-font.bak`). Warp, WezTerm, Alacritty and editors take the font,
   `JetBrainsMono NF` or `MesloLGS Nerd Font`, in their own settings. The setup installs both, and
   ⚙ → Instalación says whether they are there.
-- After the exit, the footer shows the version, `v:yy.mmdd-(hhmm)`: the moment of the clone's
-  last commit, in Buenos Aires time.
+- After the exit, the footer shows the folder, home as `~`, and its git branch. speedy-code's version,
+  `v:yy.mmdd-(hhmm)` (the moment of the clone's last commit, in Buenos Aires time), closes the
+  status line.
 - `Agente ▾`, beside the voice, opens the menu of the agents a person picks: OpenCode has no permission
   modes, what runs without asking is the agent's. Each one with the host's description; a button goes
   to the next one, as Tab, and another opens the host's own list. The host tells no plugin which agent is picked, so the control names none.

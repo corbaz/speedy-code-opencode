@@ -15,6 +15,7 @@ import {
   footerControls,
   newSessionChoice,
   versionLabel,
+  folderLabel,
   footerFit,
   footerRoom,
   hiddenGroups,
@@ -1297,6 +1298,7 @@ export default Plugin.define({
           home: homedir(),
           branch: context.data.location.vcs.info()?.branch?.current,
           version: context.app.version,
+          app: version,
           durationMs: session?.time?.created ? clock() - session.time.created : 0,
           inputTokens: last?.tokens?.input,
           outputTokens: last?.tokens?.output,
@@ -1352,7 +1354,8 @@ export default Plugin.define({
           polishing: wand.busy,
           socials: linked,
           icons: settings.icons,
-          version,
+          folder: folderLabel(context.location?.directory ?? process.cwd(), homedir(), sep === "\\" ? "\\" : "/"),
+          branch: context.data.location.vcs.info()?.branch?.current,
         })
         const result = footerFit(controls, footerRoom(columnsNow()))
         hiddenNow = hiddenGroups(controls, result) as FooterControl[]
