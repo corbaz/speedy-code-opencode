@@ -27,7 +27,7 @@ describe("settings defaults", () => {
   })
 
   test("keeps every status line part in its default priority", () => {
-    expect(DEFAULT_ORDER).toEqual(["core", "app", "five_hour", "seven_day", "context", "time", "cost", "tokens"])
+    expect(DEFAULT_ORDER).toEqual(["core", "app", "five_hour", "seven_day", "monthly", "context", "time", "tokens"])
     expect(BAR_PARTS.map(([key]) => key)).toEqual(DEFAULT_ORDER)
   })
 
@@ -57,11 +57,13 @@ describe("barOrderOf", () => {
       "core",
       "five_hour",
       "seven_day",
+      "monthly",
       "context",
       "time",
-      "cost",
       "tokens",
     ])
+    // An order saved when the session's cost was a part: the monthly window takes its place.
+    expect(barOrderOf(["cost", "core"]).slice(0, 2)).toEqual(["monthly", "core"])
   })
 
   test("never drops a part", () => {
@@ -97,8 +99,8 @@ describe("movePart", () => {
       "core",
       "app",
       "five_hour",
-      "context",
       "seven_day",
+      "context",
     ])
   })
 

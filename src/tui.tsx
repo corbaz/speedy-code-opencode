@@ -84,6 +84,7 @@ interface ModelShape {
 /** The plan's usage windows, as the host's `usage.limits` answers. */
 interface LimitsShape {
   readonly data?: {
+    readonly workspace?: { readonly id?: string }
     readonly go?: Record<string, { readonly percent?: number; readonly resetsAt?: number } | undefined>
   }
 }
@@ -178,7 +179,9 @@ export default Plugin.define({
       initial: { ...INITIAL_MENU },
     })
     // The plan's usage windows, asked now and then.
-    const [limits, setLimits] = createSignal<{ five_hour?: StatusLimit; seven_day?: StatusLimit }>({})
+    const [limits, setLimits] = createSignal<{ five_hour?: StatusLimit; seven_day?: StatusLimit; monthly?: StatusLimit }>({})
+    // The page of the workspace's usage, as the host names the workspace: where a click on a window goes.
+    const [usageUrl, setUsageUrl] = createSignal("")
     // The minute the status line counts the session in: read by its render, so it redraws.
     const [clock, setClock] = createSignal(Date.now())
     // The version beside the exit: the last commit of this clone, asked of git once, before the first draw.
@@ -1264,10 +1267,14 @@ export default Plugin.define({
       try {
         const usage = (context.client as unknown as { usage?: { limits?: (input: object) => Promise<LimitsShape> } })
           .usage
-        const go = (await usage?.limits?.({}))?.data?.go
+        const data = (await usage?.limits?.({}))?.data
+        const go = data?.go
+        // The workspace's id is letters, digits and `_` alone: anything else names no page.
+        const workspace = data?.workspace?.id ?? ""
+        setUsageUrl(/^[\w-]+$/.test(workspace) ? `https://opencode.ai/console/${workspace}` : "")
         const window = (one: { percent?: number; resetsAt?: number } | undefined): StatusLimit | undefined =>
           one && typeof one.percent === "number" ? { percent: one.percent, resetsAt: one.resetsAt } : undefined
-        setLimits({ five_hour: window(go?.rolling), seven_day: window(go?.weekly) })
+        setLimits({ five_hour: window(go?.rolling), seven_day: window(go?.weekly), monthly: window(go?.monthly) })
       } catch {
         // No plan, or no answer: the line is drawn without the windows.
       }
@@ -1313,8 +1320,8 @@ export default Plugin.define({
           cacheReadTokens: last?.tokens?.cache?.read,
           cacheWriteTokens: last?.tokens?.cache?.write,
           contextSize: info?.limit?.context,
-          costUsd: sessionID ? context.data.session.cost(sessionID) : 0,
           limits: limits(),
+          usageUrl: usageUrl(),
           now: clock(),
           icons: settings.icons,
         },

@@ -9,7 +9,7 @@
 import type { IconSet } from "./icons"
 
 /** The status line parts, in the order the original declares them. */
-export type BarPart = "core" | "five_hour" | "seven_day" | "context" | "time" | "cost" | "tokens" | "app"
+export type BarPart = "core" | "five_hour" | "seven_day" | "monthly" | "context" | "time" | "tokens" | "app"
 
 /** The four thresholds the status line colors. */
 export type LevelKey = "contextYellow" | "contextRed" | "limitYellow" | "limitRed"
@@ -46,9 +46,9 @@ export const BAR_PARTS: ReadonlyArray<readonly [BarPart, string]> = [
   ["app", "Versión de speedy-code"],
   ["five_hour", "Límite de 5 horas"],
   ["seven_day", "Límite semanal"],
+  ["monthly", "Límite mensual"],
   ["context", "Contexto"],
   ["time", "Tiempo de sesión"],
-  ["cost", "Costo de sesión"],
   ["tokens", "Tokens in, out y caché"],
 ]
 
@@ -177,7 +177,9 @@ const isBarPart = (value: unknown): value is BarPart =>
  * never drops a part from the status line.
  */
 export function barOrderOf(saved: unknown): BarPart[] {
-  const known = Array.isArray(saved) ? saved.filter(isBarPart) : []
+  // An order saved when the session's cost was a part: the monthly window takes its place.
+  const named = Array.isArray(saved) ? saved.map((key) => (key === "cost" ? "monthly" : key)) : []
+  const known = named.filter(isBarPart)
   const order = [...new Set(known)]
   return [...order, ...DEFAULT_ORDER.filter((key) => !order.includes(key))]
 }

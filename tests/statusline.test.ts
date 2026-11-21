@@ -51,7 +51,7 @@ describe("status line numbers", () => {
 describe("statusLine", () => {
   test("draws every part, in the original order and wording, when it fits", () => {
     expect(text(statusLine(input, 0, levels))).toBe(
-      "opencode:v2.3.0 » ⏱  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04 │ v26.1121(1012)",
+      "opencode:v2.3.0 » ⏱  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ v26.1121(1012)",
     )
   })
 
@@ -72,8 +72,8 @@ describe("statusLine", () => {
   })
 
   test("the saved order decides what stays", () => {
-    const line = text(statusLine(input, 53, levels, ["cost", "core"]))
-    expect(line).toBe("opencode:v2.3.0 » sesión $2.04 │ v26.1121(1012)")
+    const line = text(statusLine(input, 53, levels, ["time", "core"]))
+    expect(line).toBe("opencode:v2.3.0 » ⏱  43m │ v26.1121(1012)")
   })
 
   test("context turns yellow and red at the saved levels, and red asks to compact", () => {
@@ -87,13 +87,13 @@ describe("statusLine", () => {
 
   test("with Nerd Fonts the signs are glyphs", () => {
     expect(text(statusLine({ ...input, branch: "main", icons: "nerd" }, 0, levels))).toBe(
-      "opencode:v2.3.0 » \uf017  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ sesión $2.04 │ v26.1121(1012)",
+      "opencode:v2.3.0 » \uf017  43m │ in 2 out 995 caché 149.5k │ ctx: ▰▱▱▱ 15% 149.5k/1M │ v26.1121(1012)",
     )
     expect(text(statusLine({ ...input, cacheReadTokens: 800000, icons: "nerd" }, 0, levels))).toContain("\uf071   compactar")
   })
 
   test("with nothing known it still draws zeros", () => {
-    expect(text(statusLine({}, 0, levels))).toBe("⏱  0m │ in 0 out 0 caché 0 │ ctx: ▱▱▱▱ 0% │ sesión $0.00")
+    expect(text(statusLine({}, 0, levels))).toBe("⏱  0m │ in 0 out 0 caché 0 │ ctx: ▱▱▱▱ 0%")
   })
 })
 
@@ -106,8 +106,24 @@ describe("limits", () => {
 
   test("the 5-hour and weekly windows close the line, with when each starts over", () => {
     expect(text(statusLine({ ...input, limits, now }, 0, levels))).toEndWith(
-      " │ sesión $2.04 │ 5hs ▱▱▱▱ 1% ↻ hoy 13:40 │ semana ▱▱▱▱ 0% ↻ Dom 13:00 │ v26.1121(1012)",
+      " │ ctx: ▰▱▱▱ 15% 149.5k/1M │ 5hs ▱▱▱▱ 1% ↻ hoy 13:40 │ semana ▱▱▱▱ 0% ↻ Dom 13:00 │ v26.1121(1012)",
     )
+  })
+
+  test("the monthly window follows the weekly one, and the session's cost is not on the line", () => {
+    const monthly = { percent: 54, resetsAt: new Date(2026, 11, 9, 4, 0).getTime() }
+    const line = text(statusLine({ ...input, limits: { ...limits, monthly }, now }, 0, levels))
+    expect(line).toContain(" │ semana ▱▱▱▱ 0% ↻ Dom 13:00 │ mes ▰▰▱▱ 54% ↻ ")
+    expect(line).toEndWith(" │ v26.1121(1012)")
+    expect(line).not.toContain("sesión")
+    expect(line).not.toContain("$")
+  })
+
+  test("the windows' labels open the workspace's own page when the host tells which it is", () => {
+    const usageUrl = "https://opencode.ai/console/wrk_1"
+    const line = statusLine({ ...input, limits, now, usageUrl }, 0, levels)
+    expect(line.find((run) => run.text === "5hs ")?.link).toBe(usageUrl)
+    expect(line.find((run) => run.text === "semana ")?.link).toBe(usageUrl)
   })
 
   test("a narrow terminal keeps the windows short before it drops a part", () => {
@@ -142,7 +158,8 @@ describe("limits", () => {
 
 describe("priorityOf", () => {
   test("keeps the known keys once, then the rest in the default order", () => {
-    expect(priorityOf(["cost", "nope", "cost", "core"]).slice(0, 3)).toEqual(["cost", "core", "app"])
+    // An order saved when the session's cost was a part: the monthly window takes its place.
+    expect(priorityOf(["cost", "nope", "cost", "core"]).slice(0, 3)).toEqual(["monthly", "core", "app"])
     expect(priorityOf(undefined)[0]).toBe("core")
   })
 })

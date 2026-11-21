@@ -1,6 +1,6 @@
 /**
  * The status line, ported from the original `statusline.py`: folder, branch,
- * version, time, tokens, context used and cost, in color. In a
+ * version, time, tokens, context used and the plan's windows, in color. In a
  * narrow terminal it keeps what matters most, in the order the settings give.
  *
  * Pure: it turns what the host knows into colored runs and touches no host API.
@@ -43,9 +43,9 @@ export const DEFAULT_PRIORITY: readonly string[] = [
   "app",
   "five_hour",
   "seven_day",
+  "monthly",
   "context",
   "time",
-  "cost",
   "tokens",
 ]
 
@@ -78,7 +78,13 @@ export interface StatusInput {
   readonly contextSize?: number
   readonly costUsd?: number
   /** The plan's windows, when the host knows them: 0% is a limit too. */
-  readonly limits?: { readonly five_hour?: StatusLimit; readonly seven_day?: StatusLimit }
+  readonly limits?: {
+    readonly five_hour?: StatusLimit
+    readonly seven_day?: StatusLimit
+    readonly monthly?: StatusLimit
+  }
+  /** The page of the workspace's usage, when the host tells which it is: where the windows' labels go. */
+  readonly usageUrl?: string
   /** The moment the reset times are told from; now when absent. */
   readonly now?: number
 }
@@ -144,7 +150,9 @@ export function runsWidth(runs: readonly Run[]): number {
 /** The known parts in the saved order, once each; any it lacks after them, in the default order. */
 export function priorityOf(saved: readonly string[] | undefined): string[] {
   const known: string[] = []
-  for (const key of saved ?? []) {
+  for (const saved_key of saved ?? []) {
+    // An order saved when the session's cost was a part: the monthly window takes its place.
+    const key = saved_key === "cost" ? "monthly" : saved_key
     if (DEFAULT_PRIORITY.includes(key) && !known.includes(key)) known.push(key)
   }
   return [...known, ...DEFAULT_PRIORITY.filter((key) => !known.includes(key))]
@@ -213,12 +221,12 @@ export function statusLine(
     { key: "time", runs: [run(`${sign.time} ${formatDuration(input.durationMs)}`, C.time)] },
     { key: "tokens", runs: tokens },
     { key: "context", runs: context },
-    { key: "cost", runs: [run("sesión ", C.label), { ...run(formatCost(input.costUsd), C.cost), bold: true }] },
   ]
 
   for (const [key, label] of [
     ["five_hour", "5hs"],
     ["seven_day", "semana"],
+    ["monthly", "mes"],
   ] as const) {
     const limit = input.limits?.[key]
     if (!limit || !Number.isFinite(limit.percent)) continue
@@ -226,7 +234,7 @@ export function statusLine(
     const limitTone = usedLimit >= levels.limitRed ? C.red : usedLimit >= levels.limitYellow ? C.yellow : C.green
     // The label is the link, in the links' color: a click opens the plan's usage. The meter and the
     // share keep the colors that say how much is used.
-    const short: Run[] = [{ ...run(`${label} `, C.link), bold: true, link: USAGE }, ...meter(usedLimit, limitTone), run(` ${usedLimit}%`, limitTone)]
+    const short: Run[] = [{ ...run(`${label} `, C.link), bold: true, link: input.usageUrl || USAGE }, ...meter(usedLimit, limitTone), run(` ${usedLimit}%`, limitTone)]
     if (usedLimit >= levels.limitRed) short.push(run(` ${sign.warning} `, C.red))
     const reset = formatReset(limit.resetsAt, input.now)
     parts.push({ key, short, runs: reset ? [...short, run(` ${sign.reset} ${reset}`, C.label)] : short })
