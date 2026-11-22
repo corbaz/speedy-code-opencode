@@ -25,8 +25,8 @@ import {
   type FooterControl,
   type SpeechState,
 } from "./footer"
-import { POWERSHELL } from "./powershell"
-import { viewerCommand, type ViewerScript } from "./viewer"
+import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
+import { createViewerReader, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
 import { EXPLORER_PANEL, ExplorerPanel } from "./explorer-panel"
 import { behindOrigin, takeUpdate, type Git } from "./update"
@@ -99,6 +99,9 @@ interface EditorShape {
   readonly plainText?: string
   setText?: (text: string) => void
   insertText?: (text: string) => void
+  /** Where the cursor is, in characters from the start. */
+  readonly cursorOffset?: number
+  readonly isDestroyed?: boolean
 }
 
 /**
@@ -406,13 +409,37 @@ export default Plugin.define({
               "-NoProfile",
               "-NonInteractive",
               "-Command",
-              "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-Clipboard -Raw",
+              CLIPBOARD_READ,
             ]
           : process.platform === "darwin"
             ? ["pbpaste"]
             : ["xclip", "-selection", "clipboard", "-o"]
       const result = await run(argv)
       return result.code === 0 ? result.stdout.trim() : ""
+    }
+
+    // The prompt's field as last seen with the focus: a press in the side panel may leave the focus elsewhere.
+    let promptSeen: EditorShape | undefined
+    /** The prompt's text field: the one with the focus, else the one last seen, while it is still drawn. */
+    const promptField = (): EditorShape | undefined => {
+      const field = editor()
+      if (field) promptSeen = field
+      return promptSeen && !promptSeen.isDestroyed ? promptSeen : undefined
+    }
+
+    /**
+     * Puts `text` into the prompt at the cursor, as typed there: see promptInsertion. Without the prompt's
+     * field it goes in as a paste through the clipboard, unless `byClipboard` is false (the clipboard holds
+     * a file that must stay there).
+     */
+    const insertInPrompt = async (text: string, separator: " " | "\n", byClipboard = true): Promise<void> => {
+      const field = promptField()
+      if (field?.insertText) {
+        const draft = field.plainText ?? ""
+        field.insertText(promptInsertion(draft.slice(0, field.cursorOffset ?? draft.length), text, separator))
+        return
+      }
+      if (byClipboard && (await writeClipboard(promptInsertion("", text, separator)))) context.keymap.dispatch("prompt.paste")
     }
 
     /** Writes `text` into the prompt where the cursor is: straight into its field, else as a paste. */
@@ -1047,15 +1074,24 @@ export default Plugin.define({
      */
     const viewFile = (path: string, script: ViewerScript, failure: string) => {
       closeViewer()
-      const { argv, env } = viewerCommand(process.platform, script, path, PLUGIN_ROOT)
+      const { argv, env } = viewerCommand(process.platform, script, path, PLUGIN_ROOT, pythonPath())
       try {
         const child = spawn(argv[0] as string, argv.slice(1), {
           env: { ...process.env, ...env },
           stdio: ["ignore", "pipe", "ignore"],
           windowsHide: true,
         })
-        // It says a dot ten times a second while it is up: read and dropped, so it never stalls.
-        child.stdout?.on("data", () => {})
+        // It says a dot ten times a second while it is up, read so it never stalls. Its Copiar says
+        // `copied <base64>`: the text goes into the prompt on a line of its own; `attach <base64>`: a
+        // picture file, attached to the prompt as @path.
+        const reader = createViewerReader((said) => {
+          if (said.kind === "mention") return void insertInPrompt(said.text, " ")
+          const field = promptField()
+          if (field?.insertText) field.insertText(said.text)
+          else void typeIntoPrompt(said.text)
+        })
+        child.stdout?.setEncoding("utf8")
+        child.stdout?.on("data", (chunk: string) => reader.push(chunk))
         child.on("error", () => toast(failure, "error"))
         child.on("exit", () => {
           if (viewer === child) viewer = undefined

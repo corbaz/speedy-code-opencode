@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
 
-import { POWERSHELL, powershellPath } from "../src/powershell"
+import { CLIPBOARD_READ, POWERSHELL, powershellPath } from "../src/powershell"
 
 const SEP = String.fromCharCode(92)
 
@@ -21,5 +21,11 @@ describe("powershellPath", () => {
 
   test.skipIf(process.platform !== "win32")("names a program that is there, on Windows", () => {
     expect(existsSync(POWERSHELL)).toBe(true)
+  })
+})
+
+describe("CLIPBOARD_READ", () => {
+  test("the clipboard's text is read in UTF-8, whatever the console's code page: á é í ó ú ñ intact", () => {
+    expect(CLIPBOARD_READ).toBe("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard -Raw")
   })
 })

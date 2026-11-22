@@ -12,3 +12,9 @@ export function powershellPath(env: Record<string, string | undefined> = process
 
 /** Windows PowerShell on this system: what every command of the plugin runs it by. */
 export const POWERSHELL = powershellPath()
+
+/**
+ * The clipboard's text, written in UTF-8 whatever the console's code page: PowerShell writes to a pipe in
+ * that code page, where á and ñ come out as `?`.
+ */
+export const CLIPBOARD_READ = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard -Raw"
