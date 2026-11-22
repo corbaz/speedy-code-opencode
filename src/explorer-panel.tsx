@@ -190,7 +190,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
             field = one as typeof field
           }}
           focused={isTyping()}
-          placeholder="pegá una ruta y Enter: D:\carpeta\archivo"
+          placeholder={"pegá una ruta y Enter: D:\\carpeta\\archivo"}
           placeholderColor="#868e96"
           textColor={VIEWABLE_COLOR}
           focusedTextColor={VIEWABLE_COLOR}

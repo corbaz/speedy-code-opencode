@@ -29,7 +29,7 @@ import { dialogAnswer, dialogCommand, fileCopyCommand, renameCommand, trashComma
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
 import { createViewerReader, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
-import { EXPLORER_PANEL, ExplorerPanel } from "./explorer-panel"
+import { EXPLORER_PANEL, ExplorerPanel, type ExplorerPanelApi } from "./explorer-panel"
 import { behindOrigin, takeUpdate, type Git } from "./update"
 import { ClipPlayer, listClips, type HistoryClip } from "./history"
 import {
@@ -1219,19 +1219,27 @@ export default Plugin.define({
     }
     const explorer = createExplorer(explorerIO, process.platform, (state) => setExplorerState(() => state))
 
+    // The explorer on the home screen, where the host has no side panel: drawn by the mod at the right,
+    // over the home screen, as wide as the panel would be.
+    const [homeExplorer, setHomeExplorer] = createSignal(false)
+
     /**
      * The folder after the exit: opens the explorer beside the chat, read afresh down to the session's
-     * folder; clicked while it is open, it closes it. Where the host has no side panel to open, as on the
-     * home screen, the system's file manager opens the folder, as before.
+     * folder; clicked while it is open, it closes it. On the home screen, where the host has no side panel
+     * to open, the mod draws the same explorer at the right of the screen.
      */
     const toggleExplorer = async (): Promise<void> => {
       if (context.ui.panel.current()?.name === EXPLORER_PANEL) {
         context.ui.panel.close()
         return
       }
+      if (homeExplorer()) {
+        setHomeExplorer(false)
+        return
+      }
       const folder = context.location?.directory ?? process.cwd()
       await explorer.open(folder)
-      if (!context.ui.panel.open(EXPLORER_PANEL)) openSystemFolder(folder)
+      if (!context.ui.panel.open(EXPLORER_PANEL)) setHomeExplorer(true)
     }
     const runControl = async (id: string): Promise<void> => {
       if (id.startsWith("social:")) return openSocial(id.slice("social:".length))
@@ -1735,35 +1743,69 @@ export default Plugin.define({
       ),
     })
 
+    /** What the explorer's panel reads and does, in the host's side panel or drawn by the mod on the home screen. */
+    const explorerApi = (width: () => number, close: () => void): ExplorerPanelApi => ({
+      state: explorerState,
+      width,
+      icons: () => (settings.icons === "nerd" ? "nerd" : "emoji"),
+      pickDrive: (drive) => void explorer.pickDrive(drive),
+      toggleFolder: (path) => void explorer.toggleFolder(path),
+      pressFile: (path) => explorer.pressFile(path),
+      tool: (kind, path) => {
+        if (kind === "copy") void explorer.copyFile(path)
+        else if (kind === "path") void explorer.copyPath(path)
+        else if (kind === "rename") void explorer.rename(path)
+        else void explorer.trash(path)
+      },
+      collapse: () => explorer.collapse(),
+      goTo: (text) => {
+        void explorer.goTo(text)
+        // The keys go back to the prompt, once the field has let them go.
+        setTimeout(() => promptField()?.focus?.(), 50)
+      },
+      openSystem: () => explorer.openSystem(),
+      close,
+    })
+
     // The explorer, in the side panel the host opens for it beside the chat.
     const disposeExplorer = context.ui.slot({
       append: "session.panel",
       render: (input) => (
         <Show when={input.name === EXPLORER_PANEL}>
-          <ExplorerPanel
-            api={{
-              state: explorerState,
-              width: () => input.width,
-              icons: () => (settings.icons === "nerd" ? "nerd" : "emoji"),
-              pickDrive: (drive) => void explorer.pickDrive(drive),
-              toggleFolder: (path) => void explorer.toggleFolder(path),
-              pressFile: (path) => explorer.pressFile(path),
-              tool: (kind, path) => {
-                if (kind === "copy") void explorer.copyFile(path)
-                else if (kind === "path") void explorer.copyPath(path)
-                else if (kind === "rename") void explorer.rename(path)
-                else void explorer.trash(path)
-              },
-              collapse: () => explorer.collapse(),
-              goTo: (text) => {
-                void explorer.goTo(text)
-                // The keys go back to the prompt, once the field has let them go.
-                setTimeout(() => promptField()?.focus?.(), 50)
-              },
-              openSystem: () => explorer.openSystem(),
-              close: () => input.close(),
-            }}
-          />
+          <ExplorerPanel api={explorerApi(() => input.width, () => input.close())} />
+        </Show>
+      ),
+    })
+
+    // On the home screen, the same explorer at the right, over the home screen, under a rule at its left.
+    // A session opened from there takes it to the host's side panel.
+    const homeWidth = () => Math.max(44, Math.round(columnsNow() * 0.3))
+    // The home screen's own rows at the bottom, the status line and the footer among them: the explorer stops above them.
+    const HOME_FOOTER_ROWS = 5
+    createEffect(() => {
+      const route = context.ui.router.current() as { type?: string } | undefined
+      if (!homeExplorer() || route?.type === "home") return
+      setHomeExplorer(false)
+      context.ui.panel.open(EXPLORER_PANEL)
+    })
+    const disposeHomeExplorer = context.ui.slot({
+      append: "app",
+      render: () => (
+        <Show when={homeExplorer() && (context.ui.router.current() as { type?: string } | undefined)?.type === "home"}>
+          <box
+            position="absolute"
+            top={0}
+            right={0}
+            bottom={HOME_FOOTER_ROWS}
+            width={homeWidth()}
+            zIndex={50}
+            flexDirection="column"
+            backgroundColor="#141414"
+            border={["left"]}
+            borderColor="#3a3a3a"
+          >
+            <ExplorerPanel api={explorerApi(() => homeWidth() - 1, () => setHomeExplorer(false))} />
+          </box>
         </Show>
       ),
     })
@@ -1771,6 +1813,7 @@ export default Plugin.define({
     return () => {
       clearInterval(promptWatch)
       disposeExplorer()
+      disposeHomeExplorer()
       disposeNarration()
       disposeTurn()
       disposeSent()
