@@ -1601,9 +1601,16 @@ export default Plugin.define({
               <Tinted fg={control.color} bold={control.bold}>
                 {control.text}
               </Tinted>
-              {/* ⚙ → Ver labels: what the control does, just above it while the pointer is on it. */}
+              {/* ⚙ → Ver labels: what the control does, just above it and centered on it while the pointer is on it. */}
               <Show when={settings.labels && control.tip !== undefined && tipped() === control.name}>
-                <box position="absolute" top={-1} left={0} zIndex={60} width={cells(` ${control.tip} `)} flexShrink={0}>
+                <box
+                  position="absolute"
+                  top={-1}
+                  left={Math.floor((cells(control.text) - cells(` ${control.tip} `)) / 2)}
+                  zIndex={60}
+                  width={cells(` ${control.tip} `)}
+                  flexShrink={0}
+                >
                   <text wrapMode="none" selectable={false} fg={LABEL_TEXT} bg={LABEL_FILL} attributes={1}>
                     {` ${control.tip} `}
                   </text>

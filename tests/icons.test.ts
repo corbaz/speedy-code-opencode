@@ -25,7 +25,8 @@ describe("the Nerd Fonts icons", () => {
     expect(nerdText(" × ")).toBe(" \uea76 ")
     expect(nerdText(" ⏸\ufe0e ")).toBe(" \uf04c  ")
     expect(nerdText("✔ listo · ⚠  compactar")).toBe("\uf00c  listo · \uf071   compactar")
-    for (const label of [" ⏳ ", " ✔ "]) expect(cells(nerdText(label))).toBe(cells(label) + 1)
+    // The settings' signs grow alike, so their names stay in one column: ▤, ◈ and ⓘ.
+    for (const label of [" ⏳ ", " ✔ ", " ▤  Barra speedy-code ", " ◈  Iconos ", " ⓘ  Ver labels "]) expect(cells(nerdText(label))).toBe(cells(label) + 1)
   })
 
   test("text without emojis is left as it is, and so is everything with the emoji set", () => {

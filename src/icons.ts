@@ -48,6 +48,7 @@ export const NERD_ICONS: Readonly<Record<string, string>> = {
   "✚": "\uf067", // fa-plus
   "▤": "\uf1de", // fa-sliders
   "◈": "\uefcc", // fa-palette
+  "ⓘ": "\uf05a", // fa-info_circle
 }
 
 const EMOJI = new RegExp(`(${Object.keys(NERD_ICONS).join("|")})[\ufe0e\ufe0f]?`, "gu")
