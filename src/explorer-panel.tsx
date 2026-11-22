@@ -113,7 +113,8 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
 
   /** A file's row: its name, which opens the viewer, and its four tools, none with a fill under the pointer. */
   const fileRow = (row: TreeRow) => {
-    const isHovered = () => hovered() === row.path || row.isFound === true
+    // The path the field found keeps the fill until the pointer is on another file: the fill follows the pointer.
+    const isHovered = () => hovered() === row.path || (row.isFound === true && hovered() === "")
     return (
       // The pointer's over and out reach the row from its name and its tools alike: an out from one part
       // comes before the over of the next, so the row stays marked while the pointer is anywhere on it.

@@ -330,7 +330,17 @@ describe("the explorer the footer's folder opens", () => {
     await explorer.goTo("C:\\nada\\falta.txt")
     expect(fake.toasts.at(-1)).toBe("no existe C:/nada/falta.txt.")
     expect(marked()).toEqual(["  ▾ Windows"])
-    // ⊟ takes the mark away.
+    // Any press in the explorer takes the mark away: the yellow fill follows the pointer again.
+    await explorer.toggleFolder("C:/Users/Public")
+    expect(marked()).toEqual([])
+    await explorer.goTo("C:\\Users\\test\\proyectos\\notas.txt")
+    explorer.pressFile("C:/Users/test/proyectos/app.exe")
+    expect(marked()).toEqual([])
+    await explorer.goTo("C:\\Users\\test\\proyectos\\notas.txt")
+    await explorer.copyPath("C:/Users/test/proyectos/app.exe")
+    expect(marked()).toEqual([])
+    // ⊟ too.
+    await explorer.goTo("C:\\Windows")
     explorer.collapse()
     expect(marked()).toEqual([])
   })

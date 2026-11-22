@@ -368,6 +368,10 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       if (state.flashed === key) set((now) => ({ ...now, flashed: "" }))
     })
   }
+  // Any press in the explorer takes the mark off the path the field found: the yellow fill follows the pointer again.
+  const forget = () => {
+    if (state.found !== undefined) set((now) => ({ ...now, found: undefined }))
+  }
   // A folder of the tree read again, after a file in it was renamed or sent to the trash.
   const reread = async (path: string) => {
     const key = pathKey(path, state.caseless)
@@ -404,6 +408,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       set(() => ({ drives, drive, open: chainRead.map(([key]) => key), listed: Object.fromEntries(chainRead), here, caseless, top: -1 }))
     },
     async toggleFolder(path) {
+      forget()
       const key = pathKey(path, state.caseless)
       if (state.open.includes(key)) {
         set((now) => ({ ...now, open: now.open.filter((one) => one !== key) }))
@@ -414,6 +419,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       set((now) => ({ ...now, listed: { ...now.listed, [key]: listed } }))
     },
     async pickDrive(drive) {
+      forget()
       const key = pathKey(drive, state.caseless)
       const top = driveOf(state.here, state.drives, state.caseless) === drive ? -1 : 0
       set((now) => ({ ...now, drive, top, open: now.open.includes(key) ? now.open : [...now.open, key] }))
@@ -425,9 +431,11 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       io.openFolder(folder)
     },
     pressFile(path) {
+      forget()
       if (isViewable(nameOf(path))) io.view(path)
     },
     async copyFile(path) {
+      forget()
       flash(`copy:${path}`)
       const native = nativeOf(path, platform)
       const isCopied = await io.copyFile(native)
@@ -438,6 +446,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       else io.toast(`${name} está adjunto en el prompt; no pude copiarlo al portapapeles.`, true)
     },
     async copyPath(path) {
+      forget()
       flash(`path:${path}`)
       const native = nativeOf(path, platform)
       const isCopied = await io.copyText(native)
@@ -447,10 +456,12 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       else io.toast(`la ruta ${native} está en el prompt; no pude copiarla al portapapeles.`, true)
     },
     async rename(path) {
+      forget()
       const name = newNameOf(await io.ask("rename", nativeOf(path, platform)))
       if (name) await renameTo(path, name)
     },
     async trash(path) {
+      forget()
       const native = nativeOf(path, platform)
       if ((await io.ask("delete", native)) !== "delete") return
       const name = nameOf(path)
