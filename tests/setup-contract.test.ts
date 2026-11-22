@@ -29,6 +29,13 @@ describe("cross-platform setup contract", () => {
     )
   })
 
+  test("installs and checks the viewer's packages: pdfminer.six for a PDF's text, the beautifiers for minified code", () => {
+    for (const installer of [windowsInstaller, macInstaller]) {
+      expect(installer).toMatch(/uv pip install --python "?\$python"? edge-tts transcribe-cpp sounddevice numpy pdfminer\.six jsbeautifier cssbeautifier/)
+      expect(installer).toContain("import edge_tts, transcribe_cpp, sounddevice, numpy, pdfminer, jsbeautifier, cssbeautifier")
+    }
+  })
+
   test("retains the upstream MIT attribution", async () => {
     const license = await Bun.file("LICENSE").text()
     expect(license).toContain("MIT License")
