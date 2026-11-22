@@ -104,6 +104,7 @@ interface EditorShape {
   readonly cursorOffset?: number
   readonly isDestroyed?: boolean
   focus?: () => void
+  readonly id?: string
 }
 
 /**
@@ -388,7 +389,8 @@ export default Plugin.define({
     const editor = (): EditorShape | undefined => {
       const focused = (context.renderer as unknown as { currentFocusedRenderable?: EditorShape })
         .currentFocusedRenderable
-      return focused && typeof focused.plainText === "string" ? focused : undefined
+      // The mod's own fields (the explorer's, for a path) are never the prompt.
+      return focused && typeof focused.plainText === "string" && !String(focused.id ?? "").startsWith("speedy-") ? focused : undefined
     }
 
     /** Puts `text` on the system clipboard; false when the system has no way to. */
@@ -1753,6 +1755,11 @@ export default Plugin.define({
                 else void explorer.trash(path)
               },
               collapse: () => explorer.collapse(),
+              goTo: (text) => {
+                void explorer.goTo(text)
+                // The keys go back to the prompt, once the field has let them go.
+                setTimeout(() => promptField()?.focus?.(), 50)
+              },
               openSystem: () => explorer.openSystem(),
               close: () => input.close(),
             }}

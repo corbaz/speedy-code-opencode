@@ -1,8 +1,9 @@
 /**
  * The explorer as the host's side panel draws it (`session.panel`, opened by `ui.panel.open`): the disks
  * on top, the one shown underlined, ⊟ to collapse the tree, `↗ abrir en el sistema` and the close mark
- * beside them; under a rule, the disk's tree, the session's folder marked ● and put in the middle when the
- * explorer opens. The tree scrolls under the disks, which stay.
+ * beside them; under them a field a path is pasted in, Enter, and the tree opens down to it and marks it;
+ * under a rule, the disk's tree, the session's folder marked ● and put in the middle when the explorer
+ * opens. The tree scrolls under the disks and the field, which stay.
  *
  * Every file is yellow and opens in the viewer; at its right, its four tools. While the pointer is anywhere
  * on a file's row, its tools included, the name keeps a yellow fill: the row is marked as the one the
@@ -56,6 +57,8 @@ export interface ExplorerPanelApi {
   tool(kind: FileToolKind, path: string): void
   /** ⊟: the tree back to the session's folder. */
   collapse(): void
+  /** A path pasted in the field, Enter: the tree opens down to it and marks it. */
+  goTo(text: string): void
   openSystem(): void
   close(): void
 }
@@ -69,6 +72,7 @@ const HOVER_TEXT = "#1a1a1a"
 function rowLook(row: TreeRow): { color?: string; attributes: number } {
   if (row.kind === "note") return { attributes: DIM | ITALIC }
   if (row.kind === "dir") return row.isHere ? { color: FOLDER_COLOR, attributes: BOLD } : { color: DIR_COLOR, attributes: 0 }
+  if (row.isFound) return { color: HOVER_TEXT, attributes: BOLD }
   return rowAction(row) === "view" ? { color: VIEWABLE_COLOR, attributes: 0 } : { attributes: DIM }
 }
 
@@ -79,6 +83,10 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const room = () => Math.max(8, api.width() - 3)
   // The file whose row is under the pointer, its tools included.
   const [hovered, setHovered] = createSignal("")
+  // The field for a path takes the keys only once pressed, and gives them back on Enter: the prompt keeps them.
+  const [isTyping, setTyping] = createSignal(false)
+  let field: { value?: string; plainText?: string } | undefined
+  const typed = () => field?.value ?? field?.plainText ?? ""
   let tree: ScrollBoxRenderable | undefined
 
   // A disk shown, the explorer opened or the tree collapsed: the tree goes to its top, or puts the
@@ -105,7 +113,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
 
   /** A file's row: its name, which opens the viewer, and its four tools, none with a fill under the pointer. */
   const fileRow = (row: TreeRow) => {
-    const isHovered = () => hovered() === row.path
+    const isHovered = () => hovered() === row.path || row.isFound === true
     return (
       // The pointer's over and out reach the row from its name and its tools alike: an out from one part
       // comes before the over of the next, so the row stays marked while the pointer is anywhere on it.
@@ -174,6 +182,24 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         <Btn label=" ↗ abrir en el sistema " dim onPress={() => api.openSystem()} />
         <Btn label=" × " color={CLOSE_COLOR} bold onPress={() => api.close()} />
       </box>
+      <box flexShrink={0} onMouseUp={() => setTyping(true)}>
+        <input
+          id="speedy-explorer-goto"
+          ref={(one: unknown) => {
+            field = one as typeof field
+          }}
+          focused={isTyping()}
+          placeholder="pegá una ruta y Enter: D:\carpeta\archivo"
+          placeholderColor="#868e96"
+          textColor={VIEWABLE_COLOR}
+          focusedTextColor={VIEWABLE_COLOR}
+          cursorColor={VIEWABLE_COLOR}
+          onSubmit={() => {
+            setTyping(false)
+            api.goTo(typed())
+          }}
+        />
+      </box>
       <text wrapMode="none" selectable={false} attributes={DIM} flexShrink={0}>
         {"─".repeat(room())}
       </text>
@@ -185,7 +211,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
             const look = rowLook(row)
             return (
               <box flexShrink={0} onMouseUp={rowAction(row) === "none" ? undefined : () => press(row)}>
-                <text wrapMode="none" selectable={false} fg={look.color} attributes={look.attributes}>
+                <text wrapMode="none" selectable={false} fg={row.isFound ? HOVER_TEXT : look.color} bg={row.isFound ? VIEWABLE_COLOR : undefined} attributes={row.isFound ? BOLD : look.attributes}>
                   {fit(rowLabel(row), room())}
                 </text>
               </box>

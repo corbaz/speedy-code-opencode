@@ -51,8 +51,10 @@ export interface ExplorerState {
   readonly top: number
   /** The tool just pressed (`copy:<path>`, `collapse:`), green for a second; empty or absent: none. */
   readonly flashed?: string
-  /** Counts the collapses: each one puts the session's folder in the middle again, even with `top` already -1. */
+  /** Counts the collapses and the paths gone to: each one puts its row in the middle again, even with `top` already -1. */
   readonly turn?: number
+  /** The key of the path pasted in the field under the disks and found, marked in the tree; absent: none. */
+  readonly found?: string
 }
 
 /** What the explorer reads and does outside itself. */
@@ -147,19 +149,22 @@ export interface TreeRow {
   readonly kind: ExplorerEntry["kind"] | "note"
   readonly isOpen: boolean
   readonly isHere: boolean
+  /** The path pasted in the field and found. */
+  readonly isFound?: boolean
 }
 
 /** The tree of the disk shown, flat: the disk, then what each open folder holds under it. */
 export function treeRows(state: ExplorerState): TreeRow[] {
   if (!state.drive) return []
   const here = pathKey(state.here, state.caseless)
+  const found = state.found ?? ""
   const rows: TreeRow[] = []
   const note = (path: string, name: string, depth: number) =>
     void rows.push({ path: `${path}#${name}`, name, depth, kind: "note", isOpen: false, isHere: false })
   const walk = (path: string, name: string, kind: ExplorerEntry["kind"], depth: number): void => {
     const key = pathKey(path, state.caseless)
     const isOpen = kind === "dir" && state.open.includes(key)
-    rows.push({ path, name, depth, kind, isOpen, isHere: kind === "dir" && key === here })
+    rows.push({ path, name, depth, kind, isOpen, isHere: kind === "dir" && key === here, isFound: key === found })
     if (!isOpen) return
     const listed = state.listed[key]
     if (listed === undefined) return note(path, "leyendo…", depth + 1)
@@ -175,12 +180,13 @@ export function treeRows(state: ExplorerState): TreeRow[] {
 
 /**
  * The first tree row to show in a window of `room` rows: `top` kept within the tree, so its last row stays
- * at the bottom; -1, just opened, puts the session's folder in the middle.
+ * at the bottom; -1 puts in the middle the path pasted in the field and found, or else the session's folder.
  */
 export function windowTop(rows: readonly TreeRow[], top: number, room: number): number {
   const last = Math.max(0, rows.length - room)
   if (top >= 0) return Math.min(last, top)
-  const here = rows.findIndex((row) => row.isHere)
+  const found = rows.findIndex((row) => row.isFound)
+  const here = found >= 0 ? found : rows.findIndex((row) => row.isHere)
   return Math.min(last, Math.max(0, here - Math.floor(room / 2)))
 }
 
@@ -269,6 +275,16 @@ export function rowAction(row: TreeRow): "folder" | "view" | "none" {
   return "none"
 }
 
+/**
+ * A path as pasted in the explorer's field, `D:\Excel\rand.xlsx` or `"C:/a b/c"`: its quotes, its spaces and
+ * a mention's `@` off, `/` for `\`, a disk's root ending in `/` and any other folder without one.
+ */
+export function pastedPath(text: string): string {
+  const path = slashed(text.trim().replace(/^@/, "").replace(/^["']+|["']+$/g, "").trim())
+  if (/^[A-Za-z]:\/?$/.test(path)) return `${path.slice(0, 2)}/`
+  return path.length > 1 ? path.replace(/\/+$/, "") : path
+}
+
 /** A path as the system writes it: with `\` on Windows. */
 const nativeOf = (path: string, platform: string) => (platform === "win32" ? path.replace(/\//g, "\\") : path)
 
@@ -327,6 +343,12 @@ export interface Explorer {
   trash(path: string): Promise<void>
   /** ⊟: every folder closes but those down to the session's folder, on its disk, which is put in the middle. */
   collapse(): void
+  /**
+   * A path pasted in the field under the disks: the tree opens down to it, on its disk, and puts it in the
+   * middle, marked; for a file its folder opens and the file is the row marked. A path not absolute is taken
+   * from the session's folder.
+   */
+  goTo(text: string): Promise<void>
 }
 
 /** The explorer's state and what its presses do; `onChange` hears every new state. */
@@ -441,8 +463,44 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       set((now) => {
         const drive = driveOf(now.here, now.drives, now.caseless) || now.drive
         const chain = drive ? chainOf(now.here, drive).map((path) => pathKey(path, now.caseless)) : []
-        return { ...now, drive, open: chain, top: -1, turn: (now.turn ?? 0) + 1 }
+        return { ...now, drive, open: chain, top: -1, turn: (now.turn ?? 0) + 1, found: undefined }
       })
+    },
+    async goTo(text) {
+      const pasted = pastedPath(text)
+      if (!pasted) return
+      const isAbsolute = /^[A-Za-z]:\//.test(pasted) || pasted.startsWith("/")
+      const path = isAbsolute ? pasted : joinPath(state.here, pasted)
+      if (!(await io.exists(nativeOf(path, platform)))) return io.toast(`no existe ${pasted}.`, true)
+      const key = pathKey(path, state.caseless)
+      const drive = state.drives
+        .filter((one) => isUnder(key, pathKey(one, state.caseless)))
+        .sort((a, b) => b.length - a.length)[0]
+      if (!drive) return io.toast(`${pasted} no está en ninguno de los discos del explorador.`, true)
+      const isFolder = key === pathKey(drive, state.caseless) || (await io.isDir(path).catch(() => false))
+      const folder = isFolder ? path : folderOf(path)
+      // Each folder down to it read afresh: what was pasted may be new.
+      const chainRead = await Promise.all(
+        chainOf(folder, drive).map(async (one) => [pathKey(one, state.caseless), await readFolder(io, one)] as const),
+      )
+      const listed: Record<string, ExplorerListing | "denied"> = Object.fromEntries(chainRead)
+      // A file past the entries a big folder shows is shown all the same: it is the one asked for.
+      const folderKey = pathKey(folder, state.caseless)
+      const name = nameOf(path)
+      const holding = listed[folderKey]
+      if (!isFolder && holding && holding !== "denied" && !holding.entries.some((entry) => pathKey(entry.name, state.caseless) === pathKey(name, state.caseless))) {
+        listed[folderKey] = { entries: [...holding.entries, { name, kind: "file" }], left: Math.max(0, holding.left - 1) }
+      }
+      const opened = chainRead.map(([one]) => one)
+      set((now) => ({
+        ...now,
+        drive,
+        open: [...now.open.filter((one) => !opened.includes(one)), ...opened],
+        listed: { ...now.listed, ...listed },
+        found: key,
+        top: -1,
+        turn: (now.turn ?? 0) + 1,
+      }))
     },
   }
 }

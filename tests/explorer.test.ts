@@ -13,6 +13,7 @@ import {
   driveOf,
   isViewable,
   listingOf,
+  pastedPath,
   rowAction,
   rowLabel,
   treeRows,
@@ -113,6 +114,18 @@ describe("explorer helpers", () => {
     expect(windowTop(rows.slice(0, 4), 2, 6)).toBe(0)
     expect(windowTop(rows.map((row) => ({ ...row, isHere: false })), -1, 6)).toBe(0)
     expect(windowTop(rows.map((row, i) => ({ ...row, isHere: i === 19 })), -1, 6)).toBe(14)
+    // A path found by the field is put in the middle before the session's folder.
+    expect(windowTop(rows.map((row, i) => ({ ...row, isFound: i === 4 })), -1, 6)).toBe(1)
+  })
+
+  test("pastedPath: a path as pasted in the explorer's field, quotes, spaces and a mention's @ off, with / for \\", () => {
+    expect(pastedPath(' "D:\\Excel\\rand.xlsx" ')).toBe("D:/Excel/rand.xlsx")
+    expect(pastedPath("@C:\\Users\\test\\")).toBe("C:/Users/test")
+    expect(pastedPath("d:")).toBe("d:/")
+    expect(pastedPath("D:\\")).toBe("D:/")
+    expect(pastedPath("'/Users/ana/notas.md'")).toBe("/Users/ana/notas.md")
+    expect(pastedPath("/")).toBe("/")
+    expect(pastedPath("   ")).toBe("")
   })
 
   test("isViewable: every file opens in the viewer, which draws the kinds it knows and reads or describes the rest", () => {
@@ -287,6 +300,39 @@ describe("the explorer the footer's folder opens", () => {
     explorer.pressFile(byLabel("          app.exe").path)
     expect(viewed).toEqual(["C:/Users/test/proyectos/notas.txt", "C:/Users/test/proyectos/app.exe"])
     expect(opened).toEqual([])
+  })
+
+  test("a path pasted in the field: the tree opens down to it, on its disk, and marks it in the middle; a file, in its folder", async () => {
+    const fake = fakeIO()
+    // What is on the fake disks: its folders, and the files they list.
+    const isDir = (path: string) => /^[CD]:\/$/.test(path) || path in TREE
+    const isThere = (native: string) => {
+      const path = native.replace(/\\/g, "/")
+      const at = path.lastIndexOf("/")
+      return isDir(path) || (TREE[path.slice(0, at)] ?? []).some((entry) => entry.name === path.slice(at + 1))
+    }
+    const explorer = createExplorer({ ...fake.io, isDir: async (path) => isDir(path), exists: async (native) => isThere(native) }, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    const marked = () => treeRows(explorer.state()).filter((row) => row.isFound).map(rowLabel)
+    await explorer.pickDrive("D:/")
+    const turn = explorer.state().turn ?? 0
+    await explorer.goTo(' "C:\\Users\\test\\proyectos\\notas.txt" ')
+    expect(explorer.state().drive).toBe("C:/")
+    expect(marked()).toEqual(["          notas.txt"])
+    // Asked to be put in the middle, again.
+    expect(explorer.state().top).toBe(-1)
+    expect(explorer.state().turn).toBe(turn + 1)
+    // A folder is marked the same way, and opened.
+    await explorer.goTo("C:\\Windows\\")
+    expect(marked()).toEqual(["  ▾ Windows"])
+    expect(treeRows(explorer.state()).map(rowLabel)).toContain("    ▸ System32")
+    // A path that is not there says so, and the tree stays.
+    await explorer.goTo("C:\\nada\\falta.txt")
+    expect(fake.toasts.at(-1)).toBe("no existe C:/nada/falta.txt.")
+    expect(marked()).toEqual(["  ▾ Windows"])
+    // ⊟ takes the mark away.
+    explorer.collapse()
+    expect(marked()).toEqual([])
   })
 
   test("↗ abrir en el sistema still opens the session's folder in the system's file manager, as the footer's folder did", async () => {
