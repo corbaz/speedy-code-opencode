@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test"
 
 import {
+  FILE_TOOLS_WIDTH,
+  badFileName,
   chainOf,
+  collapseLabel,
+  cutCells,
+  fileNameLabel,
+  fileTools,
   createExplorer,
   driveLabel,
   driveOf,
@@ -14,7 +20,8 @@ import {
   type ExplorerIO,
   type FsEntry,
 } from "../src/explorer"
-import { folderCommand } from "../src/footer"
+import { cells, folderCommand } from "../src/footer"
+import { promptInsertion } from "../src/viewer"
 
 describe("explorer helpers", () => {
   test("driveOf, chainOf and driveLabel: the disk a folder is on, each folder from the disk down to it, and the disk's name", () => {
@@ -108,13 +115,52 @@ describe("explorer helpers", () => {
     expect(windowTop(rows.map((row, i) => ({ ...row, isHere: i === 19 })), -1, 6)).toBe(14)
   })
 
-  test("isViewable: text, scripts, PDF and pictures open in the viewer, whatever their case; .gitignore too; other files do not", () => {
-    for (const name of ["a.md", "b.MARKDOWN", "c.txt", "d.sh", "e.bat", "install.PS1", "f.pdf", "g.png", "h.JPG", "i.jpeg", "j.gif", "k.bmp", "l.ico", "m.tif", "n.tiff", ".gitignore", ".GITIGNORE"]) {
+  test("isViewable: every file opens in the viewer, which draws the kinds it knows and reads or describes the rest", () => {
+    for (const name of ["a.md", "b.MARKDOWN", "c.txt", "install.PS1", "f.pdf", "h.JPG", ".gitignore", "a.ts", "bun.lock", "index.html", "logo.svg", "a.xlsx", "a.docx", "song.mp3", "clip.mp4", "cache.sqlite", "Atajo.lnk", "pagefile.sys", "a.exe", "main.py", "cert.pem", "archive.zip", ".env", "Makefile", "LICENSE", ".DS_Store"]) {
       expect([name, isViewable(name)]).toEqual([name, true])
     }
-    for (const name of ["pagefile.sys", "a.exe", "md", ".md", "notes.md.bak", ".env", "Makefile"]) {
-      expect([name, isViewable(name)]).toEqual([name, false])
+    expect(isViewable("")).toBe(false)
+  })
+
+  test("cutCells: a name keeps to its row, cut with …, wide characters counted as two cells", () => {
+    expect(cutCells("notas.txt", 20)).toBe("notas.txt")
+    expect(cutCells("guia_fundamentos_javascript_mouredevpro.pdf", 20)).toBe("guia_fundamentos_ja…")
+    expect(cells(cutCells("01-01-Qué es RAG y por qué es importante.mp4", 12))).toBeLessThanOrEqual(12)
+    expect(cells(cutCells("漢字漢字漢字漢字", 7))).toBeLessThanOrEqual(7)
+  })
+
+  test("badFileName: a new name is refused empty, as . or .., or with a folder separator or a character Windows forbids", () => {
+    expect(badFileName("apuntes.txt")).toBe("")
+    expect(badFileName("año 2026 (copia).md")).toBe("")
+    expect(badFileName("  ")).toBe("el nombre está vacío")
+    expect(badFileName("..")).toBe("ese nombre no es válido")
+    expect(badFileName(".")).toBe("ese nombre no es válido")
+    for (const name of ["a/b", "a\\b", "a:b", "a*b", "a?b", 'a"b', "a<b", "a>b", "a|b", "a\u0007b"]) {
+      expect([name, badFileName(name)]).toEqual([name, 'el nombre no puede tener \\ / : * ? " < > |'])
     }
+  })
+
+  test("a file's row: its name cut and filled with spaces up to its four tools, emoji or Nerd Fonts glyphs in their colors", () => {
+    const row = { path: "C:/x/un_nombre_muy_largo_de_archivo.txt", name: "un_nombre_muy_largo_de_archivo.txt", depth: 2, kind: "file" as const, isOpen: false, isHere: false }
+    const label = fileNameLabel(row, 30)
+    expect(cells(label)).toBe(30 - FILE_TOOLS_WIDTH)
+    expect(label.startsWith("      un_nombre")).toBe(true)
+    expect(label.trimEnd().endsWith("…")).toBe(true)
+    const short = fileNameLabel({ ...row, name: "a.md", depth: 0 }, 30)
+    expect(short).toBe("  a.md".padEnd(30 - FILE_TOOLS_WIDTH))
+    expect(fileTools("emoji", "", row.path).map((tool) => [tool.kind, tool.label, tool.color])).toEqual([
+      ["copy", " 📋", "#74c0fc"],
+      ["path", " 🔗", "#63e6be"],
+      ["rename", " ✏", "#b197fc"],
+      ["trash", " 🗑", "#ff8787"],
+    ])
+    expect(fileTools("nerd", "", row.path).map((tool) => tool.label)).toEqual([" ", " ", " ", " "])
+    // The tool just pressed is green, with no fill; the others keep their colors.
+    const flashed = fileTools("emoji", `path:${row.path}`, row.path)
+    expect(flashed.map((tool) => tool.color)).toEqual(["#74c0fc", "#51cf66", "#b197fc", "#ff8787"])
+    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#74c0fc", "#63e6be", "#b197fc", "#ff8787"])
+    expect(Object.keys(flashed[0]!)).not.toContain("bg")
+    expect([collapseLabel("emoji"), collapseLabel("nerd")]).toEqual([" ⊟ ", "  "])
   })
 })
 
@@ -140,20 +186,52 @@ const TREE: Record<string, Array<{ name: string; kind: FsEntry["kind"]; isLink?:
   "D:/": [{ name: "fotos", kind: "dir" }],
 }
 
-function fakeIO() {
+/** The tools' side of the explorer, as the tests drive it: what reached the clipboard, the prompt and the disk. */
+const noTools = {
+  copyFile: async () => false,
+  copyText: async () => false,
+  insert: async () => {},
+  ask: async () => "cancel",
+  rename: async () => false,
+  trash: async () => false,
+  exists: async () => false,
+  toast: () => {},
+  wait: async () => {},
+}
+
+function fakeIO(tree: typeof TREE = TREE) {
   const opened: string[] = []
   const viewed: string[] = []
+  const files = { copied: [] as string[], texts: [] as string[], renamed: [] as string[], trashed: [] as string[] }
+  const dialog = { answer: "cancel", asked: [] as string[] }
+  const toasts: string[] = []
+  // The prompt as the person left it: what is inserted lands at its end, where the cursor is.
+  const prompt = { text: "mirá este" }
+  const existing = new Set<string>()
+  let release: () => void = () => {}
   const io: ExplorerIO = {
     list: async (path) => {
-      const entries = TREE[path.replace(/\\/g, "/")]
+      const entries = tree[path.replace(/\\/g, "/")]
       if (!entries) throw new Error("EPERM")
       return entries.map((entry) => ({ isLink: false, ...entry }))
     },
     isDir: async (path) => /^[CD]:\/$/.test(path),
     openFolder: (folder) => void opened.push(folder),
     view: (path) => void viewed.push(path),
+    copyFile: async (native) => (files.copied.push(native), true),
+    copyText: async (text) => (files.texts.push(text), true),
+    insert: async (text, separator) => {
+      prompt.text += promptInsertion(prompt.text, text, separator)
+    },
+    ask: async (mode, native) => (dialog.asked.push(`${mode} ${native}`), dialog.answer),
+    rename: async (native, name, target) => (files.renamed.push(`${native} -> ${name} (${target})`), true),
+    trash: async (native) => (files.trashed.push(native), true),
+    exists: async (native) => existing.has(native),
+    toast: (message) => void toasts.push(message),
+    // A second passes when the test says so.
+    wait: () => new Promise<void>((done) => (release = done)),
   }
-  return { io, opened, viewed }
+  return { io, opened, viewed, files, dialog, toasts, prompt, existing, second: () => release() }
 }
 
 describe("the explorer the footer's folder opens", () => {
@@ -202,12 +280,12 @@ describe("the explorer the footer's folder opens", () => {
     const byLabel = (label: string) => rows.find((row) => rowLabel(row) === label)!
     expect(rowAction(byLabel("      ▾ proyectos ●"))).toBe("folder")
     expect(rowAction(byLabel("          notas.txt"))).toBe("view")
-    expect(rowAction(byLabel("          app.exe"))).toBe("none")
+    expect(rowAction(byLabel("          app.exe"))).toBe("view")
     expect(rowAction(byLabel("  ↪ Documents and Settings"))).toBe("none")
     expect(rowAction(byLabel("          (sin acceso)"))).toBe("none")
     explorer.pressFile(byLabel("          notas.txt").path)
     explorer.pressFile(byLabel("          app.exe").path)
-    expect(viewed).toEqual(["C:/Users/test/proyectos/notas.txt"])
+    expect(viewed).toEqual(["C:/Users/test/proyectos/notas.txt", "C:/Users/test/proyectos/app.exe"])
     expect(opened).toEqual([])
   })
 
@@ -238,6 +316,7 @@ describe("the explorer the footer's folder opens", () => {
       isDir: async () => false,
       openFolder: () => {},
       view: () => {},
+      ...noTools,
     }
     const explorer = createExplorer(io, "darwin")
     await explorer.open("/Users/me")
@@ -254,5 +333,125 @@ describe("the explorer the footer's folder opens", () => {
     await explorer.pickDrive("D:/")
     expect(seen.at(-1)).toBe("D:/")
     expect(seen.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe("each file's tools", () => {
+  const NOTAS = "C:/Users/test/proyectos/notas.txt"
+  const NATIVE = "C:\\Users\\test\\proyectos\\notas.txt"
+
+  test("📋 puts the file on the clipboard and attaches it to the prompt as @path; 🔗 its path, to both; each turns green for a second", async () => {
+    const fake = fakeIO()
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    const copying = explorer.copyFile(NOTAS)
+    await copying
+    expect(fake.files.copied).toEqual([NATIVE])
+    expect(fake.prompt.text).toBe(`mirá este @${NATIVE} `)
+    expect(fake.toasts.at(-1)).toBe("notas.txt está adjunto en el prompt y en el portapapeles; pegalo en una carpeta.")
+    expect(explorer.state().flashed).toBe(`copy:${NOTAS}`)
+    fake.second()
+    await Bun.sleep(0)
+    expect(explorer.state().flashed).toBe("")
+    // The text before the cursor already ends in a space: no second one.
+    await explorer.copyPath(NOTAS)
+    expect(fake.files.texts).toEqual([NATIVE])
+    expect(fake.prompt.text).toBe(`mirá este @${NATIVE} ${NATIVE} `)
+    expect(fake.toasts.at(-1)).toBe(`la ruta ${NATIVE} está en el prompt y en el portapapeles`)
+    expect(explorer.state().flashed).toBe(`path:${NOTAS}`)
+  })
+
+  test("a path with a space is mentioned in quotes; a copy that failed still attaches, and says so", async () => {
+    const fake = fakeIO()
+    fake.io.copyFile = async () => false
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    fake.prompt.text = ""
+    await explorer.copyFile("C:/Mis Cosas/a b.txt")
+    expect(fake.prompt.text).toBe('@"C:\\Mis Cosas\\a b.txt" ')
+    expect(fake.toasts.at(-1)).toBe("a b.txt está adjunto en el prompt; no pude copiarlo al portapapeles.")
+  })
+
+  test("✏ asks the new name in the dialog: cancel leaves the file; a name renames it and the folder is read again", async () => {
+    const tree = { ...TREE }
+    const fake = fakeIO(tree)
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    await explorer.rename(NOTAS)
+    expect(fake.dialog.asked).toEqual([`rename ${NATIVE}`])
+    expect(fake.files.renamed).toEqual([])
+    // dialog.ps1 answers the name in Base64, UTF-8: "apuntes.txt".
+    fake.dialog.answer = "rename YXB1bnRlcy50eHQ="
+    tree["C:/Users/test/proyectos"] = [{ name: "facturas", kind: "dir" }, { name: "apuntes.txt", kind: "file" }]
+    await explorer.rename(NOTAS)
+    expect(fake.files.renamed).toEqual([`${NATIVE} -> apuntes.txt (C:\\Users\\test\\proyectos\\apuntes.txt)`])
+    expect(fake.toasts.at(-1)).toBe("notas.txt ahora se llama apuntes.txt.")
+    expect(treeRows(explorer.state()).map(rowLabel)).toContain("          apuntes.txt")
+    expect(treeRows(explorer.state()).map(rowLabel)).not.toContain("          notas.txt")
+  })
+
+  test("✏ refuses a bad name or one another file has, with the reason; the Mac's dialog answers `name <text>`", async () => {
+    const fake = fakeIO()
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    fake.dialog.answer = `rename ${Buffer.from("a:b.txt").toString("base64")}`
+    await explorer.rename(NOTAS)
+    expect(fake.toasts.at(-1)).toBe('no renombré notas.txt: el nombre no puede tener \\ / : * ? " < > |.')
+    fake.existing.add("C:\\Users\\test\\proyectos\\app.exe")
+    fake.dialog.answer = `rename ${Buffer.from("app.exe").toString("base64")}`
+    await explorer.rename(NOTAS)
+    expect(fake.toasts.at(-1)).toBe("ya hay un archivo app.exe en esa carpeta.")
+    // The same file in another case is a rename on Windows, not a clash.
+    fake.existing.add("C:\\Users\\test\\proyectos\\NOTAS.txt")
+    fake.dialog.answer = `rename ${Buffer.from("NOTAS.txt").toString("base64")}`
+    await explorer.rename(NOTAS)
+    expect(fake.files.renamed).toEqual([`${NATIVE} -> NOTAS.txt (C:\\Users\\test\\proyectos\\NOTAS.txt)`])
+
+    const mac = fakeIO()
+    mac.io.list = async (path) => (path === "/Users/me" ? [{ name: "a.md", kind: "file", isLink: false }] : [])
+    const onMac = createExplorer(mac.io, "darwin")
+    await onMac.open("/Users/me")
+    mac.dialog.answer = "name b.md"
+    await onMac.rename("/Users/me/a.md")
+    expect(mac.dialog.asked).toEqual(["rename /Users/me/a.md"])
+    expect(mac.files.renamed).toEqual(["/Users/me/a.md -> b.md (/Users/me/b.md)"])
+  })
+
+  test("🗑 asks in the dialog: cancel leaves the file; delete sends it to the trash and the folder is read again", async () => {
+    const tree = { ...TREE }
+    const fake = fakeIO(tree)
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    await explorer.trash(NOTAS)
+    expect(fake.dialog.asked).toEqual([`delete ${NATIVE}`])
+    expect(fake.files.trashed).toEqual([])
+    fake.dialog.answer = "delete"
+    tree["C:/Users/test/proyectos"] = [{ name: "facturas", kind: "dir" }]
+    await explorer.trash(NOTAS)
+    expect(fake.files.trashed).toEqual([NATIVE])
+    expect(fake.toasts.at(-1)).toBe("notas.txt fue a la papelera.")
+    expect(treeRows(explorer.state()).map(rowLabel)).not.toContain("          notas.txt")
+    // One the system would not take says so, and the folder stays as it was.
+    fake.io.trash = async () => false
+    await explorer.trash("C:/Users/test/proyectos/app.exe")
+    expect(fake.toasts.at(-1)).toBe("no pude mandar app.exe a la papelera.")
+  })
+
+  test("⊟ collapses the tree back to the session's folder, on its disk, in the middle", async () => {
+    const fake = fakeIO()
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    await explorer.toggleFolder("C:/Windows")
+    await explorer.pickDrive("D:/")
+    const turn = explorer.state().turn ?? 0
+    explorer.collapse()
+    expect(explorer.state().drive).toBe("C:/")
+    expect(explorer.state().top).toBe(-1)
+    expect(explorer.state().turn).toBe(turn + 1)
+    const labels = treeRows(explorer.state()).map(rowLabel)
+    expect(labels).toContain("      ▾ proyectos ●")
+    expect(labels).toContain("  ▸ Windows")
+    expect(labels).not.toContain("    ▸ System32")
+    expect(explorer.state().flashed).toBe("collapse:")
   })
 })

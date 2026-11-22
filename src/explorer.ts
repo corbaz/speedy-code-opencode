@@ -5,7 +5,16 @@
  * Everything here is pure or works through the `ExplorerIO` it is given, so the panel that draws it
  * (`explorer-panel.tsx`) is a view of `ExplorerState` and the tests drive it with a fake file system.
  * The helpers are the Claude Code plugin's own, ported as they are.
+ *
+ * Each file has four tools at its right: 📋 puts it on the clipboard and attaches it to the prompt as
+ * `@path`, 🔗 puts its path in both, ✏ renames it and 🗑 sends it to the trash, each of the last two after a
+ * dialog. ⊟ beside the disks collapses the tree back to the session's folder.
  */
+
+import { newNameOf } from "./file-tools"
+import { cells } from "./footer"
+import type { IconSet } from "./icons"
+import { fileMention } from "./viewer"
 
 /** An entry of a folder as the file system reports it. */
 export interface FsEntry {
@@ -40,6 +49,10 @@ export interface ExplorerState {
   readonly caseless: boolean
   /** The tree row to show first; -1 puts the session's folder in the middle. */
   readonly top: number
+  /** The tool just pressed (`copy:<path>`, `collapse:`), green for a second; empty or absent: none. */
+  readonly flashed?: string
+  /** Counts the collapses: each one puts the session's folder in the middle again, even with `top` already -1. */
+  readonly turn?: number
 }
 
 /** What the explorer reads and does outside itself. */
@@ -51,6 +64,24 @@ export interface ExplorerIO {
   openFolder(folder: string): void
   /** Shows a file in the viewer popup. */
   view(path: string): void
+  /** Puts a file on the clipboard as a file, to paste in a folder; whether it went. */
+  copyFile(native: string): Promise<boolean>
+  /** Puts a text on the clipboard; whether it went. */
+  copyText(text: string): Promise<boolean>
+  /** Writes `text` into the prompt at the cursor, `separator` before it unless what is before ends apart: see promptInsertion. */
+  insert(text: string, separator: " " | "\n"): Promise<void>
+  /** Asks in the dialog: `rename <base64 name>` or `name <name>`, `delete`, or `cancel`. */
+  ask(mode: "rename" | "delete", native: string): Promise<string>
+  /** Renames a file in its folder; whether it did. */
+  rename(native: string, name: string, nativeTarget: string): Promise<boolean>
+  /** Sends a file to the trash, where it can be got back; whether it went. */
+  trash(native: string): Promise<boolean>
+  /** Whether something is at a path. */
+  exists(native: string): Promise<boolean>
+  /** Says something to the person, an error or not. */
+  toast(message: string, isError?: boolean): void
+  /** Waits; the pressed tool is green for this long. */
+  wait(ms: number): Promise<void>
 }
 
 /** The most entries a folder shows: a folder with thousands would bury the tree. */
@@ -153,15 +184,74 @@ export function windowTop(rows: readonly TreeRow[], top: number, room: number): 
   return Math.min(last, Math.max(0, here - Math.floor(room / 2)))
 }
 
-/** The files the explorer opens in the viewer when pressed: text, scripts, PDF and pictures. */
-const VIEWABLE_EXTENSIONS = new Set(["md", "markdown", "txt", "sh", "bat", "ps1", "pdf", "png", "jpg", "jpeg", "gif", "bmp", "ico", "tif", "tiff"])
-const VIEWABLE_NAMES = new Set([".gitignore"])
-
-/** Whether the explorer opens a file of this name in the viewer. */
+/**
+ * Whether the explorer opens a file of this name in the viewer: every file. The viewer draws the kinds it
+ * knows (text and code, pages, PDF, pictures, documents, sound and video, databases, shortcuts), reads any
+ * other as text when it is text, and describes it when it is not.
+ */
 export function isViewable(name: string): boolean {
-  const lower = name.toLowerCase()
-  const dot = lower.lastIndexOf(".")
-  return VIEWABLE_NAMES.has(lower) || (dot > 0 && VIEWABLE_EXTENSIONS.has(lower.slice(dot + 1)))
+  return name.length > 0
+}
+
+/** A text cut to `most` cells, ending in … when it is longer: a name on one row, whatever its length. */
+export function cutCells(text: string, most: number): string {
+  if (cells(text) <= most) return text
+  let out = ""
+  for (const char of Array.from(text)) {
+    if (cells(out + char) > most - 1) break
+    out += char
+  }
+  return `${out}…`
+}
+
+/** Why a new file name cannot be used, or empty when it can: not empty, no folder separators, none of Windows' forbidden characters. */
+export function badFileName(name: string): string {
+  const trimmed = name.trim()
+  if (!trimmed) return "el nombre está vacío"
+  if (trimmed === "." || trimmed === "..") return "ese nombre no es válido"
+  if (/[\\/:*?"<>|]/.test(trimmed) || /\p{Cc}/u.test(trimmed)) return 'el nombre no puede tener \\ / : * ? " < > |'
+  return ""
+}
+
+/** What each file's tool does. */
+export type FileToolKind = "copy" | "path" | "rename" | "trash"
+
+/** Each file's tools: what a press does, its emoji, its Nerd Fonts glyph and its color. */
+export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, string]> = [
+  ["copy", "📋", "", "#74c0fc"],
+  ["path", "🔗", "", "#63e6be"],
+  ["rename", "✏", "", "#b197fc"],
+  ["trash", "🗑", "", "#ff8787"],
+]
+
+/** The cells the four tools take at a file's right, a spare one with them: an emoji's width varies by terminal. */
+export const FILE_TOOLS_WIDTH = 13
+
+/** The color a pressed tool takes for a second, as a sign the press was taken: green, with no fill. */
+export const FLASH_COLOR = "#51cf66"
+
+/** How long a pressed tool stays green. */
+export const FLASH_MS = 1000
+
+/** A file's name as its row writes it: indented, cut with … to its room, and filled with spaces up to its tools. */
+export function fileNameLabel(row: TreeRow, width: number): string {
+  const room = Math.max(4, width - FILE_TOOLS_WIDTH)
+  const cut = cutCells(`${"  ".repeat(row.depth)}  ${row.name}`, room)
+  return cut + " ".repeat(Math.max(0, room - cells(cut)))
+}
+
+/** A file's tools as its row draws them: each its glyph or emoji and its color, the one just pressed green. */
+export function fileTools(icons: IconSet, flashed: string, path: string): Array<{ kind: FileToolKind; label: string; color: string }> {
+  return FILE_TOOLS.map(([kind, emoji, glyph, color]) => ({
+    kind,
+    label: ` ${icons === "nerd" ? glyph : emoji}`,
+    color: flashed === `${kind}:${path}` ? FLASH_COLOR : color,
+  }))
+}
+
+/** ⊟ beside the disks, as the icon set draws it. */
+export function collapseLabel(icons: IconSet): string {
+  return ` ${icons === "nerd" ? "" : "⊟"} `
 }
 
 /** A row as the panel writes it: indented by its depth, a folder with its open mark, the session's marked ●. */
@@ -172,12 +262,25 @@ export function rowLabel(row: TreeRow): string {
   return `${indent}${row.kind === "link" ? "↪ " : "  "}${row.name}`
 }
 
-/** What a press on a row does: a folder opens or closes, a file the viewer shows opens it, the rest nothing. */
+/** What a press on a row does: a folder opens or closes, a file opens the viewer, the rest (links, notes) nothing. */
 export function rowAction(row: TreeRow): "folder" | "view" | "none" {
   if (row.kind === "dir") return "folder"
   if (row.kind === "file" && isViewable(row.name)) return "view"
   return "none"
 }
+
+/** A path as the system writes it: with `\` on Windows. */
+const nativeOf = (path: string, platform: string) => (platform === "win32" ? path.replace(/\//g, "\\") : path)
+
+/** The folder a file of the tree is in: a disk's root keeps its `/`. */
+const folderOf = (path: string) => {
+  const parent = path.slice(0, path.lastIndexOf("/"))
+  if (parent === "") return "/"
+  return parent.endsWith(":") ? `${parent}/` : parent
+}
+
+/** A file's name, the last part of its path. */
+const nameOf = (path: string) => slashed(path).split("/").pop() ?? path
 
 /** A folder read for the tree; `denied` when it cannot be read. */
 async function readFolder(io: ExplorerIO, path: string): Promise<ExplorerListing | "denied"> {
@@ -214,6 +317,16 @@ export interface Explorer {
   openSystem(): void
   /** A file pressed: the viewer shows it, when it is one the viewer shows. */
   pressFile(path: string): void
+  /** 📋: the file to the clipboard as a file, and attached to the prompt as `@path`. */
+  copyFile(path: string): Promise<void>
+  /** 🔗: the file's path, as the system writes it, to the clipboard and into the prompt. */
+  copyPath(path: string): Promise<void>
+  /** ✏: the dialog asks the new name, then the file is renamed in its folder and the folder read again. */
+  rename(path: string): Promise<void>
+  /** 🗑: the dialog asks, then the file goes to the trash and its folder is read again. */
+  trash(path: string): Promise<void>
+  /** ⊟: every folder closes but those down to the session's folder, on its disk, which is put in the middle. */
+  collapse(): void
 }
 
 /** The explorer's state and what its presses do; `onChange` hears every new state. */
@@ -226,6 +339,37 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     onChange?.(state)
   }
   const caseless = platform === "win32"
+  // The tool pressed turns green, and back to its color a second later unless another was pressed meanwhile.
+  const flash = (key: string) => {
+    set((now) => ({ ...now, flashed: key }))
+    void io.wait(FLASH_MS).then(() => {
+      if (state.flashed === key) set((now) => ({ ...now, flashed: "" }))
+    })
+  }
+  // A folder of the tree read again, after a file in it was renamed or sent to the trash.
+  const reread = async (path: string) => {
+    const key = pathKey(path, state.caseless)
+    const listed = await readFolder(io, path)
+    set((now) => ({ ...now, listed: { ...now.listed, [key]: listed } }))
+  }
+  const renameTo = async (path: string, wanted: string) => {
+    const name = wanted.trim()
+    const old = nameOf(path)
+    if (!name || name === old) return
+    const why = badFileName(name)
+    if (why) return io.toast(`no renombré ${old}: ${why}.`, true)
+    const folder = folderOf(slashed(path))
+    const target = joinPath(folder, name)
+    // The same file in another case is a rename too; another file is never overwritten.
+    if (name.toLowerCase() !== old.toLowerCase() && (await io.exists(nativeOf(target, platform)))) {
+      return io.toast(`ya hay un archivo ${name} en esa carpeta.`, true)
+    }
+    if (!(await io.rename(nativeOf(path, platform), name, nativeOf(target, platform)))) {
+      return io.toast(`no pude renombrar ${old}.`, true)
+    }
+    io.toast(`${old} ahora se llama ${name}.`)
+    await reread(folder)
+  }
   return {
     state: () => state,
     async open(where) {
@@ -259,8 +403,46 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       io.openFolder(folder)
     },
     pressFile(path) {
-      const name = slashed(path).split("/").pop() ?? ""
-      if (isViewable(name)) io.view(path)
+      if (isViewable(nameOf(path))) io.view(path)
+    },
+    async copyFile(path) {
+      flash(`copy:${path}`)
+      const native = nativeOf(path, platform)
+      const isCopied = await io.copyFile(native)
+      // Attached to the prompt too, as a file is mentioned there: @path.
+      await io.insert(fileMention(native), " ")
+      const name = nameOf(path)
+      if (isCopied) io.toast(`${name} está adjunto en el prompt y en el portapapeles; pegalo en una carpeta.`)
+      else io.toast(`${name} está adjunto en el prompt; no pude copiarlo al portapapeles.`, true)
+    },
+    async copyPath(path) {
+      flash(`path:${path}`)
+      const native = nativeOf(path, platform)
+      const isCopied = await io.copyText(native)
+      // Into the prompt as well, so it need not be pasted; the clipboard keeps it for elsewhere.
+      await io.insert(native, " ")
+      if (isCopied) io.toast(`la ruta ${native} está en el prompt y en el portapapeles`)
+      else io.toast(`la ruta ${native} está en el prompt; no pude copiarla al portapapeles.`, true)
+    },
+    async rename(path) {
+      const name = newNameOf(await io.ask("rename", nativeOf(path, platform)))
+      if (name) await renameTo(path, name)
+    },
+    async trash(path) {
+      const native = nativeOf(path, platform)
+      if ((await io.ask("delete", native)) !== "delete") return
+      const name = nameOf(path)
+      if (!(await io.trash(native))) return io.toast(`no pude mandar ${name} a la papelera.`, true)
+      io.toast(`${name} fue a la papelera.`)
+      await reread(folderOf(slashed(path)))
+    },
+    collapse() {
+      flash("collapse:")
+      set((now) => {
+        const drive = driveOf(now.here, now.drives, now.caseless) || now.drive
+        const chain = drive ? chainOf(now.here, drive).map((path) => pathKey(path, now.caseless)) : []
+        return { ...now, drive, open: chain, top: -1, turn: (now.turn ?? 0) + 1 }
+      })
     },
   }
 }

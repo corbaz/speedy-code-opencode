@@ -81,11 +81,21 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   folder opens or closes on a click and is read afresh; links show `↪` and are not followed; a folder
   lists at most 500 entries, then `… y N más`. Each disk keeps the folders open in it.
   `↗ abrir en el sistema` still opens the session's folder in Explorer, or in Finder; so does the
-  folder's click where the host has no side panel to open, as on the home screen. A click on a `.md`,
-  `.markdown`, `.txt`, `.sh`, `.bat`, `.ps1`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.ico`, `.tif`,
-  `.tiff` file or a `.gitignore`, drawn yellow, shows it in a popup in the middle of the screen, with scroll bars when
-  it does not fit (`engine/view_file.ps1`; Quick Look on macOS); markdown opens drawn, with a
-  Preview/MD switch beside the title; other files are listed dimmed. One
+  folder's click where the host has no side panel to open, as on the home screen. `⊟` beside the
+  disks collapses the tree back to the session's folder. Every file is drawn yellow, its name cut
+  with `…` to its row, and a click shows it in a popup in the middle of the screen with dark scroll
+  bars (`engine/view_file.ps1`; Quick Look on macOS): text and code selectable, with Copiar; md, html
+  and svg drawn, with a switch to their source; minified code laid out; pdf (its pages, and its text by
+  `pdfminer.six`), pictures, spreadsheets and documents; sound and video, played; databases as tables;
+  shortcuts with their target; any other file read as text when it is text and described when it is
+  not. Copiar's text goes to the clipboard and into the prompt, on a line of its own; a picture it takes
+  is attached to the prompt as `@path`. While the pointer is on a file's row, its name keeps a yellow
+  fill. At the right of every file: `📋` puts the file on the clipboard (to paste in a folder) and
+  attaches it to the prompt as `@path`; `🔗` puts its path on the clipboard and in the prompt; `✏`
+  asks the new name in a dialog in the middle of the screen (`engine/dialog.ps1`; a Finder dialog on
+  macOS) and renames it, refusing an empty name, `\ / : * ? " < > |` or another file's name; `🗑` asks
+  and sends it to the Recycle Bin, or the Trash. With ⚙'s Nerd Fonts icons they are glyphs in their
+  colors; a pressed `📋` or `🔗` turns green for a second. One
   popup at a time: another closes it. In the status line, a click on `opencode:v…` opens that version's
   release notes and one on `5hs`, `semana` or `mes` the console of the workspace the host names: the links are in Claude's orange. speedy-code's version,
   `vyy.mmdd(hhmm)` (the moment of the clone's last commit, in Buenos Aires time), closes the

@@ -25,6 +25,7 @@ import {
   type FooterControl,
   type SpeechState,
 } from "./footer"
+import { dialogAnswer, dialogCommand, fileCopyCommand, renameCommand, trashCommand } from "./file-tools"
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
 import { createViewerReader, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
@@ -1183,6 +1184,31 @@ export default Plugin.define({
       isDir: async (path) => (await stat(path)).isDirectory(),
       openFolder: openSystemFolder,
       view: (path) => viewFile(path, "view_file.ps1", "no pude abrir el archivo"),
+      copyFile: async (native) => {
+        const command = fileCopyCommand(process.platform, native)
+        return command !== undefined && (await run(command.argv, command.env)).stdout.trim() === "copied"
+      },
+      copyText: async (text) => (await writeClipboard(text)) || (context.renderer?.copyToClipboardOSC52?.(text) ?? false),
+      // A file's mention never goes through the clipboard: it holds the file 📋 just put there.
+      insert: (text, separator) => insertInPrompt(text, separator, false),
+      ask: async (mode, native) => {
+        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT)
+        return command ? dialogAnswer((await run(command.argv, command.env)).stdout) : "cancel"
+      },
+      rename: async (native, name, target) => {
+        const command = renameCommand(process.platform, native, name, target)
+        return (await run(command.argv, command.env)).stdout.trim() === "renamed"
+      },
+      trash: async (native) => {
+        const command = trashCommand(process.platform, native)
+        return command !== undefined && (await run(command.argv, command.env)).stdout.trim() === "deleted"
+      },
+      exists: (native) => stat(native).then(
+        () => true,
+        () => false,
+      ),
+      toast: (message, isError) => toast(message, isError ? "error" : "info"),
+      wait: (ms) => new Promise((done) => setTimeout(done, ms)),
     }
     const explorer = createExplorer(explorerIO, process.platform, (state) => setExplorerState(() => state))
 
@@ -1711,9 +1737,17 @@ export default Plugin.define({
             api={{
               state: explorerState,
               width: () => input.width,
+              icons: () => (settings.icons === "nerd" ? "nerd" : "emoji"),
               pickDrive: (drive) => void explorer.pickDrive(drive),
               toggleFolder: (path) => void explorer.toggleFolder(path),
               pressFile: (path) => explorer.pressFile(path),
+              tool: (kind, path) => {
+                if (kind === "copy") void explorer.copyFile(path)
+                else if (kind === "path") void explorer.copyPath(path)
+                else if (kind === "rename") void explorer.rename(path)
+                else void explorer.trash(path)
+              },
+              collapse: () => explorer.collapse(),
               openSystem: () => explorer.openSystem(),
               close: () => input.close(),
             }}
