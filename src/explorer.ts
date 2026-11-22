@@ -8,7 +8,7 @@
  *
  * Each file has four tools at its right: 📋 puts it on the clipboard and attaches it to the prompt as
  * `@path`, 🔗 puts its path in both, ✏ renames it and 🗑 sends it to the trash, each of the last two after a
- * dialog. ⊟ beside the disks collapses the tree back to the session's folder.
+ * dialog. ⊟ beside the disks collapses every disk; the session's stays open down to its folder.
  */
 
 import { newNameOf } from "./file-tools"
@@ -341,7 +341,10 @@ export interface Explorer {
   rename(path: string): Promise<void>
   /** 🗑: the dialog asks, then the file goes to the trash and its folder is read again. */
   trash(path: string): Promise<void>
-  /** ⊟: every folder closes but those down to the session's folder, on its disk, which is put in the middle. */
+  /**
+   * ⊟: every disk collapses. On the session's, every folder closes but those down to its folder; on the others,
+   * all close but the root. The disk shown stays shown: the session's puts its folder in the middle, another its top.
+   */
   collapse(): void
   /**
    * A path pasted in the field under the disks: the tree opens down to it, on its disk, and puts it in the
@@ -472,9 +475,12 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     collapse() {
       flash("collapse:")
       set((now) => {
-        const drive = driveOf(now.here, now.drives, now.caseless) || now.drive
-        const chain = drive ? chainOf(now.here, drive).map((path) => pathKey(path, now.caseless)) : []
-        return { ...now, drive, open: chain, top: -1, turn: (now.turn ?? 0) + 1, found: undefined }
+        const home = driveOf(now.here, now.drives, now.caseless)
+        const chain = home ? chainOf(now.here, home).map((path) => pathKey(path, now.caseless)) : []
+        const drive = now.drive || home
+        const root = pathKey(drive, now.caseless)
+        const open = chain.includes(root) || !drive ? chain : [...chain, root]
+        return { ...now, drive, open, top: drive === home ? -1 : 0, turn: (now.turn ?? 0) + 1, found: undefined }
       })
     },
     async goTo(text) {

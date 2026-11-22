@@ -493,7 +493,7 @@ describe("each file's tools", () => {
     expect(fake.toasts.at(-1)).toBe("no pude mandar app.exe a la papelera.")
   })
 
-  test("⊟ collapses the tree back to the session's folder, on its disk, in the middle", async () => {
+  test("⊟ collapses every disk: the session's open down to its folder, the others to their root; the disk shown stays", async () => {
     const fake = fakeIO()
     const explorer = createExplorer(fake.io, "win32")
     await explorer.open("C:\\Users\\test\\proyectos")
@@ -501,9 +501,17 @@ describe("each file's tools", () => {
     await explorer.pickDrive("D:/")
     const turn = explorer.state().turn ?? 0
     explorer.collapse()
+    // Shown on D:, it stays on D:, at its top, its root open and nothing under it.
+    expect(explorer.state().drive).toBe("D:/")
+    expect(explorer.state().top).toBe(0)
+    expect(explorer.state().turn).toBe(turn + 1)
+    expect(explorer.state().open.filter((key) => key.startsWith("d:"))).toEqual(["d:/"])
+    // The session's disk, picked again, shows its folder in the middle and the rest closed.
+    await explorer.pickDrive("C:/")
+    expect(explorer.state().top).toBe(-1)
+    explorer.collapse()
     expect(explorer.state().drive).toBe("C:/")
     expect(explorer.state().top).toBe(-1)
-    expect(explorer.state().turn).toBe(turn + 1)
     const labels = treeRows(explorer.state()).map(rowLabel)
     expect(labels).toContain("      ▾ proyectos ●")
     expect(labels).toContain("  ▸ Windows")

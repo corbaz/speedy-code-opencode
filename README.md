@@ -82,7 +82,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   lists at most 500 entries, then `… y N más`. Each disk keeps the folders open in it.
   `↗ abrir en el sistema` still opens the session's folder in Explorer, or in Finder; so does the
   folder's click where the host has no side panel to open, as on the home screen. `⊟` beside the
-  disks collapses the tree back to the session's folder. Every file is drawn yellow, its name cut
+  disks collapses every disk: the session's stays open down to its folder, the others close to their
+  first level, and the disk shown stays shown. Every file is drawn yellow, its name cut
   with `…` to its row, and a click shows it in a popup in the middle of the screen with dark scroll
   bars (`engine/view_file.ps1`; Quick Look on macOS): text and code selectable, with Copiar; md, html
   and svg drawn, with a switch to their source; minified code laid out; pdf (its pages, and its text by

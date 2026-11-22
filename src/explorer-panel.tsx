@@ -1,6 +1,6 @@
 /**
  * The explorer as the host's side panel draws it (`session.panel`, opened by `ui.panel.open`): the disks
- * on top, the one shown underlined, ⊟ to collapse the tree, `↗ abrir en el sistema` and the close mark
+ * on top, the one shown underlined, ⊟ to collapse every disk, `↗ abrir en el sistema` and the close mark
  * beside them; under them a field a path is pasted in, Enter, and the tree opens down to it and marks it;
  * under a rule, the disk's tree, the session's folder marked ● and put in the middle when the explorer
  * opens. The tree scrolls under the disks and the field, which stay.
@@ -55,7 +55,7 @@ export interface ExplorerPanelApi {
   pressFile(path: string): void
   /** A file's tool pressed. */
   tool(kind: FileToolKind, path: string): void
-  /** ⊟: the tree back to the session's folder. */
+  /** ⊟: every disk collapses; the session's stays open down to its folder. */
   collapse(): void
   /** A path pasted in the field, Enter: the tree opens down to it and marks it. */
   goTo(text: string): void
