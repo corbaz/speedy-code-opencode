@@ -83,8 +83,12 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   chosen disk's tree, open down to the session's folder, which is marked `●` and put in the middle. A
   folder opens or closes on a click and is read afresh; links show `↪` and are not followed; a folder
   lists at most 500 entries, then `… y N más`. Each disk keeps the folders open in it.
-  `↗ abrir en el sistema` still opens the session's folder in Explorer, or in Finder; so does the
-  folder's click where the host has no side panel to open, as on the home screen. `⊟` beside the
+  On the home screen, where OpenCode has no side panel, the mod draws the same explorer at the right
+  of the screen, over it, above the footer; a session opened from there takes it to the side panel.
+  Under the disks, a field takes a path pasted (`D:\Excel\rand.xlsx`, quoted or not; one not absolute
+  is taken from the session's folder) and, on Enter, opens the tree down to it and marks it in yellow
+  until the next press. `↗ abrir en el sistema` still opens the session's folder in Explorer, or in
+  Finder. `⊟` beside the
   disks collapses every disk: the session's stays open down to its folder, the others close to their
   first level, and the disk shown stays shown. Every file is drawn yellow, its name cut
   with `…` to its row, and a click shows it in a popup in the middle of the screen with dark scroll
