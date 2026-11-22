@@ -90,7 +90,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   `pdfminer.six`), pictures, spreadsheets and documents; sound and video, played; databases as tables;
   shortcuts with their target; any other file read as text when it is text and described when it is
   not. Copiar's text goes to the clipboard and into the prompt, on a line of its own; a picture it takes
-  is attached to the prompt as `@path`. While the pointer is on a file's row, its name keeps a yellow
+  is attached to the prompt as `@path`. `✥` beside the popup's `×`, held down with the mouse, carries the
+  popup elsewhere to read what is behind it; opened again, it stands in the middle. While the pointer is on a file's row, its name keeps a yellow
   fill. At the right of every file: `📋` puts the file on the clipboard (to paste in a folder) and
   attaches it to the prompt as `@path`; `🔗` puts its path on the clipboard and in the prompt; `✏`
   asks the new name in a dialog in the middle of the screen (`engine/dialog.ps1`; a Finder dialog on
