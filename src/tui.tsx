@@ -103,6 +103,7 @@ interface EditorShape {
   /** Where the cursor is, in characters from the start. */
   readonly cursorOffset?: number
   readonly isDestroyed?: boolean
+  focus?: () => void
 }
 
 /**
@@ -427,6 +428,8 @@ export default Plugin.define({
       if (field) promptSeen = field
       return promptSeen && !promptSeen.isDestroyed ? promptSeen : undefined
     }
+    // Looked for twice a second, so the field is known before a press in the side panel takes the focus.
+    const promptWatch = setInterval(() => { promptField() }, 500)
 
     /**
      * Puts `text` into the prompt at the cursor, as typed there: see promptInsertion. Without the prompt's
@@ -438,6 +441,8 @@ export default Plugin.define({
       if (field?.insertText) {
         const draft = field.plainText ?? ""
         field.insertText(promptInsertion(draft.slice(0, field.cursorOffset ?? draft.length), text, separator))
+        // The keys go back to the prompt, so what is typed next follows what was put there.
+        field.focus?.()
         return
       }
       if (byClipboard && (await writeClipboard(promptInsertion("", text, separator)))) context.keymap.dispatch("prompt.paste")
@@ -1757,6 +1762,7 @@ export default Plugin.define({
     })
 
     return () => {
+      clearInterval(promptWatch)
       disposeExplorer()
       disposeNarration()
       disposeTurn()
