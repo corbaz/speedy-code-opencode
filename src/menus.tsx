@@ -8,7 +8,7 @@
 
 import { For, Show, createSignal } from "solid-js"
 
-import { AGENT_COLOR, DISABLED_COLOR, SESSIONS_COLOR, fit, type FooterControl, type SpeechState } from "./footer"
+import { AGENT_COLOR, DISABLED_COLOR, LABEL_FILL, SESSIONS_COLOR, fit, type FooterControl, type SpeechState } from "./footer"
 import { sessionStamp, type SessionRow } from "./sessions"
 import type { AgentRow } from "./agents"
 import { clipParts, type HistoryClip } from "./history"
@@ -178,6 +178,9 @@ export interface MenuApi {
   /** Changes the icon set: emojis, or Nerd Fonts glyphs. */
   readonly toggleIcons: () => void
   readonly icons: () => IconSet
+  /** Shows or hides the footer controls' names above them. */
+  readonly toggleLabels: () => void
+  readonly labels: () => boolean
   /** Sets the terminal's font to this family at this size, in points. */
   readonly setFont: (family: FontFamily, size: number) => void
   /** The size last set from here; 0 while the terminal keeps its own font. */
@@ -770,6 +773,15 @@ function SettingsMenu(props: { api: MenuApi }) {
         <Show when={!narrow()}>
           <Label text="(¿cuadrados? falta una Nerd Font)" dim />
         </Show>
+      </Setting>
+      <Setting name=" ⓘ  Ver labels " color={LABEL_FILL} state={api.labels() ? "● al pasar el mouse" : "○ ocultas"} on={api.labels()}>
+        <Btn
+          label={api.labels() ? " Ocultar labels " : " Mostrar labels "}
+          bold
+          color="black"
+          bg={api.labels() ? "#868e96" : LABEL_FILL}
+          onPress={() => api.toggleLabels()}
+        />
       </Setting>
       {/* The terminal's own font: a program in a terminal has none, so the terminal's settings are changed. */}
       <Setting

@@ -160,6 +160,9 @@ export function opensFolder(lastMs: number, nowMs: number): boolean {
 
 /** The colors of the folder and the branch after the exit: the status line's own. */
 export const FOLDER_COLOR = "#5fd7ff"
+/** A control's name above it: dark on yellow, as the explorer marks the row under the pointer. */
+export const LABEL_TEXT = "#1a1a1a"
+export const LABEL_FILL = "#ffd43b"
 export const BRANCH_COLOR = "#d787ff"
 
 /**
@@ -283,6 +286,8 @@ export interface FooterControl extends FooterGroup {
   readonly panel?: string
   /** Drawn bold, as the original draws the networks, the model and the effort. */
   readonly bold?: boolean
+  /** What it does, shown above it while the pointer is on it (⚙ → Ver labels). */
+  readonly tip?: string
 }
 
 /** One network drawn as a badge, like the original footer draws the linked ones. */
@@ -342,6 +347,38 @@ export const PANEL_LABELS: Readonly<Record<string, string>> = {
   reload: " 🔄 recargar ",
   settings: " ⚙️ configuración ",
   socials: " Redes sociales ",
+}
+
+/** What each control does, as its name above it says it; the ones whose state changes what they do are named in `tipOf`. */
+const TIPS: Readonly<Record<string, string>> = {
+  socials: "redes sociales",
+  copy: "copiar",
+  paste: "pegar",
+  image: "pegar imagen",
+  images: "ver imágenes",
+  clear: "borrar el prompt",
+  model: "modelo",
+  effort: "esfuerzo",
+  voice: "voz del narrador",
+  agent: "agente",
+  compact: "compactar",
+  history: "audios y selección",
+  mics: "micrófono",
+  send: "enviar",
+  new: "conversación nueva",
+  sessions: "conversaciones",
+  reload: "recargar",
+  settings: "configuración",
+  exit: "salir",
+}
+
+/** A control's name above it, by what it would do now. */
+function tipOf(name: string, input: FooterInput): string | undefined {
+  if (name === "narrator") return input.narrator ? "apagar el narrador" : "encender el narrador"
+  if (name === "play") return input.speech === "playing" ? "pausar" : "leer de nuevo"
+  if (name === "mic") return input.listening === "off" ? "dictar" : "dejar de dictar"
+  if (name === "polish") return input.polishing ? "corrigiendo…" : "corregir el texto"
+  return TIPS[name]
 }
 
 /** One control, sized from the label it draws. */
@@ -423,7 +460,11 @@ export function footerControls(input: FooterInput): FooterControl[] {
     }
   }
 
-  return input.icons === "nerd" ? controls.map(nerdControl) : controls
+  const named = controls.map((one) => {
+    const tip = tipOf(one.name, input)
+    return tip === undefined ? one : { ...one, tip }
+  })
+  return input.icons === "nerd" ? named.map(nerdControl) : named
 }
 
 /** A control drawn with Nerd Fonts glyphs: as wide as its glyphs make it, in the color a glyph can take. */

@@ -143,6 +143,8 @@ export interface SpeedySettings {
   statusBar: boolean
   /** The icons drawn: emojis, or Nerd Fonts glyphs where the terminal has a Nerd Font. */
   icons: IconSet
+  /** Whether a footer control's name shows above it while the pointer is on it (⚙ → Ver labels). */
+  labels: boolean
   /** The size, in points, the terminal's font was last set to from here; 0 while it never was. */
   fontSize: number
   /** The font the terminal was last set to from here. */
@@ -160,6 +162,7 @@ export const DEFAULT_SETTINGS: SpeedySettings = {
   barOrder: [...DEFAULT_ORDER],
   statusBar: true,
   icons: "emoji",
+  labels: true,
   fontSize: 0,
   fontFamily: "jetbrains",
   imported: false,
@@ -249,6 +252,7 @@ export function settingsFromSaved(saved: unknown): SpeedySettings {
     barOrder: barOrderOf(saved.barOrder),
     statusBar: typeof saved.statusBar === "boolean" ? saved.statusBar : DEFAULT_SETTINGS.statusBar,
     icons: saved.icons === "nerd" ? "nerd" : DEFAULT_SETTINGS.icons,
+    labels: typeof saved.labels === "boolean" ? saved.labels : DEFAULT_SETTINGS.labels,
     fontSize: Number.isInteger(saved.fontSize) && Number(saved.fontSize) > 0 ? Number(saved.fontSize) : 0,
     fontFamily: FONT_FAMILIES.some(([id]) => id === saved.fontFamily) ? (saved.fontFamily as FontFamily) : DEFAULT_SETTINGS.fontFamily,
     imported: saved.imported === true,

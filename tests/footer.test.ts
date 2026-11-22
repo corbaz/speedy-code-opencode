@@ -172,6 +172,47 @@ describe("footerControls", () => {
     ])
   })
 
+  test("gives each control the name shown above it under the pointer, as its state says it", () => {
+    const tips = (input: Parameters<typeof footerControls>[0]) =>
+      Object.fromEntries(footerControls(input).map((control) => [control.name, control.tip]))
+    expect(tips({ ...base, model: "claude-sonnet-4-5", effort: "high", socials: [{ id: "github", badge: "GH", color: "#fff" }], folder: "~" })).toEqual({
+      socials: "redes sociales",
+      divider: undefined,
+      copy: "copiar",
+      paste: "pegar",
+      image: "pegar imagen",
+      images: "ver imágenes",
+      clear: "borrar el prompt",
+      bar: undefined,
+      model: "modelo",
+      effort: "esfuerzo",
+      voice: "voz del narrador",
+      agent: "agente",
+      compact: "compactar",
+      narrator: "encender el narrador",
+      play: "leer de nuevo",
+      history: "audios y selección",
+      mic: "dictar",
+      mics: "micrófono",
+      polish: "corregir el texto",
+      send: "enviar",
+      new: "conversación nueva",
+      sessions: "conversaciones",
+      reload: "recargar",
+      settings: "configuración",
+      exit: "salir",
+      place: undefined,
+    })
+    const busy = tips({ narrator: true, speech: "playing", listening: "on", polishing: true, icons: "nerd" })
+    expect([busy.narrator, busy.play, busy.mic, busy.polish, busy.copy]).toEqual([
+      "apagar el narrador",
+      "pausar",
+      "dejar de dictar",
+      "corrigiendo…",
+      "copiar",
+    ])
+  })
+
   test("omits the model when none is selected", () => {
     expect(footerControls(base).map((control) => control.name)).toEqual([
       "copy",

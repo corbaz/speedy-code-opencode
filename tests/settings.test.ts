@@ -252,3 +252,12 @@ describe("importClaude", () => {
     expect(next).toEqual({ ...cloneSettings(DEFAULT_SETTINGS), imported: true })
   })
 })
+
+describe("Ver labels", () => {
+  test("is on by default, kept off when saved off, and repaired to on when saved wrong", () => {
+    expect(DEFAULT_SETTINGS.labels).toBe(true)
+    expect(settingsFromSaved({ labels: false }).labels).toBe(false)
+    expect(settingsFromSaved({ labels: "no" }).labels).toBe(true)
+    expect(settingsFromSaved({}).labels).toBe(true)
+  })
+})

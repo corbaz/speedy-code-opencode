@@ -12,6 +12,9 @@ import { Dictation } from "./dictation"
 import { createListener, createPlayer, createSpeaker } from "./engine"
 import {
   DISABLED_COLOR,
+  LABEL_FILL,
+  LABEL_TEXT,
+  cells,
   footerControls,
   newSessionChoice,
   versionLabel,
@@ -1547,6 +1550,9 @@ export default Plugin.define({
       </Show>
     )
 
+    // The footer control under the pointer, by name: its name shows above it.
+    const [tipped, setTipped] = createSignal("")
+
     /** The row of controls, each its own box so each takes its own click. */
     const FooterRow = () => {
       const view = () => {
@@ -1589,10 +1595,20 @@ export default Plugin.define({
             <box
               flexShrink={0}
               onMouseUp={control.id === undefined ? undefined : () => void runControl(control.id as string)}
+              onMouseOver={() => setTipped(control.name)}
+              onMouseOut={() => setTipped((now) => (now === control.name ? "" : now))}
             >
               <Tinted fg={control.color} bold={control.bold}>
                 {control.text}
               </Tinted>
+              {/* ⚙ → Ver labels: what the control does, just above it while the pointer is on it. */}
+              <Show when={settings.labels && control.tip !== undefined && tipped() === control.name}>
+                <box position="absolute" top={-1} left={0} zIndex={60} width={cells(` ${control.tip} `)} flexShrink={0}>
+                  <text wrapMode="none" selectable={false} fg={LABEL_TEXT} bg={LABEL_FILL} attributes={1}>
+                    {` ${control.tip} `}
+                  </text>
+                </box>
+              </Show>
             </box>
           ))}
           {view().hidden.length > 0 ? (
@@ -1684,6 +1700,11 @@ export default Plugin.define({
           draft.icons = draft.icons === "nerd" ? "emoji" : "nerd"
         }),
       icons: () => settings.icons,
+      toggleLabels: () =>
+        void update((draft) => {
+          draft.labels = !draft.labels
+        }),
+      labels: () => settings.labels,
       setFont: (family, size) => {
         toast(`poniendo ${FONT_FAMILIES.find(([id]) => id === family)?.[1] ?? family} a ${size} pt en tu terminal…`)
         void run([pythonPath(), join(PLUGIN_ROOT, "setup", "terminal_font.py"), "--family", family, "--size", String(size)], {
