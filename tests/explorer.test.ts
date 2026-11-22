@@ -5,6 +5,7 @@ import {
   badFileName,
   chainOf,
   collapseLabel,
+  gotoHint,
   cutCells,
   fileNameLabel,
   fileTools,
@@ -518,4 +519,9 @@ describe("each file's tools", () => {
     expect(labels).not.toContain("    ▸ System32")
     expect(explorer.state().flashed).toBe("collapse:")
   })
+})
+
+test("gotoHint: the explorer's field shows a path as the system writes one", () => {
+  expect(gotoHint("win32")).toBe("pegá una ruta y Enter: D:\\carpeta\\archivo")
+  expect(gotoHint("darwin")).toBe("pegá una ruta y Enter: /Users/carpeta/archivo")
 })

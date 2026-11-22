@@ -20,6 +20,7 @@ import {
   driveLabel,
   fileNameLabel,
   fileTools,
+  gotoHint,
   rowAction,
   rowLabel,
   treeRows,
@@ -190,7 +191,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
             field = one as typeof field
           }}
           focused={isTyping()}
-          placeholder={"pegá una ruta y Enter: D:\\carpeta\\archivo"}
+          placeholder={gotoHint(process.platform)}
           placeholderColor="#868e96"
           textColor={VIEWABLE_COLOR}
           focusedTextColor={VIEWABLE_COLOR}

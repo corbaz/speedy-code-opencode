@@ -255,6 +255,11 @@ export function fileTools(icons: IconSet, flashed: string, path: string): Array<
   }))
 }
 
+/** What the explorer's field says while empty: a path as the system writes one. */
+export function gotoHint(platform: string): string {
+  return `pegá una ruta y Enter: ${platform === "win32" ? "D:\\carpeta\\archivo" : "/Users/carpeta/archivo"}`
+}
+
 /** ⊟ beside the disks, as the icon set draws it. */
 export function collapseLabel(icons: IconSet): string {
   return ` ${icons === "nerd" ? "" : "⊟"} `
