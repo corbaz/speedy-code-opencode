@@ -340,19 +340,21 @@ export default Plugin.define({
       controlPath: () => join(DATA_ROOT, "control", `control-${crypto.randomUUID()}.txt`),
       savePath: (input) => {
         // Where this narration is kept once it has played: the play button opens it from there.
-        const file = join(DATA_ROOT, "audio", historyName(input.text, new Date()))
+        // Said again, it is already kept: nothing is written twice, and its row is the one playing.
+        const isAgain = kept.file !== ""
+        const file = isAgain ? kept.file : join(DATA_ROOT, "audio", historyName(input.text, new Date()))
         kept = { ...kept, file }
         // A selection read is in the history as it starts: its row there is the one playing, with ⏸ and ⏵,
         // and the selection's own row is free for the next text.
         if (isSelectionRead) {
           isSelectionRead = false
-          startedClips.add(file)
+          if (!isAgain) startedClips.add(file)
           setMenus((draft) => {
             draft.clipNow = file
             draft.clips = withStarted(draft.clips, startedClips)
           })
         }
-        return file
+        return isAgain ? undefined : file
       },
       writeControl,
       removeControl,
@@ -433,7 +435,8 @@ export default Plugin.define({
       const voice = voiceForCode(settings.picks.active)
       const lang = settings.picks.active || "es"
       const mine = ++narrating
-      kept = { answer, lang, file: "" }
+      // The same answer in the same language keeps the file it was kept in: it is not kept again.
+      if (kept.answer !== answer || kept.lang !== lang) kept = { answer, lang, file: "" }
       let text = answer
       const request = narrationRequest(answer, lang, LANGUAGES.find(([code]) => code === lang)?.[2] ?? "Spanish")
       if (request) {
