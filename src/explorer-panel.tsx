@@ -112,10 +112,18 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
     else if (action === "view") api.pressFile(row.path)
   }
 
-  /** A file's row: its name, which opens the viewer, and its four tools, none with a fill under the pointer. */
+  /**
+   * A file's or a folder's row: its name, which opens the viewer (a file) or opens and closes it (a folder),
+   * and its four tools, none with a fill under the pointer. A file's name is yellow and fills yellow; a
+   * folder's is blue and fills blue.
+   */
   const fileRow = (row: TreeRow) => {
-    // The path the field found keeps the fill until the pointer is on another file: the fill follows the pointer.
-    const isHovered = () => hovered() === row.path || (row.isFound === true && hovered() === "")
+    const isFolder = row.kind === "dir"
+    const tint = isFolder ? (row.isHere ? FOLDER_COLOR : DIR_COLOR) : VIEWABLE_COLOR
+    const fill = isFolder ? DIR_COLOR : VIEWABLE_COLOR
+    // The path the field found keeps the fill until the pointer is on another row: the fill follows the pointer.
+    const isFound = () => row.isFound === true && hovered() === ""
+    const isHovered = () => hovered() === row.path || isFound()
     return (
       // The pointer's over and out reach the row from its name and its tools alike: an out from one part
       // comes before the over of the next, so the row stays marked while the pointer is anywhere on it.
@@ -129,8 +137,10 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           <text
             wrapMode="none"
             selectable={false}
-            fg={isHovered() ? HOVER_TEXT : VIEWABLE_COLOR}
-            bg={isHovered() ? VIEWABLE_COLOR : undefined}
+            fg={isHovered() ? HOVER_TEXT : tint}
+            // The path found is marked yellow, a folder too; under the pointer, the row's own fill.
+            bg={isHovered() ? (isFound() ? VIEWABLE_COLOR : fill) : undefined}
+            attributes={isFolder && row.isHere ? BOLD : 0}
           >
             {fileNameLabel(row, room())}
           </text>
@@ -138,11 +148,17 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         <box flexDirection="row" flexShrink={0} width={FILE_TOOLS_WIDTH}>
           <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path)}>
             {(tool) => (
-              <box flexShrink={0} onMouseUp={() => api.tool(tool.kind, row.path)}>
-                <text wrapMode="none" selectable={false} fg={tool.color} attributes={BOLD}>
-                  {tool.label}
+              <>
+                {/* A plain gap before each icon takes no press: one a little off an icon does nothing. */}
+                <text wrapMode="none" selectable={false} flexShrink={0}>
+                  {" ".repeat(tool.gap)}
                 </text>
-              </box>
+                <box flexShrink={0} onMouseUp={() => api.tool(tool.kind, row.path)}>
+                  <text wrapMode="none" selectable={false} fg={tool.color} attributes={BOLD}>
+                    {tool.label}
+                  </text>
+                </box>
+              </>
             )}
           </For>
         </box>
@@ -208,8 +224,9 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
       <scrollbox ref={(box: ScrollBoxRenderable) => (tree = box)} flexGrow={1} minHeight={0} scrollY>
         <For each={rows()}>
           {(row) => {
-            // A row's kind never changes: a file's row is drawn with its tools, any other as its label.
-            if (row.kind === "file") return fileRow(row)
+            // A row's kind never changes: a file's or a folder's row is drawn with its tools, a disk's root and
+            // any other as its label.
+            if (row.kind === "file" || (row.kind === "dir" && row.depth > 0)) return fileRow(row)
             const look = rowLook(row)
             return (
               <box flexShrink={0} onMouseUp={rowAction(row) === "none" ? undefined : () => press(row)}>

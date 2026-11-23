@@ -22,9 +22,12 @@ describe("the commands behind each file's tools", () => {
   test("✏ and 🗑 ask in the engine's dialog.ps1, its mode and file in the environment; macOS in an AppleScript dialog", () => {
     expect(dialogCommand("win32", "rename", NATIVE, "C:\\plugin")).toEqual({
       argv: [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "C:/plugin/engine/dialog.ps1"],
-      env: { SPEEDY_FILE: NATIVE, SPEEDY_MODE: "rename" },
+      env: { SPEEDY_FILE: NATIVE, SPEEDY_MODE: "rename", SPEEDY_KIND: "file" },
     })
     expect(dialogCommand("win32", "delete", NATIVE, "C:/plugin")?.env.SPEEDY_MODE).toBe("delete")
+    // A folder: the dialog asks one name, and says the folder goes with what it holds.
+    expect(dialogCommand("win32", "rename", NATIVE, "C:/plugin", "dir")?.env.SPEEDY_KIND).toBe("dir")
+    expect(dialogCommand("win32", "rename", NATIVE, "C:/plugin")?.env.SPEEDY_KIND).toBe("file")
     const rename = dialogCommand("darwin", "rename", "/Users/me/a.md", "/plugin")!
     expect(rename.argv[0]).toBe("osascript")
     expect(rename.argv.join(" ")).toContain('return "name " & answer')
@@ -56,6 +59,8 @@ describe("the commands behind each file's tools", () => {
   test("🗑 to the Recycle Bin on Windows, to the Trash by Finder on macOS, where they can be got back", () => {
     const windows = trashCommand("win32", NATIVE)!
     expect(windows.argv.at(-1)).toContain("[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:SPEEDY_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin')")
+    // A folder goes to the Recycle Bin whole.
+    expect(windows.argv.at(-1)).toContain("[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($env:SPEEDY_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin')")
     expect(windows.env).toEqual({ SPEEDY_FILE: NATIVE })
     const mac = trashCommand("darwin", "/Users/me/a.md")!
     expect(mac.argv).toContain('tell application "Finder" to delete (POSIX file (item 1 of argv) as alias)')

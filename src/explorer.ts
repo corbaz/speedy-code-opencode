@@ -72,8 +72,11 @@ export interface ExplorerIO {
   copyText(text: string): Promise<boolean>
   /** Writes `text` into the prompt at the cursor, `separator` before it unless what is before ends apart: see promptInsertion. */
   insert(text: string, separator: " " | "\n"): Promise<void>
-  /** Asks in the dialog: `rename <base64 name>` or `name <name>`, `delete`, or `cancel`. */
-  ask(mode: "rename" | "delete", native: string): Promise<string>
+  /**
+   * Asks in the dialog: `rename <base64 name>` or `name <name>`, `delete`, or `cancel`. A folder (`dir`) is
+   * asked one name, with no extension, and goes to the trash with what it holds.
+   */
+  ask(mode: "rename" | "delete", native: string, kind?: "file" | "dir"): Promise<string>
   /** Renames a file in its folder; whether it did. */
   rename(native: string, name: string, nativeTarget: string): Promise<boolean>
   /** Sends a file to the trash, where it can be got back; whether it went. */
@@ -230,8 +233,11 @@ export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, s
   ["trash", "🗑", "", "#ff8787"],
 ]
 
-/** The cells the four tools take at a file's right, a spare one with them: an emoji's width varies by terminal. */
-export const FILE_TOOLS_WIDTH = 13
+/**
+ * The cells the four tools take at a row's right: each icon on its own two cells, a plain gap of two before
+ * each but the first, which has one. A press a little off an icon lands on a gap and does nothing.
+ */
+export const FILE_TOOLS_WIDTH = 15
 
 /** The color a pressed tool takes for a second, as a sign the press was taken: green, with no fill. */
 export const FLASH_COLOR = "#51cf66"
@@ -239,20 +245,32 @@ export const FLASH_COLOR = "#51cf66"
 /** How long a pressed tool stays green. */
 export const FLASH_MS = 1000
 
-/** A file's name as its row writes it: indented, cut with … to its room, and filled with spaces up to its tools. */
+/**
+ * A file's or a folder's name as its row writes it: indented (a folder with its open mark), cut with … to
+ * its room, and filled with spaces up to its tools.
+ */
 export function fileNameLabel(row: TreeRow, width: number): string {
   const room = Math.max(4, width - FILE_TOOLS_WIDTH)
-  const cut = cutCells(`${"  ".repeat(row.depth)}  ${row.name}`, room)
+  const cut = cutCells(row.kind === "dir" ? rowLabel(row) : `${"  ".repeat(row.depth)}  ${row.name}`, room)
   return cut + " ".repeat(Math.max(0, room - cells(cut)))
 }
 
 /** A file's tools as its row draws them: each its glyph or emoji and its color, the one just pressed green. */
-export function fileTools(icons: IconSet, flashed: string, path: string): Array<{ kind: FileToolKind; label: string; color: string }> {
-  return FILE_TOOLS.map(([kind, emoji, glyph, color]) => ({
-    kind,
-    label: ` ${icons === "nerd" ? glyph : emoji}`,
-    color: flashed === `${kind}:${path}` ? FLASH_COLOR : color,
-  }))
+export function fileTools(
+  icons: IconSet,
+  flashed: string,
+  path: string,
+): Array<{ kind: FileToolKind; label: string; gap: number; color: string }> {
+  return FILE_TOOLS.map(([kind, emoji, glyph, color], index) => {
+    // An emoji, or a glyph with the cell it spills over: two cells, the tool's own.
+    const icon = icons === "nerd" ? `${glyph}\u00a0` : emoji
+    return {
+      kind,
+      label: icon + " ".repeat(Math.max(0, 2 - cells(icon))),
+      gap: index === 0 ? 1 : 2,
+      color: flashed === `${kind}:${path}` ? FLASH_COLOR : color,
+    }
+  })
 }
 
 /** What the explorer's field says while empty: a path as the system writes one. */
@@ -465,13 +483,15 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async rename(path) {
       forget()
-      const name = newNameOf(await io.ask("rename", nativeOf(path, platform)))
+      const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
+      const name = newNameOf(await io.ask("rename", nativeOf(path, platform), kind))
       if (name) await renameTo(path, name)
     },
     async trash(path) {
       forget()
       const native = nativeOf(path, platform)
-      if ((await io.ask("delete", native)) !== "delete") return
+      const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
+      if ((await io.ask("delete", native, kind)) !== "delete") return
       const name = nameOf(path)
       if (!(await io.trash(native))) return io.toast(`no pude mandar ${name} a la papelera.`, true)
       io.toast(`${name} fue a la papelera.`)

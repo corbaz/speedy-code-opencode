@@ -5,7 +5,7 @@ import { homedir } from "node:os"
 import { dirname, join, resolve, sep } from "node:path"
 
 import { Plugin } from "@opencode/plugin/tui"
-import { Show, createEffect, createSignal } from "solid-js"
+import { Show, createEffect, createSignal, onCleanup } from "solid-js"
 
 import { COMMAND_HELP, routeCommand } from "./commands"
 import { Dictation } from "./dictation"
@@ -1201,8 +1201,8 @@ export default Plugin.define({
       copyText: async (text) => (await writeClipboard(text)) || (context.renderer?.copyToClipboardOSC52?.(text) ?? false),
       // A file's mention never goes through the clipboard: it holds the file 📋 just put there.
       insert: (text, separator) => insertInPrompt(text, separator, false),
-      ask: async (mode, native) => {
-        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT)
+      ask: async (mode, native, kind) => {
+        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind)
         return command ? dialogAnswer((await run(command.argv, command.env)).stdout) : "cancel"
       },
       rename: async (native, name, target) => {
@@ -1553,6 +1553,11 @@ export default Plugin.define({
     // The footer control under the pointer, by name: its name shows above it.
     const [tipped, setTipped] = createSignal("")
 
+    // The columns the explorer takes at the right: the host's side panel, or the mod's own on the home screen,
+    // with the rule at its left.
+    const [panelWidth, setPanelWidth] = createSignal(0)
+    const explorerTaken = () => (panelWidth() > 0 ? panelWidth() + 2 : homeExplorer() ? homeWidth() + 1 : 0)
+
     /** The row of controls, each its own box so each takes its own click. */
     const FooterRow = () => {
       const view = () => {
@@ -1653,7 +1658,8 @@ export default Plugin.define({
       set: setMenus,
       speech: () => speech.state,
       narrator: () => settings.narrator,
-      width: () => Math.max(40, columnsNow() - 4),
+      // Left of the explorer, when it is open: a menu under it would hide its right edge and its close mark.
+      width: () => Math.max(40, columnsNow() - 4 - explorerTaken()),
       rows: () => Math.max(10, Math.floor(rowsNow() / 2)),
       close: closeMenu,
       pickVoice: (voice) => void pickVoice(voice),
@@ -1795,11 +1801,18 @@ export default Plugin.define({
       close,
     })
 
-    // The explorer, in the side panel the host opens for it beside the chat.
+    // The explorer, in the side panel the host opens for it beside the chat. While it is drawn, its width is
+    // kept, so the menus over the prompt stand left of it.
+    const PanelWidth = (props: { width: number }) => {
+      createEffect(() => setPanelWidth(props.width))
+      onCleanup(() => setPanelWidth(0))
+      return null
+    }
     const disposeExplorer = context.ui.slot({
       append: "session.panel",
       render: (input) => (
         <Show when={input.name === EXPLORER_PANEL}>
+          <PanelWidth width={input.width} />
           <ExplorerPanel api={explorerApi(() => input.width, () => input.close())} />
         </Show>
       ),

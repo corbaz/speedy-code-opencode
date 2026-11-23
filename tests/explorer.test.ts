@@ -158,18 +158,23 @@ describe("explorer helpers", () => {
     const row = { path: "C:/x/un_nombre_muy_largo_de_archivo.txt", name: "un_nombre_muy_largo_de_archivo.txt", depth: 2, kind: "file" as const, isOpen: false, isHere: false }
     const label = fileNameLabel(row, 30)
     expect(cells(label)).toBe(30 - FILE_TOOLS_WIDTH)
-    expect(label.startsWith("      un_nombre")).toBe(true)
+    expect(label.startsWith("      un_nomb")).toBe(true)
     expect(label.trimEnd().endsWith("…")).toBe(true)
     const short = fileNameLabel({ ...row, name: "a.md", depth: 0 }, 30)
     expect(short).toBe("  a.md".padEnd(30 - FILE_TOOLS_WIDTH))
-    expect(fileTools("emoji", "", row.path).map((tool) => [tool.kind, tool.label, tool.color])).toEqual([
-      ["copy", " 📋", "#74c0fc"],
-      ["path", " 🔗", "#63e6be"],
-      ["rename", " ✏", "#b197fc"],
-      ["trash", " 🗑", "#ff8787"],
+    // Each icon on its own two cells, pressed there alone; before each, a plain gap that takes no press, so a
+    // press a little off an icon does nothing instead of its neighbour's work.
+    expect(fileTools("emoji", "", row.path).map((tool) => [tool.kind, tool.label.trimEnd(), cells(tool.label), tool.gap, tool.color])).toEqual([
+      ["copy", "📋", 2, 1, "#74c0fc"],
+      ["path", "🔗", 2, 2, "#63e6be"],
+      ["rename", "✏", 2, 2, "#b197fc"],
+      ["trash", "🗑", 2, 2, "#ff8787"],
     ])
-    expect(fileTools("nerd", "", row.path).map((tool) => tool.label)).toEqual([" ", " ", " ", " "])
-    // The tool just pressed is green, with no fill; the others keep their colors.
+    expect(fileTools("nerd", "", row.path).map((tool) => tool.label)).toEqual(["\uf0c5\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0"])
+    expect(FILE_TOOLS_WIDTH).toBe(15)
+    // A folder's row is laid out as a file's: its open mark and name, filled up to the same four tools.
+    const folder = { path: "C:/x/docs", name: "docs", depth: 1, kind: "dir" as const, isOpen: false, isHere: false }
+    expect(fileNameLabel(folder, 30)).toBe("  ▸ docs".padEnd(30 - FILE_TOOLS_WIDTH))    // The tool just pressed is green, with no fill; the others keep their colors.
     const flashed = fileTools("emoji", `path:${row.path}`, row.path)
     expect(flashed.map((tool) => tool.color)).toEqual(["#74c0fc", "#51cf66", "#b197fc", "#ff8787"])
     expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#74c0fc", "#63e6be", "#b197fc", "#ff8787"])
@@ -229,7 +234,14 @@ function fakeIO(tree: typeof TREE = TREE) {
       if (!entries) throw new Error("EPERM")
       return entries.map((entry) => ({ isLink: false, ...entry }))
     },
-    isDir: async (path) => /^[CD]:\/$/.test(path),
+    // A disk, a folder read, or an entry its folder lists as one.
+    isDir: async (path) => {
+      const plain = path.replace(/\\/g, "/")
+      const at = plain.lastIndexOf("/")
+      const parent = at === 2 ? plain.slice(0, 3) : plain.slice(0, at)
+      const isListed = (tree[parent] ?? []).some((entry) => entry.name === plain.slice(at + 1) && entry.kind === "dir")
+      return /^[CD]:\/$/.test(plain) || tree[plain] !== undefined || isListed
+    },
     openFolder: (folder) => void opened.push(folder),
     view: (path) => void viewed.push(path),
     copyFile: async (native) => (files.copied.push(native), true),
@@ -237,7 +249,7 @@ function fakeIO(tree: typeof TREE = TREE) {
     insert: async (text, separator) => {
       prompt.text += promptInsertion(prompt.text, text, separator)
     },
-    ask: async (mode, native) => (dialog.asked.push(`${mode} ${native}`), dialog.answer),
+    ask: async (mode, native, kind) => (dialog.asked.push(`${mode} ${native}${kind === "dir" ? " dir" : ""}`), dialog.answer),
     rename: async (native, name, target) => (files.renamed.push(`${native} -> ${name} (${target})`), true),
     trash: async (native) => (files.trashed.push(native), true),
     exists: async (native) => existing.has(native),
@@ -445,6 +457,11 @@ describe("each file's tools", () => {
     expect(fake.toasts.at(-1)).toBe("notas.txt ahora se llama apuntes.txt.")
     expect(treeRows(explorer.state()).map(rowLabel)).toContain("          apuntes.txt")
     expect(treeRows(explorer.state()).map(rowLabel)).not.toContain("          notas.txt")
+    // A folder is asked as one: one name, no extension.
+    fake.dialog.answer = `rename ${Buffer.from("facturas 2025").toString("base64")}`
+    await explorer.rename("C:/Users/test/proyectos/facturas")
+    expect(fake.dialog.asked.at(-1)).toBe("rename C:\\Users\\test\\proyectos\\facturas dir")
+    expect(fake.files.renamed.at(-1)).toBe("C:\\Users\\test\\proyectos\\facturas -> facturas 2025 (C:\\Users\\test\\proyectos\\facturas 2025)")
   })
 
   test("✏ refuses a bad name or one another file has, with the reason; the Mac's dialog answers `name <text>`", async () => {
@@ -488,6 +505,10 @@ describe("each file's tools", () => {
     expect(fake.files.trashed).toEqual([NATIVE])
     expect(fake.toasts.at(-1)).toBe("notas.txt fue a la papelera.")
     expect(treeRows(explorer.state()).map(rowLabel)).not.toContain("          notas.txt")
+    // A folder goes with what it holds; the dialog says so.
+    await explorer.trash("C:/Users/test/proyectos/facturas")
+    expect(fake.dialog.asked.at(-1)).toBe("delete C:\\Users\\test\\proyectos\\facturas dir")
+    expect(fake.files.trashed.at(-1)).toBe("C:\\Users\\test\\proyectos\\facturas")
     // One the system would not take says so, and the folder stays as it was.
     fake.io.trash = async () => false
     await explorer.trash("C:/Users/test/proyectos/app.exe")

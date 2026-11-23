@@ -100,7 +100,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   is attached to the prompt as `@path`. `✥` beside the popup's `×`, held down with the mouse, carries the
   popup elsewhere to read what is behind it; opened again, it stands in the middle. The image popup and
   the rename and delete dialogs have it too, in one style. While the pointer is on a file's row, its name keeps a yellow
-  fill. At the right of every file: `📋` puts the file on the clipboard (to paste in a folder) and
+  fill; a folder's, blue, a blue fill. At the right of every file and every folder (a disk's root aside),
+  each icon pressed on its own cells with a gap between them that takes no press: `📋` puts the file on the clipboard (to paste in a folder) and
   attaches it to the prompt as `@path`; `🔗` puts its path on the clipboard and in the prompt; `✏`
   asks the new name in a dialog in the middle of the screen (`engine/dialog.ps1`; a Finder dialog on
   macOS) and renames it, refusing an empty name, `\ / : * ? " < > |` or another file's name; `🗑` asks

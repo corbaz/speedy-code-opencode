@@ -46,11 +46,18 @@ export function fileCopyCommand(platform: string, native: string): FileCommand |
  * Recycle Bin), an AppleScript dialog on macOS. It answers `rename <base64 name>` (macOS: `name <name>`),
  * `delete` or `cancel`.
  */
-export function dialogCommand(platform: string, mode: "rename" | "delete", native: string, root: string): FileCommand | undefined {
+export function dialogCommand(
+  platform: string,
+  mode: "rename" | "delete",
+  native: string,
+  root: string,
+  kind: "file" | "dir" = "file",
+): FileCommand | undefined {
   if (platform === "win32") {
     return {
       argv: [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", `${root.replace(/\\/g, "/")}/engine/dialog.ps1`],
-      env: { SPEEDY_FILE: native, SPEEDY_MODE: mode },
+      // A folder: one name with no extension, and Borrar says it goes with what it holds.
+      env: { SPEEDY_FILE: native, SPEEDY_MODE: mode, SPEEDY_KIND: kind },
     }
   }
   if (platform !== "darwin") return undefined
@@ -113,7 +120,8 @@ export function trashCommand(platform: string, native: string): FileCommand | un
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:SPEEDY_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin'); 'deleted'",
+        // A folder goes whole, with what it holds.
+        "Add-Type -AssemblyName Microsoft.VisualBasic; if (Test-Path -LiteralPath $env:SPEEDY_FILE -PathType Container) { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($env:SPEEDY_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin') } else { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:SPEEDY_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin') }; 'deleted'",
       ],
       env: { SPEEDY_FILE: native },
     }
