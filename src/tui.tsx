@@ -880,6 +880,8 @@ export default Plugin.define({
     let pendingSelection = ""
     // The clipboard while it is still being read for the 📎 menu: its first row waits for it.
     let pendingRead: Promise<void> | undefined
+    // The clipboard's text as it was when the history was cleared.
+    let clearedClipboard: string | undefined
 
     const closeMenu = () =>
       setMenus((draft) => {
@@ -920,6 +922,12 @@ export default Plugin.define({
         pendingRead = pendingSelection
           ? undefined
           : readClipboard().then((text) => {
+              // The text the history was cleared with is passed over until the clipboard holds another.
+              if (clearedClipboard !== undefined && text === clearedClipboard) {
+                pendingSelection = ""
+                return
+              }
+              clearedClipboard = undefined
               pendingSelection = text
             })
         await refreshClips()
@@ -1000,6 +1008,8 @@ export default Plugin.define({
       await pendingRead?.catch(() => {})
       pendingSelection = ""
       pendingRead = undefined
+      // What the clipboard holds now was there before the clearing: it is not read again, only a text copied after.
+      clearedClipboard = await readClipboard().catch(() => undefined)
       kept = { ...kept, file: "" }
       await refreshClips()
     }
