@@ -57,7 +57,9 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   microphones, networks and settings. A network takes several accounts
   (`GH`, `GH2`); one footer control opens them all.
 - The reply of the session on screen is read aloud when the narrator is on,
-  through the original engine, with pause and resume. Every narration is kept
+  through the original engine, with pause and resume. On Windows a narration kept (a row of the audio
+  menu, or ⏵ once the reply was read) plays in the viewer's popup, with its bar to seek back and forth.
+  Every narration is kept
   under `~/.config/opencode/speedy-code/audio` and can be played back later.
 - Dictation runs the original streaming model on this machine: nothing is sent
   anywhere. What it hears is written into the prompt.

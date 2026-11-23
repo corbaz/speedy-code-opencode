@@ -328,10 +328,18 @@ export default Plugin.define({
       }
     }
 
+    // The answer last narrated, its language and the file it is kept in once it has played.
+    let kept = { answer: "", lang: "", file: "" }
+
     const narration = new Narration({
       speak: createSpeaker(engine),
       controlPath: () => join(DATA_ROOT, "control", `control-${crypto.randomUUID()}.txt`),
-      savePath: (input) => join(DATA_ROOT, "audio", historyName(input.text, new Date())),
+      savePath: (input) => {
+        // Where this narration is kept once it has played: the play button opens it from there.
+        const file = join(DATA_ROOT, "audio", historyName(input.text, new Date()))
+        kept = { ...kept, file }
+        return file
+      },
       writeControl,
       removeControl,
       onState: onSpeech,
@@ -369,6 +377,7 @@ export default Plugin.define({
       const voice = voiceForCode(settings.picks.active)
       const lang = settings.picks.active || "es"
       const mine = ++narrating
+      kept = { answer, lang, file: "" }
       let text = answer
       const request = narrationRequest(answer, lang, LANGUAGES.find(([code]) => code === lang)?.[2] ?? "Spanish")
       if (request) {
@@ -694,6 +703,8 @@ export default Plugin.define({
         toast("no hay respuesta para leer")
         return
       }
+      // The answer already read and kept plays in the popup, where it can be sought; otherwise it is read again.
+      if (kept.answer === text && kept.lang === (settings.picks.active || "es") && (await playInViewer(kept.file))) return
       await narrate(text)
     }
 
@@ -967,6 +978,7 @@ export default Plugin.define({
 
     /** A row's button: the narration playing from it pauses or goes on; another row starts. */
     const pressClip = async (clip: HistoryClip) => {
+      if (await playInViewer(clip.path)) return
       if (menus.clipNow === clip.path && speech.state === "playing") return clipPlayer.pause()
       if (menus.clipNow === clip.path && speech.state === "paused") return clipPlayer.resume()
       await narration.stop()
@@ -1114,6 +1126,18 @@ export default Plugin.define({
     }
 
     /** Shows an image in a popup in the middle of the screen, in its own proportions, as the original does. */
+    /**
+     * A narration kept, played in the viewer's popup, where its bar seeks back and forth: on Windows, which
+     * has the popup, and only while the file is there. It says whether it opened; elsewhere the player plays it.
+     */
+    const playInViewer = async (path: string): Promise<boolean> => {
+      if (!path || process.platform !== "win32" || !existsSync(path)) return false
+      await narration.stop()
+      await clipPlayer.stop()
+      viewFile(path, "view_file.ps1", "no pude abrir el audio")
+      return true
+    }
+
     const viewImage = (image: KeptImage) => viewFile(image.path, "view.ps1", "no pude abrir la imagen")
 
     /** Pastes a kept image again: it goes on the clipboard, then the host pastes. */
