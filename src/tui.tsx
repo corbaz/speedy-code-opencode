@@ -882,6 +882,14 @@ export default Plugin.define({
     let pendingRead: Promise<void> | undefined
     // The clipboard's text as it was when the history was cleared.
     let clearedClipboard: string | undefined
+    // Whether what 📎 reads was selected with the mouse; else it is the clipboard's, read again at each press.
+    let isPendingSelected = false
+    /** The clipboard's text for 📎 to read: none while it is still the one the history was cleared with. */
+    const freshClipboard = (text: string): string => {
+      if (clearedClipboard !== undefined && text === clearedClipboard) return ""
+      clearedClipboard = undefined
+      return text
+    }
 
     const closeMenu = () =>
       setMenus((draft) => {
@@ -919,16 +927,11 @@ export default Plugin.define({
         // A click leaves a selection of a glyph or two behind: only one that holds words counts. The
         // clipboard is read after the menu is open: PowerShell takes seconds to start on a busy machine.
         pendingSelection = /\p{L}{3,}/u.test(selected) ? selected : ""
+        isPendingSelected = pendingSelection !== ""
         pendingRead = pendingSelection
           ? undefined
           : readClipboard().then((text) => {
-              // The text the history was cleared with is passed over until the clipboard holds another.
-              if (clearedClipboard !== undefined && text === clearedClipboard) {
-                pendingSelection = ""
-                return
-              }
-              clearedClipboard = undefined
-              pendingSelection = text
+              pendingSelection = freshClipboard(text)
             })
         await refreshClips()
       }
@@ -959,13 +962,15 @@ export default Plugin.define({
     /** The first row of the 📎 menu: reads the selection taken when 📎 was pressed. */
     const readSelection = async () => {
       await pendingRead?.catch(() => {})
-      if (!plain(pendingSelection).trim()) {
-        toast("seleccioná o copiá un texto primero")
-        return
-      }
-      if (menus.clipNow === SELECTION_CLIP && speech.state !== "idle") {
+      if (plain(pendingSelection).trim() && menus.clipNow === SELECTION_CLIP && speech.state !== "idle") {
         if (speech.state === "playing") await narration.pause()
         else if (speech.state === "paused") await narration.resume()
+        return
+      }
+      // The clipboard as it is now, not as it was when the menu opened: a text copied since is the one read.
+      if (!isPendingSelected) pendingSelection = freshClipboard(await readClipboard().catch(() => ""))
+      if (!plain(pendingSelection).trim()) {
+        toast("seleccioná o copiá un texto primero")
         return
       }
       const text = plain(pendingSelection)
