@@ -1,6 +1,7 @@
 /**
- * What shows a file in a popup in the middle of the screen: the engine's PowerShell popup on Windows,
- * Quick Look on macOS, the default program elsewhere. One popup at a time is the host's part.
+ * What shows a file in a popup in the middle of the screen: the engine's PowerShell popup on Windows; on
+ * macOS the engine's view.py popup for a pasted image, drawn the same, and Quick Look for a file; the
+ * default program elsewhere. One popup at a time is the host's part.
  *
  * While it is up, the file popup speaks on stdout: `shown`, then a dot ten times a second, and, when its
  * Copiar is pressed, `copied <base64>` (the text taken) or `attach <base64>` (a picture file to attach).
@@ -38,6 +39,14 @@ export function viewerCommand(
       ],
       env: { SPEEDY_FILE: native, SPEEDY_IMAGE: native, SPEEDY_PYTHON: python },
     }
+  }
+  // A pasted image on macOS: view.py's popup, framed as view.ps1's; Quick Look where pywebview is not installed.
+  if (platform === "darwin" && script === "view.ps1") {
+    const show = [
+      `if "$SPEEDY_PYTHON" -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("webview") else 1)' 2>/dev/null; then exec "$SPEEDY_PYTHON" "$SPEEDY_POPUP"; fi`,
+      'exec qlmanage -p "$SPEEDY_IMAGE"',
+    ].join("\n")
+    return { argv: ["/bin/sh", "-c", show], env: { SPEEDY_IMAGE: path, SPEEDY_PYTHON: python, SPEEDY_POPUP: `${root}/engine/view.py` } }
   }
   return { argv: platform === "darwin" ? ["qlmanage", "-p", path] : ["xdg-open", path], env: {} }
 }

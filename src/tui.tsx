@@ -1334,7 +1334,7 @@ export default Plugin.define({
       // A file's mention never goes through the clipboard: it holds the file 📋 just put there.
       insert: (text, separator) => insertInPrompt(text, separator, false),
       ask: async (mode, native, kind) => {
-        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind)
+        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind, pythonPath())
         return command ? dialogAnswer((await run(command.argv, command.env)).stdout) : "cancel"
       },
       rename: async (native, name, target) => {

@@ -28,11 +28,17 @@ describe("the commands behind each file's tools", () => {
     // A folder: the dialog asks one name, and says the folder goes with what it holds.
     expect(dialogCommand("win32", "rename", NATIVE, "C:/plugin", "dir")?.env.SPEEDY_KIND).toBe("dir")
     expect(dialogCommand("win32", "rename", NATIVE, "C:/plugin")?.env.SPEEDY_KIND).toBe("file")
-    const rename = dialogCommand("darwin", "rename", "/Users/me/a.md", "/plugin")!
-    expect(rename.argv[0]).toBe("osascript")
+    // macOS: the engine's popup first; the AppleScript dialog after it, for when the popup says nothing.
+    const rename = dialogCommand("darwin", "rename", "/Users/me/a.md", "/plugin", "dir", "/venv/bin/python")!
+    expect(rename.argv.slice(0, 2)).toEqual(["/bin/sh", "-c"])
+    expect(rename.argv[2]).toContain('answer=$("$SPEEDY_PYTHON" "$SPEEDY_POPUP" 2>/dev/null)')
+    expect(rename.argv[2]).toContain('exec "$@"')
+    expect(rename.env).toEqual({ SPEEDY_FILE: "/Users/me/a.md", SPEEDY_MODE: "rename", SPEEDY_KIND: "dir", SPEEDY_PYTHON: "/venv/bin/python", SPEEDY_POPUP: "/plugin/engine/dialog.py" })
+    expect(rename.argv[4]).toBe("osascript")
     expect(rename.argv.join(" ")).toContain('return "name " & answer')
     expect(rename.argv.at(-1)).toBe("a.md")
     const remove = dialogCommand("darwin", "delete", "/Users/me/a.md", "/plugin")!
+    expect(remove.env.SPEEDY_MODE).toBe("delete")
     expect(remove.argv.join(" ")).toContain('return "delete"')
     expect(dialogCommand("linux", "delete", "/a", "/plugin")).toBeUndefined()
   })

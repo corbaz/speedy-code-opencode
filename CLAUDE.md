@@ -131,7 +131,8 @@ anything outside this list without checking it first.
 - A pasted image is kept by the port itself, from the clipboard, when a paste
   control is clicked: the host does not list a session's images. An image
   pasted with the keyboard is not kept. An image is shown by the original's
-  `engine/view.ps1` popup (Quick Look on macOS).
+  `engine/view.ps1` popup (on macOS `engine/view.py`, the same popup in HTML;
+  Quick Look where pywebview is not installed).
 - On first run the voices, the microphone, the networks and the status line
   levels are read from the Claude Code plugin's store, once (`imported`).
 - The status line is drawn by the plugin above its controls; its switch in

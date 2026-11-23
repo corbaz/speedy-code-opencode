@@ -43,8 +43,9 @@ export function fileCopyCommand(platform: string, native: string): FileCommand |
 
 /**
  * ✏ and 🗑's dialog: the engine's dialog.ps1 on Windows (the new name, or whether the file goes to the
- * Recycle Bin), an AppleScript dialog on macOS. It answers `rename <base64 name>` (macOS: `name <name>`),
- * `delete` or `cancel`.
+ * Recycle Bin), the engine's dialog.py popup on macOS, drawn the same. Where pywebview is not installed
+ * dialog.py says nothing, and an AppleScript dialog asks. It answers `rename <base64 name>` (the
+ * AppleScript dialog: `name <name>`), `delete` or `cancel`. `python` is the engine's Python, for macOS.
  */
 export function dialogCommand(
   platform: string,
@@ -52,6 +53,7 @@ export function dialogCommand(
   native: string,
   root: string,
   kind: "file" | "dir" = "file",
+  python = "",
 ): FileCommand | undefined {
   if (platform === "win32") {
     return {
@@ -84,7 +86,16 @@ export function dialogCommand(
           "end try",
           "end run",
         ]
-  return { argv: ["osascript", ...script.flatMap((line) => ["-e", line]), name], env: {} }
+  // The popup first; what it says is the answer. Saying nothing, the AppleScript dialog after it asks.
+  const ask = [
+    'answer=$("$SPEEDY_PYTHON" "$SPEEDY_POPUP" 2>/dev/null)',
+    `if [ -n "$answer" ]; then printf '%s\\n' "$answer"; exit 0; fi`,
+    'exec "$@"',
+  ].join("\n")
+  return {
+    argv: ["/bin/sh", "-c", ask, "sh", "osascript", ...script.flatMap((line) => ["-e", line]), name],
+    env: { SPEEDY_FILE: native, SPEEDY_MODE: mode, SPEEDY_KIND: kind, SPEEDY_PYTHON: python, SPEEDY_POPUP: `${root}/engine/dialog.py` },
+  }
 }
 
 /** The dialog's answer: its first line that says something; `cancel` when it said nothing. */

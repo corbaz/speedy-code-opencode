@@ -115,8 +115,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   fill; a folder's, blue, a blue fill. At the right of every file and every folder (a disk's root aside),
   each icon pressed on its own cells with a gap between them that takes no press: `📋` puts the file on the clipboard (to paste in a folder) and
   attaches it to the prompt as `@path`; `🔗` puts its path on the clipboard and in the prompt; `✏`
-  asks the new name in a dialog in the middle of the screen (`engine/dialog.ps1`; a Finder dialog on
-  macOS) and renames it, refusing an empty name, `\ / : * ? " < > |` or another file's name; `🗑` asks
+  asks the new name in a dialog in the middle of the screen (`engine/dialog.ps1`; on macOS
+  `engine/dialog.py`, the same popup drawn in HTML) and renames it, refusing an empty name, `\ / : * ? " < > |` or another file's name; `🗑` asks
   and sends it to the Recycle Bin, or the Trash. With ⚙'s Nerd Fonts icons they are glyphs in their
   colors; a pressed `📋` or `🔗` turns green for a second. One
   popup at a time: another closes it. In the status line, a click on `opencode:v…` opens that version's
