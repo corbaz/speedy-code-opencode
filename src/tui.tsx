@@ -332,6 +332,8 @@ export default Plugin.define({
     let kept = { answer: "", lang: "", file: "" }
     // The narrations started and listed before their file is written.
     const startedClips = new Set<string>()
+    // Whether the narration being started is a selection read: it goes to the history as it starts.
+    let isSelectionRead = false
 
     const narration = new Narration({
       speak: createSpeaker(engine),
@@ -342,7 +344,8 @@ export default Plugin.define({
         kept = { ...kept, file }
         // A selection read is in the history as it starts: its row there is the one playing, with ⏸ and ⏵,
         // and the selection's own row is free for the next text.
-        if (menus.clipNow === SELECTION_CLIP) {
+        if (isSelectionRead) {
+          isSelectionRead = false
           startedClips.add(file)
           setMenus((draft) => {
             draft.clipNow = file
@@ -1038,6 +1041,7 @@ export default Plugin.define({
       setMenus((draft) => {
         draft.clipNow = SELECTION_CLIP
       })
+      isSelectionRead = true
       void narrate(text).then(refreshClips)
       // The row is marked after the stops above cleared it.
       setMenus((draft) => {
