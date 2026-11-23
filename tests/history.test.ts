@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 
 import { POWERSHELL } from "../src/powershell"
 
-import { ClipPlayer, HISTORY_LENGTH, clipParts, listClips, playCommand, type Directory } from "../src/history"
+import { ClipPlayer, HISTORY_LENGTH, clipParts, listClips, playCommand, readSource, type Directory } from "../src/history"
 import type { SpeakingProcess } from "../src/speech"
 
 /** A process the test drives by hand. */
@@ -203,4 +203,18 @@ describe("ClipPlayer", () => {
     expect(removed).toEqual(["clip.txt"])
     expect(player.state).toBe("idle")
   })
+})
+
+test("readSource: of the selection and the clipboard, the one that changed last is read; a new selection first", () => {
+  const none = { selection: "", clipboard: "", source: "" as const }
+  expect(readSource("sel", "clip", none)).toBe("selection")
+  expect(readSource("", "clip", none)).toBe("clipboard")
+  // The selection still there from before, and a text copied since: the clipboard's.
+  expect(readSource("sel", "nuevo", { selection: "sel", clipboard: "clip", source: "selection" })).toBe("clipboard")
+  // Another text selected since: the selection's, whatever the clipboard.
+  expect(readSource("otra", "nuevo", { selection: "sel", clipboard: "clip", source: "clipboard" })).toBe("selection")
+  // Nothing changed: what was read last is read again.
+  expect(readSource("sel", "clip", { selection: "sel", clipboard: "clip", source: "clipboard" })).toBe("clipboard")
+  expect(readSource("sel", "clip", { selection: "sel", clipboard: "clip", source: "selection" })).toBe("selection")
+  expect(readSource("", "", none)).toBe("clipboard")
 })

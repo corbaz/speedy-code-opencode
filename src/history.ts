@@ -166,3 +166,23 @@ export class ClipPlayer {
     return this.#session.stop()
   }
 }
+
+/** What 📎 last looked at and read: the selection, the clipboard's text, and which of the two it read. */
+export interface LastRead {
+  readonly selection: string
+  readonly clipboard: string
+  readonly source: "" | "selection" | "clipboard"
+}
+
+/**
+ * Which of the two 📎 reads: the selection or the clipboard's text, the one that changed since they were last
+ * looked at; a new selection first. A text sent to the clipboard by any means is so read even while an
+ * older selection is still there. With nothing changed, what was read last.
+ */
+export function readSource(selection: string, clipboard: string, last: LastRead): "selection" | "clipboard" {
+  if (selection && selection !== last.selection) return "selection"
+  if (clipboard && clipboard !== last.clipboard) return "clipboard"
+  if (last.source === "selection" && selection) return "selection"
+  if (last.source === "clipboard" && clipboard) return "clipboard"
+  return selection ? "selection" : "clipboard"
+}

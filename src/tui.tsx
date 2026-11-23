@@ -34,7 +34,7 @@ import { createViewerReader, mediaSaid, promptInsertion, viewerCommand, type Vie
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
 import { EXPLORER_PANEL, ExplorerPanel, type ExplorerPanelApi } from "./explorer-panel"
 import { behindOrigin, takeUpdate, type Git } from "./update"
-import { ClipPlayer, listClips, type HistoryClip } from "./history"
+import { ClipPlayer, listClips, readSource, type HistoryClip, type LastRead } from "./history"
 import {
   DraftImages,
   INITIAL_MENU,
@@ -924,8 +924,17 @@ export default Plugin.define({
     let pendingRead: Promise<void> | undefined
     // The clipboard's text as it was when the history was cleared.
     let clearedClipboard: string | undefined
-    // Whether what 📎 reads was selected with the mouse; else it is the clipboard's, read again at each press.
-    let isPendingSelected = false
+    // The selection as 📎 took it, the one there when the history was cleared, and what was last looked at and read.
+    let takenSelection = ""
+    let clearedSelection: string | undefined
+    let lastRead: LastRead = { selection: "", clipboard: "", source: "" }
+    /** Sets what 📎 reads from the selection taken and the clipboard as it is now: the newer of the two. */
+    const choosePending = async () => {
+      const clipboard = freshClipboard(await readClipboard().catch(() => ""))
+      const source = readSource(takenSelection, clipboard, lastRead)
+      lastRead = { selection: takenSelection, clipboard, source }
+      pendingSelection = source === "selection" ? takenSelection : clipboard
+    }
     /** The clipboard's text for 📎 to read: none while it is still the one the history was cleared with. */
     const freshClipboard = (text: string): string => {
       if (clearedClipboard !== undefined && text === clearedClipboard) return ""
@@ -969,12 +978,11 @@ export default Plugin.define({
         // A click leaves a selection of a glyph or two behind: only one that holds words counts. The
         // clipboard is read after the menu is open: PowerShell takes seconds to start on a busy machine.
         pendingSelection = /\p{L}{3,}/u.test(selected) ? selected : ""
-        isPendingSelected = pendingSelection !== ""
-        pendingRead = pendingSelection
-          ? undefined
-          : readClipboard().then((text) => {
-              pendingSelection = freshClipboard(text)
-            })
+        // The selection the history was cleared with is passed over, as the clipboard's text is.
+        if (clearedSelection !== undefined && pendingSelection !== clearedSelection) clearedSelection = undefined
+        takenSelection = clearedSelection === undefined ? pendingSelection : ""
+        pendingSelection = takenSelection
+        pendingRead = choosePending()
         await refreshClips()
       }
       if (which === "images") await refreshImages()
@@ -1010,7 +1018,7 @@ export default Plugin.define({
         return
       }
       // The clipboard as it is now, not as it was when the menu opened: a text copied since is the one read.
-      if (!isPendingSelected) pendingSelection = freshClipboard(await readClipboard().catch(() => ""))
+      await choosePending()
       if (!plain(pendingSelection).trim()) {
         toast("seleccioná o copiá un texto primero")
         return
@@ -1055,6 +1063,8 @@ export default Plugin.define({
       await pendingRead?.catch(() => {})
       pendingSelection = ""
       pendingRead = undefined
+      clearedSelection = takenSelection || undefined
+      takenSelection = ""
       // What the clipboard holds now was there before the clearing: it is not read again, only a text copied after.
       clearedClipboard = await readClipboard().catch(() => undefined)
       kept = { ...kept, file: "" }
