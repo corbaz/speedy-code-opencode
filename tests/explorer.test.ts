@@ -15,6 +15,12 @@ import {
   isViewable,
   listingOf,
   pastedPath,
+  filterLine,
+  filterMoved,
+  filterNote,
+  filterPattern,
+  filterRows,
+  ruleLabel,
   rowAction,
   rowLabel,
   treeRows,
@@ -216,6 +222,7 @@ const noTools = {
   exists: async () => false,
   toast: () => {},
   wait: async () => {},
+  find: () => () => {},
 }
 
 function fakeIO(tree: typeof TREE = TREE) {
@@ -228,7 +235,14 @@ function fakeIO(tree: typeof TREE = TREE) {
   const prompt = { text: "mirá este" }
   const existing = new Set<string>()
   let release: () => void = () => {}
+  // The filter's searches: what each was asked, what it hears and whether it was stopped.
+  const searches: Array<{ ask: { root: string; first: string; pattern: string; most: number }; say: (line: object) => void; end: () => void; isStopped: boolean }> = []
   const io: ExplorerIO = {
+    find: (ask, onLine, onEnd) => {
+      const search = { ask, say: (line: object) => onLine(JSON.stringify(line)), end: onEnd, isStopped: false }
+      searches.push(search)
+      return () => void (search.isStopped = true)
+    },
     list: async (path) => {
       const entries = tree[path.replace(/\\/g, "/")]
       if (!entries) throw new Error("EPERM")
@@ -257,7 +271,7 @@ function fakeIO(tree: typeof TREE = TREE) {
     // A second passes when the test says so.
     wait: () => new Promise<void>((done) => (release = done)),
   }
-  return { io, opened, viewed, files, dialog, toasts, prompt, existing, second: () => release() }
+  return { io, opened, viewed, files, dialog, toasts, prompt, existing, searches, second: () => release() }
 }
 
 describe("the explorer the footer's folder opens", () => {
@@ -545,4 +559,71 @@ describe("each file's tools", () => {
 test("gotoHint: the explorer's field shows a path as the system writes one", () => {
   expect(gotoHint("win32")).toBe("pegá una ruta y Enter: D:\\carpeta\\archivo")
   expect(gotoHint("darwin")).toBe("pegá una ruta y Enter: /Users/carpeta/archivo")
+})
+
+describe("the explorer's filter", () => {
+  const texts = (rows: ReturnType<typeof treeRows>) => rows.map(rowLabel)
+
+  test("filterRows, filterNote, ruleLabel, filterLine, filterPattern and filterMoved: a filter's tree holds the files found under their folders; a file renamed or trashed follows", () => {
+    const state = { drives: ["/"], drive: "/", open: [], listed: {}, here: "/Users/ana", caseless: false, top: 0 }
+    const filter = { pattern: "a*.docx", paths: ["/Users/ana/b/acta 10.docx", "/Users/ana/b/acta 2.docx", "/Users/ana/Acta.docx"], seen: 1200, isBusy: true, isCut: false, closed: [] as string[] }
+    expect(texts(filterRows(state, filter))).toEqual(["▾ /", "  ▾ Users", "    ▾ ana ●", "      ▾ b", "          acta 2.docx", "          acta 10.docx", "        Acta.docx"])
+    expect(texts(treeRows({ ...state, filter: { ...filter, closed: ["/Users/ana/b"] } }))).toEqual(["▾ /", "  ▾ Users", "    ▾ ana ●", "      ▸ b", "        Acta.docx"])
+    expect(texts(filterRows(state, { ...filter, paths: [] }))).toEqual(["▾ /", "  buscando…"])
+    expect(texts(filterRows(state, { ...filter, paths: [], isBusy: false }))).toEqual(["▾ /", "  (ningún archivo coincide)"])
+    expect(texts(filterRows(state, { ...filter, paths: ["/a.docx"], isCut: true }))).toEqual(["▾ /", "    a.docx", "  … hay más: son los primeros 1"])
+    expect(filterNote(filter)).toBe(" a*.docx: 3 archivos, buscando… (1.200 vistos) ")
+    expect(filterNote({ ...filter, paths: ["/a.docx"], isBusy: false })).toBe(" a*.docx: 1 archivo ")
+    expect(ruleLabel(state, 12)).toBe("─".repeat(12))
+    expect(ruleLabel({ ...state, filter: { ...filter, isBusy: false } }, 30)).toBe("─ a*.docx: 3 archivos ────────")
+    expect(filterLine('{"paths": ["C:/a.pdf", 3], "seen": 12, "done": true, "cut": true}')).toEqual({ paths: ["C:/a.pdf"], seen: 12, isDone: true, isCut: true })
+    expect(filterLine('{"paths": [], "seen": 5}')).toEqual({ paths: [], seen: 5, isDone: false, isCut: false })
+    expect(filterLine("Traceback")).toBeUndefined()
+    expect(filterPattern('  "*.pdf" ')).toBe("*.pdf")
+    expect(filterPattern("   ")).toBe("")
+    expect(filterMoved({ ...state, filter }, "/Users/ana/b", "/Users/ana/c").filter?.paths).toEqual(["/Users/ana/c/acta 10.docx", "/Users/ana/c/acta 2.docx", "/Users/ana/Acta.docx"])
+    expect(filterMoved({ ...state, filter }, "/Users/ana/Acta.docx").filter?.paths).toEqual(["/Users/ana/b/acta 10.docx", "/Users/ana/b/acta 2.docx"])
+    expect(filterMoved(state, "/Users/ana/Acta.docx")).toBe(state)
+  })
+
+  test("a pattern, Enter: the disk shown is searched, the session's folder first, and the tree holds the files found; a folder closes and opens; another disk is searched too; × brings the whole tree back", async () => {
+    const { io, searches } = fakeIO()
+    const explorer = createExplorer(io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    const whole = texts(treeRows(explorer.state()))
+    explorer.filter(' "*.pdf" ')
+    expect(searches[0]!.ask).toEqual({ root: "C:\\", first: "C:\\Users\\test\\proyectos", pattern: "*.pdf", most: 1000 })
+    expect(texts(treeRows(explorer.state()))).toEqual(["▾ C:\\", "  buscando…"])
+    searches[0]!.say({ paths: ["C:/Users/test/proyectos/informe.pdf"], seen: 40 })
+    searches[0]!.say({ paths: ["C:/Users/Public/Guía.PDF", "C:/apuntes.pdf"], seen: 90, done: true, cut: false })
+    searches[0]!.end()
+    expect(explorer.state().filter).toMatchObject({ pattern: "*.pdf", seen: 90, isBusy: false, isCut: false })
+    expect(texts(treeRows(explorer.state()))).toEqual(["▾ C:\\", "  ▾ Users", "    ▾ Public", "        Guía.PDF", "    ▾ test", "      ▾ proyectos ●", "          informe.pdf", "    apuntes.pdf"])
+    // A folder of a filter's tree closes with a press, and opens with another.
+    await explorer.toggleFolder("C:/Users/test")
+    expect(texts(treeRows(explorer.state()))).toContain("    ▸ test")
+    await explorer.toggleFolder("C:/Users/test")
+    expect(texts(treeRows(explorer.state()))).toContain("          informe.pdf")
+    // Another disk is searched with the same filter, and the search before is stopped: its lines are not heard.
+    await explorer.pickDrive("D:/")
+    expect(searches[0]!.isStopped).toBe(true)
+    expect(searches[1]!.ask).toMatchObject({ root: "D:\\", pattern: "*.pdf" })
+    searches[0]!.say({ paths: ["C:/tarde.pdf"], seen: 99 })
+    searches[1]!.say({ paths: [], seen: 7, done: true, cut: false })
+    expect(texts(treeRows(explorer.state()))).toEqual(["▾ D:\\", "  (ningún archivo coincide)"])
+    // × clears it: the search ends, the field empties and the whole tree is back.
+    explorer.clearFilter()
+    expect(searches[1]!.isStopped).toBe(true)
+    expect(explorer.state().filter).toBeUndefined()
+    expect(explorer.state().cleared).toBe(1)
+    expect(texts(treeRows(explorer.state()))).toEqual(["▾ D:\\", "  ▸ fotos"])
+    await explorer.pickDrive("C:/")
+    expect(texts(treeRows(explorer.state()))).toEqual(whole)
+    // An empty pattern clears the filter as × does; a search that ends on its own, with no last line, is over.
+    explorer.filter("notas")
+    searches[2]!.end()
+    expect(explorer.state().filter?.isBusy).toBe(false)
+    explorer.filter("  ")
+    expect(explorer.state().filter).toBeUndefined()
+  })
 })

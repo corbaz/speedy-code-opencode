@@ -9,6 +9,9 @@
  * Each file has four tools at its right: 📋 puts it on the clipboard and attaches it to the prompt as
  * `@path`, 🔗 puts its path in both, ✏ renames it and 🗑 sends it to the trash, each of the last two after a
  * dialog. ⊟ beside the disks collapses every disk; the session's stays open down to its folder.
+ *
+ * Under the field for a path, the filter's: a pattern (`*.pdf`, `a*.docx`), Enter, and the disk shown is
+ * searched; the tree holds only the files found, under their folders. × clears it and the whole tree is back.
  */
 
 import { newNameOf } from "./file-tools"
@@ -55,6 +58,26 @@ export interface ExplorerState {
   readonly turn?: number
   /** The key of the path pasted in the field under the disks and found, marked in the tree; absent: none. */
   readonly found?: string
+  /** The filter, while one is on: the tree is its own. */
+  readonly filter?: ExplorerFilter
+  /** Counts the times the filter was cleared: each one empties its field. */
+  readonly cleared?: number
+}
+
+/** The explorer's filter: the files of the disk shown whose names match a pattern, as the search finds them. */
+export interface ExplorerFilter {
+  /** As typed: `*.pdf`. */
+  readonly pattern: string
+  /** The files found so far, each path with `/` alone. */
+  readonly paths: readonly string[]
+  /** The entries the search looked at. */
+  readonly seen: number
+  /** Whether the search still runs. */
+  readonly isBusy: boolean
+  /** Whether it stopped at the most files a filter shows. */
+  readonly isCut: boolean
+  /** The keys of the folders closed by hand in the filter's tree, where every folder is open. */
+  readonly closed: readonly string[]
 }
 
 /** What the explorer reads and does outside itself. */
@@ -87,10 +110,24 @@ export interface ExplorerIO {
   toast(message: string, isError?: boolean): void
   /** Waits; the pressed tool is green for this long. */
   wait(ms: number): Promise<void>
+  /**
+   * Searches `root` (a native path) for the files whose names match `pattern`, `first` before the rest, up to
+   * `most`: each line find_files.py says goes to `onLine`, and `onEnd` hears its end. What it gives back stops it.
+   */
+  find(ask: { root: string; first: string; pattern: string; most: number }, onLine: (line: string) => void, onEnd: () => void): () => void
 }
 
 /** The most entries a folder shows: a folder with thousands would bury the tree. */
 export const EXPLORER_MOST = 500
+
+/** The most files a filter shows: more would bury the tree, and the pattern can be made narrower. */
+export const FILTER_MOST = 1000
+
+/** What the filter's field says while empty. */
+export const FILTER_HINT = "filtro: *.pdf, a*.docx"
+
+/** The filter's ×, beside its field. */
+export const UNFILTER_LABEL = " × limpiar "
 
 export const EMPTY_EXPLORER: ExplorerState = { drives: [], drive: "", open: [], listed: {}, here: "", caseless: false, top: 0 }
 
@@ -156,9 +193,96 @@ export interface TreeRow {
   readonly isFound?: boolean
 }
 
-/** The tree of the disk shown, flat: the disk, then what each open folder holds under it. */
+/**
+ * The tree of a filter, flat: the disk, then only the folders that hold a file found, down to each one, all
+ * open but those closed by hand. Folders first, then files, each by name, as the whole tree lists them.
+ */
+export function filterRows(state: ExplorerState, filter: ExplorerFilter): TreeRow[] {
+  type Folder = { path: string; folders: Map<string, Folder>; files: string[] }
+  const root: Folder = { path: state.drive, folders: new Map(), files: [] }
+  const disk = pathKey(state.drive, state.caseless)
+  for (const path of filter.paths) {
+    if (!isUnder(pathKey(path, state.caseless), disk)) continue
+    const names = path.slice(state.drive.length).split("/").filter(Boolean)
+    const file = names.pop()
+    if (!file) continue
+    let folder = root
+    for (const name of names) {
+      const key = pathKey(name, state.caseless)
+      let next = folder.folders.get(key)
+      if (!next) folder.folders.set(key, (next = { path: joinPath(folder.path, name), folders: new Map(), files: [] }))
+      folder = next
+    }
+    folder.files.push(file)
+  }
+  const here = pathKey(state.here, state.caseless)
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })
+  const last = (path: string) => path.slice(path.lastIndexOf("/") + 1)
+  const rows: TreeRow[] = []
+  const walk = (folder: Folder, name: string, depth: number): void => {
+    const key = pathKey(folder.path, state.caseless)
+    const isOpen = !filter.closed.includes(key)
+    rows.push({ path: folder.path, name, depth, kind: "dir", isOpen, isHere: key === here })
+    if (!isOpen) return
+    for (const next of [...folder.folders.values()].sort((a, b) => byName(last(a.path), last(b.path)))) walk(next, last(next.path), depth + 1)
+    for (const file of [...folder.files].sort(byName)) {
+      rows.push({ path: joinPath(folder.path, file), name: file, depth: depth + 1, kind: "file", isOpen: false, isHere: false })
+    }
+  }
+  const label = /^[A-Za-z]:\/$/.test(state.drive) ? `${driveLabel(state.drive)}\\` : state.drive
+  walk(root, label, 0)
+  const note = (name: string) => void rows.push({ path: `${state.drive}#${name}`, name, depth: 1, kind: "note", isOpen: false, isHere: false })
+  if (rows.length === 1) note(filter.isBusy ? "buscando…" : "(ningún archivo coincide)")
+  else if (filter.isCut) note(`… hay más: son los primeros ${filter.paths.length}`)
+  return rows
+}
+
+/** What the rule under the filter says of it: the pattern, the files found, and the entries seen while it searches. */
+export function filterNote(filter: ExplorerFilter): string {
+  const count = filter.paths.length
+  const found = `${count} ${count === 1 ? "archivo" : "archivos"}`
+  return filter.isBusy
+    ? ` ${filter.pattern}: ${found}, buscando… (${filter.seen.toLocaleString("es-AR")} vistos) `
+    : ` ${filter.pattern}: ${found} `
+}
+
+/** The rule under the fields, `width` cells: plain, or with what the filter found written on it. */
+export function ruleLabel(state: ExplorerState, width: number): string {
+  if (!state.filter) return "─".repeat(width)
+  return `─${cutCells(filterNote(state.filter), Math.max(1, width - 2))}`.padEnd(width, "─")
+}
+
+/** A pattern as typed in the filter's field: its spaces and quotes off. Empty: no filter. */
+export function filterPattern(text: string): string {
+  return text.trim().replace(/^["']+|["']+$/g, "").trim()
+}
+
+/** A line find_files.py said: the files found since the one before, the entries seen, whether it ended and whether cut short. */
+export function filterLine(line: string): { paths: string[]; seen: number; isDone: boolean; isCut: boolean } | undefined {
+  try {
+    const said = JSON.parse(line) as { paths?: unknown; seen?: unknown; done?: unknown; cut?: unknown } | null
+    if (!said || typeof said !== "object") return undefined
+    const paths = Array.isArray(said.paths) ? said.paths.filter((one): one is string => typeof one === "string") : []
+    return { paths, seen: typeof said.seen === "number" ? said.seen : 0, isDone: said.done === true, isCut: said.cut === true }
+  } catch {
+    return undefined
+  }
+}
+
+/** The explorer after a file or a folder was renamed (`to`) or sent to the trash: a filter's files follow it. */
+export function filterMoved(state: ExplorerState, from: string, to?: string): ExplorerState {
+  if (!state.filter) return state
+  const key = pathKey(from, state.caseless)
+  const paths = state.filter.paths.flatMap((path) =>
+    !isUnder(pathKey(path, state.caseless), key) ? [path] : to ? [`${to}${path.slice(from.length)}`] : [],
+  )
+  return { ...state, filter: { ...state.filter, paths } }
+}
+
+/** The tree of the disk shown, flat: the disk, then what each open folder holds under it; with a filter on, its tree. */
 export function treeRows(state: ExplorerState): TreeRow[] {
   if (!state.drive) return []
+  if (state.filter) return filterRows(state, state.filter)
   const here = pathKey(state.here, state.caseless)
   const found = state.found ?? ""
   const rows: TreeRow[] = []
@@ -375,6 +499,13 @@ export interface Explorer {
    * from the session's folder.
    */
   goTo(text: string): Promise<void>
+  /**
+   * A pattern typed in the filter's field, Enter: the disk shown is searched for the files whose names match,
+   * the session's folder first, and the tree holds those alone as they are found. An empty one clears it.
+   */
+  filter(text: string): void
+  /** The filter's ×: the search ends, the field empties and the whole tree is back. */
+  clearFilter(): void
 }
 
 /** The explorer's state and what its presses do; `onChange` hears every new state. */
@@ -393,6 +524,43 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     void io.wait(FLASH_MS).then(() => {
       if (state.flashed === key) set((now) => ({ ...now, flashed: "" }))
     })
+  }
+  // The search a filter runs, while it does: called, it stops.
+  let stopFinding: (() => void) | undefined
+  const endFinding = () => {
+    stopFinding?.()
+    stopFinding = undefined
+  }
+  const find = (pattern: string) => {
+    endFinding()
+    if (!state.drive) return
+    set((now) => ({ ...now, top: 0, found: undefined, turn: (now.turn ?? 0) + 1, filter: { pattern, paths: [], seen: 0, isBusy: true, isCut: false, closed: [] } }))
+    // The lines of a search another one took the place of are not heard.
+    let isOver = false
+    const stop = io.find(
+      { root: nativeOf(state.drive, platform), first: nativeOf(state.here, platform), pattern, most: FILTER_MOST },
+      (line) => {
+        const said = filterLine(line)
+        if (!said || isOver) return
+        set((now) =>
+          now.filter
+            ? { ...now, filter: { ...now.filter, paths: said.paths.length > 0 ? [...now.filter.paths, ...said.paths] : now.filter.paths, seen: Math.max(said.seen, now.filter.seen), isBusy: !said.isDone, isCut: said.isCut } }
+            : now,
+        )
+      },
+      () => {
+        if (isOver) return
+        set((now) => (now.filter?.isBusy ? { ...now, filter: { ...now.filter, isBusy: false } } : now))
+      },
+    )
+    stopFinding = () => {
+      isOver = true
+      stop()
+    }
+  }
+  const clearFilter = () => {
+    endFinding()
+    set((now) => ({ ...now, filter: undefined, cleared: (now.cleared ?? 0) + 1, top: -1, turn: (now.turn ?? 0) + 1 }))
   }
   // Any press in the explorer takes the mark off the path the field found: the yellow fill follows the pointer again.
   const forget = () => {
@@ -420,11 +588,13 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       return io.toast(`no pude renombrar ${old}.`, true)
     }
     io.toast(`${old} ahora se llama ${name}.`)
+    set((now) => filterMoved(now, slashed(path), target))
     await reread(folder)
   }
   return {
     state: () => state,
     async open(where) {
+      endFinding()
       folder = where
       const here = slashed(where)
       const drives = await readDrives(io, platform)
@@ -436,6 +606,15 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     async toggleFolder(path) {
       forget()
       const key = pathKey(path, state.caseless)
+      // In a filter's tree every folder is open: a press closes it, and another opens it again.
+      if (state.filter) {
+        set((now) =>
+          now.filter
+            ? { ...now, filter: { ...now.filter, closed: now.filter.closed.includes(key) ? now.filter.closed.filter((one) => one !== key) : [...now.filter.closed, key] } }
+            : now,
+        )
+        return
+      }
       if (state.open.includes(key)) {
         set((now) => ({ ...now, open: now.open.filter((one) => one !== key) }))
         return
@@ -448,7 +627,10 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       forget()
       const key = pathKey(drive, state.caseless)
       const top = driveOf(state.here, state.drives, state.caseless) === drive ? -1 : 0
+      const isAnother = drive !== state.drive
       set((now) => ({ ...now, drive, top, open: now.open.includes(key) ? now.open : [...now.open, key] }))
+      // A filter follows the disk: it is searched as the one before was.
+      if (state.filter && isAnother) find(state.filter.pattern)
       if (state.listed[key] !== undefined) return
       const listed = await readFolder(io, drive)
       set((now) => ({ ...now, listed: { ...now.listed, [key]: listed } }))
@@ -495,6 +677,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       const name = nameOf(path)
       if (!(await io.trash(native))) return io.toast(`no pude mandar ${name} a la papelera.`, true)
       io.toast(`${name} fue a la papelera.`)
+      set((now) => filterMoved(now, slashed(path)))
       await reread(folderOf(slashed(path)))
     },
     collapse() {
@@ -534,8 +717,12 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
         listed[folderKey] = { entries: [...holding.entries, { name, kind: "file" }], left: Math.max(0, holding.left - 1) }
       }
       const opened = chainRead.map(([one]) => one)
+      // A path gone to is shown in the whole tree: a filter is cleared.
+      endFinding()
       set((now) => ({
         ...now,
+        filter: undefined,
+        cleared: now.filter ? (now.cleared ?? 0) + 1 : now.cleared,
         drive,
         open: [...now.open.filter((one) => !opened.includes(one)), ...opened],
         listed: { ...now.listed, ...listed },
@@ -544,5 +731,11 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
         turn: (now.turn ?? 0) + 1,
       }))
     },
+    filter(text) {
+      const pattern = filterPattern(text)
+      if (pattern) find(pattern)
+      else clearFilter()
+    },
+    clearFilter,
   }
 }

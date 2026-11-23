@@ -2,6 +2,8 @@
  * The explorer as the host's side panel draws it (`session.panel`, opened by `ui.panel.open`): the disks
  * on top, the one shown underlined, ⊟ to collapse every disk, `↗ abrir en el sistema` and the close mark
  * beside them; under them a field a path is pasted in, Enter, and the tree opens down to it and marks it;
+ * under it the filter's field, with × to clear it: a pattern, Enter, and the tree holds only the disk's files
+ * that match;
  * under a rule, the disk's tree, the session's folder marked ● and put in the middle when the explorer
  * opens. The tree scrolls under the disks and the field, which stay.
  *
@@ -16,6 +18,9 @@ import type { ScrollBoxRenderable } from "@opentui/core"
 import {
   FLASH_COLOR,
   FILE_TOOLS_WIDTH,
+  FILTER_HINT,
+  UNFILTER_LABEL,
+  ruleLabel,
   collapseLabel,
   driveLabel,
   fileNameLabel,
@@ -60,6 +65,10 @@ export interface ExplorerPanelApi {
   collapse(): void
   /** A path pasted in the field, Enter: the tree opens down to it and marks it. */
   goTo(text: string): void
+  /** A pattern typed in the filter's field, Enter: the tree holds only the disk's files that match. */
+  filter(text: string): void
+  /** The filter's ×: the whole tree is back. */
+  clearFilter(): void
   openSystem(): void
   close(): void
 }
@@ -79,15 +88,28 @@ function rowLook(row: TreeRow): { color?: string; attributes: number } {
 
 export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const api = props.api
-  const rows = createMemo(() => treeRows(api.state()))
+  // A row that did not change is the one drawn before: while a filter's search adds files, or only counts
+  // what it saw, the rows already there are left as they are.
+  const rowKey = (row: TreeRow) => `${row.kind}|${row.depth}|${row.isOpen}|${row.isHere}|${row.isFound === true}|${row.name}|${row.path}`
+  const rows = createMemo<TreeRow[]>((before) => {
+    const drawn = new Map(before.map((row) => [rowKey(row), row]))
+    const next = treeRows(api.state()).map((row) => drawn.get(rowKey(row)) ?? row)
+    return next.length === before.length && next.every((row, index) => row === before[index]) ? before : next
+  }, [])
   // The rule and the rows take the panel's width, less its margins and the scroll bar.
   const room = () => Math.max(8, api.width() - 3)
   // The file whose row is under the pointer, its tools included.
   const [hovered, setHovered] = createSignal("")
   // The field for a path takes the keys only once pressed, and gives them back on Enter: the prompt keeps them.
-  const [isTyping, setTyping] = createSignal(false)
-  let field: { value?: string; plainText?: string } | undefined
-  const typed = () => field?.value ?? field?.plainText ?? ""
+  const [typing, setTyping] = createSignal<"" | "goto" | "filter">("")
+  type Field = { value?: string; plainText?: string }
+  let field: Field | undefined
+  let filterField: Field | undefined
+  const typed = (one: Field | undefined) => one?.value ?? one?.plainText ?? ""
+  // The filter cleared, by its × or by a path gone to: its field empties.
+  createEffect(() => {
+    if ((api.state().cleared ?? 0) > 0 && filterField) filterField.value = ""
+  })
   let tree: ScrollBoxRenderable | undefined
 
   // A disk shown, the explorer opened or the tree collapsed: the tree goes to its top, or puts the
@@ -200,26 +222,61 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         <Btn label=" ↗ abrir en el sistema " dim onPress={() => api.openSystem()} />
         <Btn label=" × " color={CLOSE_COLOR} bold onPress={() => api.close()} />
       </box>
-      <box flexShrink={0} onMouseUp={() => setTyping(true)}>
+      <box flexShrink={0} onMouseUp={() => setTyping("goto")}>
         <input
           id="speedy-explorer-goto"
           ref={(one: unknown) => {
             field = one as typeof field
           }}
-          focused={isTyping()}
+          focused={typing() === "goto"}
           placeholder={gotoHint(process.platform)}
           placeholderColor="#868e96"
           textColor={VIEWABLE_COLOR}
           focusedTextColor={VIEWABLE_COLOR}
           cursorColor={VIEWABLE_COLOR}
           onSubmit={() => {
-            setTyping(false)
-            api.goTo(typed())
+            setTyping("")
+            api.goTo(typed(field))
           }}
         />
       </box>
-      <text wrapMode="none" selectable={false} attributes={DIM} flexShrink={0}>
-        {"─".repeat(room())}
+      <box flexDirection="row" flexShrink={0}>
+        <box flexGrow={1} flexShrink={1} onMouseUp={() => setTyping("filter")}>
+          <input
+            id="speedy-explorer-filter"
+            ref={(one: unknown) => {
+              filterField = one as Field
+            }}
+            focused={typing() === "filter"}
+            placeholder={FILTER_HINT}
+            placeholderColor="#868e96"
+            textColor={VIEWABLE_COLOR}
+            focusedTextColor={VIEWABLE_COLOR}
+            cursorColor={VIEWABLE_COLOR}
+            onSubmit={() => {
+              setTyping("")
+              api.filter(typed(filterField))
+            }}
+          />
+        </box>
+        <Btn
+          label={UNFILTER_LABEL}
+          color={api.state().filter ? CLOSE_COLOR : "#868e96"}
+          bold={api.state().filter !== undefined}
+          onPress={() => {
+            setTyping("")
+            api.clearFilter()
+          }}
+        />
+      </box>
+      <text
+        wrapMode="none"
+        selectable={false}
+        fg={api.state().filter ? VIEWABLE_COLOR : undefined}
+        attributes={api.state().filter ? 0 : DIM}
+        flexShrink={0}
+      >
+        {ruleLabel(api.state(), room())}
       </text>
       <scrollbox ref={(box: ScrollBoxRenderable) => (tree = box)} flexGrow={1} minHeight={0} scrollY>
         <For each={rows()}>

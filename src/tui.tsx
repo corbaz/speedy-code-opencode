@@ -28,7 +28,7 @@ import {
   type FooterControl,
   type SpeechState,
 } from "./footer"
-import { dialogAnswer, dialogCommand, fileCopyCommand, renameCommand, trashCommand } from "./file-tools"
+import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, renameCommand, trashCommand } from "./file-tools"
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
 import { createViewerReader, mediaSaid, popupCheckCommand, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
@@ -1361,6 +1361,37 @@ export default Plugin.define({
       ),
       toast: (message, isError) => toast(message, isError ? "error" : "info"),
       wait: (ms) => new Promise((done) => setTimeout(done, ms)),
+      find: (ask, onLine, onEnd) => {
+        const { argv, env } = findCommand(ask, PLUGIN_ROOT, pythonPath())
+        try {
+          const child = spawn(argv[0] as string, argv.slice(1), {
+            env: { ...process.env, ...env },
+            stdio: ["ignore", "pipe", "ignore"],
+            windowsHide: true,
+          })
+          // What it says comes in pieces: a line is heard once it is whole.
+          let pending = ""
+          child.stdout?.setEncoding("utf8")
+          child.stdout?.on("data", (chunk: string) => {
+            pending += chunk
+            const lines = pending.split(/\r?\n/)
+            pending = lines.pop() ?? ""
+            for (const line of lines) onLine(line)
+          })
+          child.on("error", onEnd)
+          child.on("close", onEnd)
+          return () => {
+            try {
+              child.kill()
+            } catch {
+              // Already gone.
+            }
+          }
+        } catch {
+          onEnd()
+          return () => {}
+        }
+      },
     }
     const explorer = createExplorer(explorerIO, process.platform, (state) => setExplorerState(() => state))
 
@@ -1374,11 +1405,14 @@ export default Plugin.define({
      * to open, the mod draws the same explorer at the right of the screen.
      */
     const toggleExplorer = async (): Promise<void> => {
+      // Closed, a filter's search ends with it.
       if (context.ui.panel.current()?.name === EXPLORER_PANEL) {
+        explorer.clearFilter()
         context.ui.panel.close()
         return
       }
       if (homeExplorer()) {
+        explorer.clearFilter()
         setHomeExplorer(false)
         return
       }
@@ -1939,8 +1973,19 @@ export default Plugin.define({
         // The keys go back to the prompt, once the field has let them go.
         setTimeout(() => promptField()?.focus?.(), 50)
       },
+      filter: (text) => {
+        explorer.filter(text)
+        setTimeout(() => promptField()?.focus?.(), 50)
+      },
+      clearFilter: () => {
+        explorer.clearFilter()
+        setTimeout(() => promptField()?.focus?.(), 50)
+      },
       openSystem: () => explorer.openSystem(),
-      close,
+      close: () => {
+        explorer.clearFilter()
+        close()
+      },
     })
 
     // The explorer, in the side panel the host opens for it beside the chat. While it is drawn, its width is
@@ -2004,6 +2049,7 @@ export default Plugin.define({
       disposeFooter()
       disposeHome()
       clearInterval(ticking)
+      explorer.clearFilter()
       closeViewer()
       void dictation.stop()
       void popup.stop()

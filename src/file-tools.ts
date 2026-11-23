@@ -98,6 +98,17 @@ export function dialogCommand(
   }
 }
 
+/**
+ * The explorer's filter: find_files.py searches `root` for the files whose names match `pattern`, `first`
+ * before the rest, up to `most`, and says what it finds a JSON line at a time.
+ */
+export function findCommand(ask: { root: string; first: string; pattern: string; most: number }, pluginRoot: string, python: string): FileCommand {
+  return {
+    argv: [python, `${pluginRoot.replace(/[\\/]+$/, "")}/engine/find_files.py`],
+    env: { SPEEDY_ROOT: ask.root, SPEEDY_FIRST: ask.first, SPEEDY_PATTERN: ask.pattern, SPEEDY_MOST: String(ask.most) },
+  }
+}
+
 /** The dialog's answer: its first line that says something; `cancel` when it said nothing. */
 export function dialogAnswer(stdout: string): string {
   return stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? "cancel"
