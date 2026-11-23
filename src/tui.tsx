@@ -34,7 +34,7 @@ import { createViewerReader, mediaSaid, promptInsertion, viewerCommand, type Vie
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
 import { EXPLORER_PANEL, ExplorerPanel, type ExplorerPanelApi } from "./explorer-panel"
 import { behindOrigin, takeUpdate, type Git } from "./update"
-import { ClipPlayer, listClips, readSource, type HistoryClip, type LastRead } from "./history"
+import { ClipPlayer, listClips, readSource, withStarted, type HistoryClip, type LastRead } from "./history"
 import {
   DraftImages,
   INITIAL_MENU,
@@ -330,6 +330,8 @@ export default Plugin.define({
 
     // The answer last narrated, its language and the file it is kept in once it has played.
     let kept = { answer: "", lang: "", file: "" }
+    // The narrations started and listed before their file is written.
+    const startedClips = new Set<string>()
 
     const narration = new Narration({
       speak: createSpeaker(engine),
@@ -338,6 +340,15 @@ export default Plugin.define({
         // Where this narration is kept once it has played: the play button opens it from there.
         const file = join(DATA_ROOT, "audio", historyName(input.text, new Date()))
         kept = { ...kept, file }
+        // A selection read is in the history as it starts: its row there is the one playing, with ⏸ and ⏵,
+        // and the selection's own row is free for the next text.
+        if (menus.clipNow === SELECTION_CLIP) {
+          startedClips.add(file)
+          setMenus((draft) => {
+            draft.clipNow = file
+            draft.clips = withStarted(draft.clips, startedClips)
+          })
+        }
         return file
       },
       writeControl,
@@ -795,7 +806,7 @@ export default Plugin.define({
     const refreshClips = async () => {
       const found = await listClips(join(DATA_ROOT, "audio"))
       setMenus((draft) => {
-        draft.clips = found
+        draft.clips = withStarted(found, startedClips)
       })
     }
 
@@ -1012,11 +1023,6 @@ export default Plugin.define({
     /** The first row of the 📎 menu: reads the selection taken when 📎 was pressed. */
     const readSelection = async () => {
       await pendingRead?.catch(() => {})
-      if (plain(pendingSelection).trim() && menus.clipNow === SELECTION_CLIP && speech.state !== "idle") {
-        if (speech.state === "playing") await narration.pause()
-        else if (speech.state === "paused") await narration.resume()
-        return
-      }
       // The clipboard as it is now, not as it was when the menu opened: a text copied since is the one read.
       await choosePending()
       if (!plain(pendingSelection).trim()) {
@@ -1065,6 +1071,7 @@ export default Plugin.define({
       pendingRead = undefined
       clearedSelection = takenSelection || undefined
       takenSelection = ""
+      startedClips.clear()
       // What the clipboard holds now was there before the clearing: it is not read again, only a text copied after.
       clearedClipboard = await readClipboard().catch(() => undefined)
       kept = { ...kept, file: "" }

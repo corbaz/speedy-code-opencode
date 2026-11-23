@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 
 import { POWERSHELL } from "../src/powershell"
 
-import { ClipPlayer, HISTORY_LENGTH, clipParts, listClips, playCommand, readSource, type Directory } from "../src/history"
+import { ClipPlayer, HISTORY_LENGTH, clipParts, listClips, playCommand, readSource, withStarted, type Directory } from "../src/history"
 import type { SpeakingProcess } from "../src/speech"
 
 /** A process the test drives by hand. */
@@ -217,4 +217,14 @@ test("readSource: of the selection and the clipboard, the one that changed last 
   expect(readSource("sel", "clip", { selection: "sel", clipboard: "clip", source: "clipboard" })).toBe("clipboard")
   expect(readSource("sel", "clip", { selection: "sel", clipboard: "clip", source: "selection" })).toBe("selection")
   expect(readSource("", "", none)).toBe("clipboard")
+})
+
+test("withStarted: a narration started is on top of the list before its file is written, and waited for no more once it is", () => {
+  const started = new Set(["C:\\audio\\Hola-26-11-23_10-00-00.mp3"])
+  const kept = [{ path: "C:\\audio\\Viejo-26-11-01_09-00-00.mp3", name: "Viejo-26-11-01_09-00-00" }]
+  expect(withStarted(kept, started)).toEqual([{ path: "C:\\audio\\Hola-26-11-23_10-00-00.mp3", name: "Hola-26-11-23_10-00-00" }, ...kept])
+  // Found on the disk: listed once, from the disk.
+  const found = [{ path: "C:\\audio\\Hola-26-11-23_10-00-00.mp3", name: "Hola-26-11-23_10-00-00" }, ...kept]
+  expect(withStarted(found, started)).toEqual(found)
+  expect(started.size).toBe(0)
 })

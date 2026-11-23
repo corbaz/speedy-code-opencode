@@ -186,3 +186,16 @@ export function readSource(selection: string, clipboard: string, last: LastRead)
   if (last.source === "clipboard" && clipboard) return "clipboard"
   return selection ? "selection" : "clipboard"
 }
+
+/**
+ * The list with the narrations started and not yet on the disk on top, newest first: a selection read shows
+ * in the history as it starts. One found on the disk is no longer waited for, and leaves `started`.
+ */
+export function withStarted(list: readonly HistoryClip[], started: Set<string>, limit = HISTORY_LENGTH): HistoryClip[] {
+  for (const clip of list) started.delete(clip.path)
+  const waiting = [...started].reverse().map((path) => ({
+    path,
+    name: (path.split(/[\\/]/).pop() ?? path).replace(/\.mp3$/i, ""),
+  }))
+  return [...waiting, ...list].slice(0, limit)
+}
