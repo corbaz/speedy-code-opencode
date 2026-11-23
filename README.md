@@ -99,7 +99,7 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   of the screen, over it, above the footer; a session opened from there takes it to the side panel.
   Under the disks, a field takes a path pasted (`D:\Excel\rand.xlsx`, quoted or not; one not absolute
   is taken from the session's folder) and, on Enter, opens the tree down to it and marks it in yellow
-  until the next press. `↗ abrir en el sistema` still opens the session's folder in Explorer, or in
+  until the next press. Under that field, the filter's: a pattern (`*.pdf`, `a*.docx`; `*` is any text, `?` one character, the case does not matter, and a pattern with neither is a part of the name) and, on Enter, the disk shown is searched, the session's folder and the person's own first, and the tree holds only the files found, under their folders, as they are found; the rule under it says how many, and that it still searches. `× limpiar` beside it ends the search and brings the whole tree back. A filter shows 1000 files at most, and leaves out Windows' own folder, the Recycle Bin and, on a Mac, the system's folders and each person's Library. A presentation (pptx, ppt) opens as its slides and a Word document (docx, doc) as its pages, under the bar a PDF has (go to a page, zoom, fit the width, the whole page), with Texto beside them: on Windows the pages are PowerPoint's and Word's own where they are installed, and without them Edge prints the popup's own drawing of a .pptx or a .docx. `↗ abrir en el sistema` still opens the session's folder in Explorer, or in
   Finder. `⊟` beside the
   disks collapses every disk: the session's stays open down to its folder, the others close to their
   first level, and the disk shown stays shown. Every file is drawn yellow, its name cut
