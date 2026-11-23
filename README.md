@@ -59,8 +59,18 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 - The reply of the session on screen is read aloud when the narrator is on,
   through the original engine, with pause and resume. On Windows a narration kept (a row of the audio
   menu, or ⏵ once the reply was read) plays in the viewer's popup, with its bar to seek back and forth.
-  Every narration is kept
-  under `~/.config/opencode/speedy-code/audio` and can be played back later.
+  The popup and the footer follow each other: ⏸ on the footer or on the row pauses the popup, and a pause
+  pressed in the popup shows on both. Every narration is kept under
+  `~/.config/opencode/speedy-code/audio` from the moment it starts, whole even when it is stopped halfway,
+  and the same text read again is kept once. A short text whose language cannot be told is read as it is,
+  never sent to be translated.
+- **leer selección** in the audio menu reads the newer of the text selected with the mouse and the
+  clipboard's, as they are when it is pressed, so a text copied by any means while the menu is open is read.
+  What it reads is in the history at once, and that row is the one playing (⏸ while it sounds, ⏵ paused);
+  the selection's own row stays ready for the next text. Clearing the history blanks it too, and passes over
+  the text the clipboard and the selection held then.
+- The narrator off (🔇) only keeps the replies from being read on their own: reading again, the selection
+  and the kept audios work all the same.
 - Dictation runs the original streaming model on this machine: nothing is sent
   anywhere. What it hears is written into the prompt.
 - The pen corrects what is written in the prompt.
