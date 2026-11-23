@@ -109,9 +109,14 @@ describe("narrationRequest", () => {
     expect(narrationRequest(spanish, "es", "Spanish")).toBeUndefined()
   })
 
+  test("a short text whose language cannot be told is read as it is, never sent to be translated", () => {
+    // Too few common words to tell: a model asked to translate it answers about it instead of reading it.
+    expect(narrationRequest("Al terminar el audio vuelve a play.", "es", "Spanish")).toBeUndefined()
+  })
+
   test("a reply in another language is translated, whole", () => {
     expect(narrationRequest(english, "es", "Spanish")?.text).toBe(
-      `Translate this reply into Spanish, faithfully and completely:\n\n${english}`,
+      `Translate this reply into Spanish, faithfully and completely. If it is already in Spanish, answer with it unchanged:\n\n${english}`,
     )
   })
 

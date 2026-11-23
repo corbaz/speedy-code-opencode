@@ -166,10 +166,13 @@ export const NARRATION_SYSTEM =
  */
 export function narrationRequest(text: string, lang: string, target: string): { system: string; text: string } | undefined {
   if (!text.trim()) return undefined
-  if (text.length <= SHORT_ANSWER && guessLanguage(text) === lang) return undefined
+  // A short text is read as it is in the language narrated in, and when its language cannot be told (a
+  // phrase of few words): asked to translate that, a model answers about it instead of reading it.
+  const guessed = guessLanguage(text)
+  if (text.length <= SHORT_ANSWER && (guessed === lang || guessed === "")) return undefined
   const ask =
     text.length <= SHORT_ANSWER
-      ? `Translate this reply into ${target}, faithfully and completely:\n\n${text}`
+      ? `Translate this reply into ${target}, faithfully and completely. If it is already in ${target}, answer with it unchanged:\n\n${text}`
       : `Say what this reply tells, in ${target}, in two to four short sentences, in first person, speaking to the reader:\n\n${text}`
   return { system: NARRATION_SYSTEM, text: ask }
 }
