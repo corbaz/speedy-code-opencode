@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test"
 import { POWERSHELL } from "../src/powershell"
 import {
   createViewerReader,
+  mediaSaid,
   fileMention,
   fromBase64Utf8,
   popupPaste,
@@ -72,4 +73,10 @@ describe("what the viewer says reaches the prompt", () => {
     reader.push("copied !!!\ncopied \n")
     expect(said.length).toBe(3)
   })
+})
+
+test("mediaSaid: what a popup says of its sound, among its dots and its other lines", () => {
+  expect(mediaSaid(".\r\n.\r\nmedia paused\r\n.\r\nmedia playing\r\ncopied aG9sYQ==\r\nmedia ended\r\n")).toEqual(["paused", "playing", "ended"])
+  expect(mediaSaid(".\r\n.\r\n")).toEqual([])
+  expect(mediaSaid("media playing now\r\n")).toEqual([])
 })

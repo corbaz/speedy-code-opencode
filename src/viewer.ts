@@ -99,3 +99,14 @@ export function createViewerReader(onSaid: (said: ViewerSaid) => void): { push(c
     },
   }
 }
+
+/**
+ * What a popup said of its sound in a piece of its output: `playing`, `paused` or `ended`, in order. A whole
+ * line each (`media playing`), so a line cut between two pieces is missed, as a dot is.
+ */
+export function mediaSaid(chunk: string): Array<"playing" | "paused" | "ended"> {
+  return chunk
+    .split(/\r?\n/)
+    .map((line) => /^media (playing|paused|ended)$/.exec(line.trim())?.[1])
+    .filter((said): said is "playing" | "paused" | "ended" => said !== undefined)
+}

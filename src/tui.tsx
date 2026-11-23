@@ -30,7 +30,7 @@ import {
 } from "./footer"
 import { dialogAnswer, dialogCommand, fileCopyCommand, renameCommand, trashCommand } from "./file-tools"
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
-import { createViewerReader, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
+import { createViewerReader, mediaSaid, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
 import { EXPLORER_PANEL, ExplorerPanel, type ExplorerPanelApi } from "./explorer-panel"
 import { behindOrigin, takeUpdate, type Git } from "./update"
@@ -355,8 +355,50 @@ export default Plugin.define({
       onError: (message) => toast(message, "error"),
     })
 
+    /**
+     * A narration kept, sounding in the viewer's popup (Windows): driven as the others are, by a control file
+     * the popup obeys, its state following what the popup says of its sound. `stop` closes the popup.
+     */
+    const popup = {
+      state: "idle" as SpeechState,
+      control: "",
+      set(state: SpeechState) {
+        popup.state = state
+        onSpeech(state)
+      },
+      async pause() {
+        if (popup.state !== "playing") return
+        await writeControl(popup.control, "pause")
+        popup.set("paused")
+      },
+      async resume() {
+        if (popup.state !== "paused") return
+        await writeControl(popup.control, "play")
+        popup.set("playing")
+      },
+      async stop() {
+        if (popup.state === "idle") return
+        popup.end()
+        closeViewer()
+      },
+      /** The popup closed, or was told to: its narration is over. */
+      end() {
+        if (popup.state === "idle") return
+        const control = popup.control
+        popup.control = ""
+        popup.set("idle")
+        if (control) void removeControl(control)
+      },
+    }
+
     // The pause, resume and stop commands drive whichever sound is playing.
-    const activeSpeech = () => (clipPlayer.state === "idle" ? narration : clipPlayer)
+    const activeSpeech = () => (popup.state !== "idle" ? popup : clipPlayer.state === "idle" ? narration : clipPlayer)
+
+    /** Ends a kept narration sounding, in the popup or by the player. */
+    const stopClips = async () => {
+      await popup.stop()
+      await clipPlayer.stop()
+    }
 
     const voiceForCode = (code: string) => voiceFor(settings.picks, code)
     // The footer names the voice itself, as the original does: `Victor · ES`.
@@ -381,7 +423,7 @@ export default Plugin.define({
       let text = answer
       const request = narrationRequest(answer, lang, LANGUAGES.find(([code]) => code === lang)?.[2] ?? "Spanish")
       if (request) {
-        await clipPlayer.stop()
+        await stopClips()
         await narration.stop()
         onSpeech("thinking")
         const result = await polish(request)
@@ -393,7 +435,7 @@ export default Plugin.define({
         join(DATA_ROOT, "narrations.log"),
         `${new Date().toISOString()} voice=${voice} active=${settings.picks.active} chars=${text.length}\n`,
       ).catch(() => {})
-      await clipPlayer.stop()
+      await stopClips()
       await narration.narrate({ text, voice })
     }
 
@@ -991,11 +1033,11 @@ export default Plugin.define({
 
     /** A row's button: the narration playing from it pauses or goes on; another row starts. */
     const pressClip = async (clip: HistoryClip) => {
-      if (await playInViewer(clip.path)) return
-      if (menus.clipNow === clip.path && speech.state === "playing") return clipPlayer.pause()
-      if (menus.clipNow === clip.path && speech.state === "paused") return clipPlayer.resume()
+      if (menus.clipNow === clip.path && speech.state === "playing") return activeSpeech().pause()
+      if (menus.clipNow === clip.path && speech.state === "paused") return activeSpeech().resume()
+      if (await playInViewer(clip.path, clip.path)) return
       await narration.stop()
-      await clipPlayer.stop()
+      await stopClips()
       setMenus((draft) => {
         draft.clipNow = clip.path
       })
@@ -1115,12 +1157,15 @@ export default Plugin.define({
      * Shows a file in a popup in the middle of the screen, as the original does: `view.ps1` a pasted
      * image in its own proportions, `view_file.ps1` a file the explorer lists. One at a time.
      */
-    const viewFile = (path: string, script: ViewerScript, failure: string) => {
+    const viewFile = (path: string, script: ViewerScript, failure: string, control = "") => {
+      // Another file shown ends a narration sounding in the popup, with its popup.
+      if (!control) popup.end()
       closeViewer()
       const { argv, env } = viewerCommand(process.platform, script, path, PLUGIN_ROOT, pythonPath())
       try {
         const child = spawn(argv[0] as string, argv.slice(1), {
-          env: { ...process.env, ...env },
+          // With `control`, the popup's sound obeys that file's `pause` and `play`.
+          env: { ...process.env, ...env, ...(control ? { SPEEDY_CONTROL: control } : {}) },
           stdio: ["ignore", "pipe", "ignore"],
           windowsHide: true,
         })
@@ -1134,10 +1179,21 @@ export default Plugin.define({
           else void typeIntoPrompt(said.text)
         })
         child.stdout?.setEncoding("utf8")
-        child.stdout?.on("data", (chunk: string) => reader.push(chunk))
+        child.stdout?.on("data", (chunk: string) => {
+          reader.push(chunk)
+          // `media playing`, `media paused`, `media ended`: the popup's own button, or its sound's end. The
+          // control file is set to match, so the next pause or play asked from here is a change the popup sees.
+          if (!control || popup.control !== control) return
+          for (const said of mediaSaid(chunk)) {
+            const state = said === "playing" ? "playing" : "paused"
+            void writeControl(control, state === "playing" ? "play" : "pause")
+            popup.set(state)
+          }
+        })
         child.on("error", () => toast(failure, "error"))
         child.on("exit", () => {
           if (viewer === child) viewer = undefined
+          if (control && popup.control === control) popup.end()
         })
         viewer = child
       } catch {
@@ -1150,11 +1206,19 @@ export default Plugin.define({
      * A narration kept, played in the viewer's popup, where its bar seeks back and forth: on Windows, which
      * has the popup, and only while the file is there. It says whether it opened; elsewhere the player plays it.
      */
-    const playInViewer = async (path: string): Promise<boolean> => {
+    const playInViewer = async (path: string, source = ""): Promise<boolean> => {
       if (!path || process.platform !== "win32" || !existsSync(path)) return false
       await narration.stop()
-      await clipPlayer.stop()
-      viewFile(path, "view_file.ps1", "no pude abrir el audio")
+      await stopClips()
+      const control = join(DATA_ROOT, "control", `popup-${crypto.randomUUID()}.txt`)
+      await writeControl(control, "play")
+      popup.control = control
+      popup.set("playing")
+      // The row it plays from shows what the footer shows: ⏸ while it plays, ⏵ paused.
+      setMenus((draft) => {
+        draft.clipNow = source
+      })
+      viewFile(path, "view_file.ps1", "no pude abrir el audio", control)
       return true
     }
 
@@ -1908,6 +1972,7 @@ export default Plugin.define({
       clearInterval(ticking)
       closeViewer()
       void dictation.stop()
+      void popup.stop()
       void clipPlayer.stop()
       return narration.stop()
     }
