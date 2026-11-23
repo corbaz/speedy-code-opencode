@@ -213,6 +213,11 @@ describe("footerControls", () => {
     ])
   })
 
+  test("the kept audios stay lit with the narrator off: off only keeps the replies from being read on their own", () => {
+    const history = (narrator: boolean) => footerControls({ ...base, narrator }).find((control) => control.name === "history")?.color
+    expect([history(true), history(false)]).toEqual(["#ffd43b", "#ffd43b"])
+  })
+
   test("omits the model when none is selected", () => {
     expect(footerControls(base).map((control) => control.name)).toEqual([
       "copy",

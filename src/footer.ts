@@ -438,7 +438,8 @@ export function footerControls(input: FooterInput): FooterControl[] {
   const narrator = input.narrator ? " 🔊 " : " 🔇 "
   controls.push(control("narrator", "narrator", narrator, input.narrator ? "#51cf66" : "#868e96"))
   controls.push(control("play", "play", ` ${play.glyph} `, play.color))
-  controls.push(control("history", "history", " 📎 ", input.narrator ? "#ffd43b" : DISABLED_COLOR))
+  // Lit whatever the narrator: off only keeps the replies from being read on their own.
+  controls.push(control("history", "history", " 📎 ", "#ffd43b"))
 
   controls.push(control("mic", "mic", ` ${mic.glyph} `, mic.color))
   controls.push(control("mics", "mics", "▾ ", MIC_GLYPHS.off.color))
