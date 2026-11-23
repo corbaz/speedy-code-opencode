@@ -8,6 +8,7 @@ import {
   fromBase64Utf8,
   popupPaste,
   promptInsertion,
+  popupCheckCommand,
   viewerCommand,
   type ViewerSaid,
 } from "../src/viewer"
@@ -24,16 +25,20 @@ describe("viewerCommand", () => {
     expect(image.env.SPEEDY_IMAGE).toBe("C:\\images\\a.png")
   })
 
-  test("macOS shows a pasted image in the engine's popup, and in Quick Look where pywebview is missing", () => {
+  test("macOS shows a file in the engine's popups, and in Quick Look where they do not come up", () => {
     const image = viewerCommand("darwin", "view.ps1", "/Users/me/captura año.png", "/plugin", "/venv/bin/python")
     expect(image.argv.slice(0, 2)).toEqual(["/bin/sh", "-c"])
-    expect(image.argv[2]).toContain('exec "$SPEEDY_PYTHON" "$SPEEDY_POPUP"')
+    expect(image.argv[2]).toContain('"$SPEEDY_PYTHON" "$SPEEDY_POPUP" & viewer=$!')
+    expect(image.argv[2]).toContain("wait $viewer && exit 0")
     expect(image.argv[2]?.indexOf("SPEEDY_POPUP")).toBeLessThan(image.argv[2]?.indexOf("qlmanage") ?? -1)
-    expect(image.env).toEqual({ SPEEDY_IMAGE: "/Users/me/captura año.png", SPEEDY_PYTHON: "/venv/bin/python", SPEEDY_POPUP: "/plugin/engine/view.py" })
+    expect(image.env).toEqual({ SPEEDY_FILE: "/Users/me/captura año.png", SPEEDY_IMAGE: "/Users/me/captura año.png", SPEEDY_PYTHON: "/venv/bin/python", SPEEDY_POPUP: "/plugin/engine/view.py" })
+    const file = viewerCommand("darwin", "view_file.ps1", "/Users/me/a.md", "/plugin", "/venv/bin/python")
+    expect(file.argv).toEqual(image.argv)
+    expect(file.env.SPEEDY_POPUP).toBe("/plugin/engine/view_file.py")
+    expect(popupCheckCommand("/venv/bin/python").slice(0, 2)).toEqual(["/venv/bin/python", "-c"])
   })
 
-  test("macOS shows the file in Quick Look, Linux in its default program", () => {
-    expect(viewerCommand("darwin", "view_file.ps1", "/Users/me/a.md", "/plugin", "python3")).toEqual({ argv: ["qlmanage", "-p", "/Users/me/a.md"], env: {} })
+  test("Linux shows the file in its default program", () => {
     expect(viewerCommand("linux", "view.ps1", "/home/me/a.png", "/plugin", "python3")).toEqual({ argv: ["xdg-open", "/home/me/a.png"], env: {} })
   })
 })

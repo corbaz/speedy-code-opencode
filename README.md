@@ -104,7 +104,7 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   disks collapses every disk: the session's stays open down to its folder, the others close to their
   first level, and the disk shown stays shown. Every file is drawn yellow, its name cut
   with `…` to its row, and a click shows it in a popup in the middle of the screen with dark scroll
-  bars (`engine/view_file.ps1`; Quick Look on macOS): text and code selectable, with Copiar; md, html
+  bars (`engine/view_file.ps1`; on macOS `engine/view_file.py`, the same popup in HTML): text and code selectable, with Copiar; md, html
   and svg drawn, with a switch to their source; minified code laid out; pdf (its pages, and its text by
   `pdfminer.six`), pictures, spreadsheets and documents; sound and video, played; databases as tables;
   shortcuts with their target; any other file read as text when it is text and described when it is

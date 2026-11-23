@@ -1,7 +1,7 @@
 /**
  * What shows a file in a popup in the middle of the screen: the engine's PowerShell popup on Windows; on
- * macOS the engine's view.py popup for a pasted image, drawn the same, and Quick Look for a file; the
- * default program elsewhere. One popup at a time is the host's part.
+ * macOS the engine's Python popups, drawn the same (view.py a pasted image, view_file.py a file), and Quick
+ * Look where they do not come up; the default program elsewhere. One popup at a time is the host's part.
  *
  * While it is up, the file popup speaks on stdout: `shown`, then a dot ten times a second, and, when its
  * Copiar is pressed, `copied <base64>` (the text taken) or `attach <base64>` (a picture file to attach).
@@ -40,15 +40,26 @@ export function viewerCommand(
       env: { SPEEDY_FILE: native, SPEEDY_IMAGE: native, SPEEDY_PYTHON: python },
     }
   }
-  // A pasted image on macOS: view.py's popup, framed as view.ps1's; Quick Look where pywebview is not installed.
-  if (platform === "darwin" && script === "view.ps1") {
+  // macOS: view.py and view_file.py draw the popups view.ps1 and view_file.ps1 draw on Windows. Where the
+  // popup does not come up (pywebview is not installed, or it failed), Quick Look shows the file as before.
+  if (platform === "darwin") {
     const show = [
-      `if "$SPEEDY_PYTHON" -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("webview") else 1)' 2>/dev/null; then exec "$SPEEDY_PYTHON" "$SPEEDY_POPUP"; fi`,
-      'exec qlmanage -p "$SPEEDY_IMAGE"',
+      '"$SPEEDY_PYTHON" "$SPEEDY_POPUP" & viewer=$!',
+      "trap 'kill $viewer 2>/dev/null' EXIT",
+      "trap 'exit 0' HUP INT TERM PIPE",
+      "wait $viewer && exit 0",
+      'qlmanage -p "$SPEEDY_FILE" >/dev/null 2>&1 & viewer=$!',
+      "wait $viewer",
     ].join("\n")
-    return { argv: ["/bin/sh", "-c", show], env: { SPEEDY_IMAGE: path, SPEEDY_PYTHON: python, SPEEDY_POPUP: `${root}/engine/view.py` } }
+    const popup = `${root}/engine/${script === "view.ps1" ? "view.py" : "view_file.py"}`
+    return { argv: ["/bin/sh", "-c", show], env: { SPEEDY_FILE: path, SPEEDY_IMAGE: path, SPEEDY_PYTHON: python, SPEEDY_POPUP: popup } }
   }
-  return { argv: platform === "darwin" ? ["qlmanage", "-p", path] : ["xdg-open", path], env: {} }
+  return { argv: ["xdg-open", path], env: {} }
+}
+
+/** Whether the engine's Python has pywebview, which the macOS popups are drawn with: it exits 0 when it does. */
+export function popupCheckCommand(python: string): string[] {
+  return [python, "-c", 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("webview") else 1)']
 }
 
 /** UTF-8 text from Base64, as the viewer and the dialog write it; empty for what is not Base64. */

@@ -30,7 +30,7 @@ import {
 } from "./footer"
 import { dialogAnswer, dialogCommand, fileCopyCommand, renameCommand, trashCommand } from "./file-tools"
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
-import { createViewerReader, mediaSaid, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
+import { createViewerReader, mediaSaid, popupCheckCommand, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
 import { EXPLORER_PANEL, ExplorerPanel, type ExplorerPanelApi } from "./explorer-panel"
 import { behindOrigin, takeUpdate, type Git } from "./update"
@@ -1226,12 +1226,22 @@ export default Plugin.define({
     }
 
     /** Shows an image in a popup in the middle of the screen, in its own proportions, as the original does. */
+    /** Whether macOS has the popups (pywebview in the engine's Python): asked once. */
+    let macPopup: Promise<boolean> | undefined
+    const hasPopup = async (): Promise<boolean> => {
+      if (process.platform === "win32") return true
+      if (process.platform !== "darwin") return false
+      macPopup ??= run(popupCheckCommand(pythonPath())).then((result) => result.code === 0)
+      return macPopup
+    }
+
     /**
-     * A narration kept, played in the viewer's popup, where its bar seeks back and forth: on Windows, which
-     * has the popup, and only while the file is there. It says whether it opened; elsewhere the player plays it.
+     * A narration kept, played in the viewer's popup, where its bar seeks back and forth: where there is the
+     * popup (Windows; macOS with pywebview), and only while the file is there. It says whether it opened;
+     * elsewhere the player plays it.
      */
     const playInViewer = async (path: string, source = ""): Promise<boolean> => {
-      if (!path || process.platform !== "win32" || !existsSync(path)) return false
+      if (!path || !existsSync(path) || !(await hasPopup())) return false
       await narration.stop()
       await stopClips()
       const control = join(DATA_ROOT, "control", `popup-${crypto.randomUUID()}.txt`)
