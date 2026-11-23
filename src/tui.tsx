@@ -996,6 +996,11 @@ export default Plugin.define({
       await Promise.all(
         names.filter((name) => /\.(mp3|txt)$/i.test(name)).map((name) => rm(join(dir, name), { force: true })),
       )
+      // The selection's row is blanked with them, and the answer kept for the play button has no file any more.
+      await pendingRead?.catch(() => {})
+      pendingSelection = ""
+      pendingRead = undefined
+      kept = { ...kept, file: "" }
       await refreshClips()
     }
 
