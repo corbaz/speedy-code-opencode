@@ -81,6 +81,8 @@ export interface ExplorerFilter {
   readonly isCut: boolean
   /** The keys of the folders closed by hand in the filter's tree, where every folder is open. */
   readonly closed: readonly string[]
+  /** Whether its search was stopped by hand, by ‖ pausar: the tree keeps the files found so far. */
+  readonly isPaused?: boolean
 }
 
 /** What the explorer reads and does outside itself. */
@@ -103,7 +105,7 @@ export interface ExplorerIO {
    * asked one name, with no extension, and goes to the trash with what it holds. 📥's (`paste`) asks whether
    * the file is copied or moved into the folder `into`, then whether for sure: `copy`, `move` or `cancel`.
    */
-  ask(mode: "rename" | "delete" | "paste", native: string, kind?: "file" | "dir", into?: string): Promise<string>
+  ask(mode: "rename" | "delete" | "paste", native: string, kind?: "file" | "dir", into?: string, isOnlyCopy?: boolean): Promise<string>
   /** Copies or moves a file or a folder to `nativeTarget`, its own name included, writing over nothing; whether it did. */
   paste(verb: "copy" | "move", native: string, nativeTarget: string): Promise<boolean>
   /** Renames a file in its folder; whether it did. */
@@ -126,6 +128,8 @@ export interface ExplorerIO {
    * machine's, `mac:/`. Where there is none to ask, there are no such disks.
    */
   remotes?(): Promise<string[]>
+  /** The copy here of a file of another machine, as this machine writes its path; empty when it was not fetched. */
+  fetch?(path: string): Promise<string>
   /** Where another machine's disk opens: its person's folder there, and `/` on one with Windows. Empty: it did not say. */
   home?(host: string): Promise<string>
 }
@@ -141,6 +145,9 @@ export const FILTER_HINT = "filtro: *.pdf, a*.docx"
 
 /** The filter's ×, beside its field. */
 export const UNFILTER_LABEL = " × limpiar "
+
+/** Beside it: stops a search that still runs. */
+export const PAUSE_LABEL = " ‖ pausar "
 
 export const EMPTY_EXPLORER: ExplorerState = { drives: [], drive: "", open: [], listed: {}, here: "", caseless: false, top: 0 }
 
@@ -272,9 +279,8 @@ export function filterRows(state: ExplorerState, filter: ExplorerFilter): TreeRo
 export function filterNote(filter: ExplorerFilter): string {
   const count = filter.paths.length
   const found = `${count} ${count === 1 ? "archivo" : "archivos"}`
-  return filter.isBusy
-    ? ` ${filter.pattern}: ${found}, buscando… (${filter.seen.toLocaleString("es-AR")} vistos) `
-    : ` ${filter.pattern}: ${found} `
+  if (filter.isBusy) return ` ${filter.pattern}: ${found}, buscando… (${filter.seen.toLocaleString("es-AR")} vistos) `
+  return filter.isPaused ? ` ${filter.pattern}: ${found}, en pausa ` : ` ${filter.pattern}: ${found} `
 }
 
 /** The rule under the fields, `width` cells: plain, or with what the filter found written on it. */
@@ -394,6 +400,9 @@ export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, s
 export const PASTE_IDLE_MARK = "↧"
 export const PASTE_IDLE_COLOR = "#495057"
 
+/** The tools that are grey on a disk's root, and do nothing there: a disk is not copied, renamed or trashed. */
+export const DISK_IDLE_TOOLS: readonly FileToolKind[] = ["copy", "rename", "trash"]
+
 /**
  * The cells the five tools take at a row's right: each icon on its own two cells, a plain gap of two before
  * each but the first, which has one, and two empty cells after the last, which part it from the scroll bar.
@@ -419,18 +428,20 @@ export function fileNameLabel(row: TreeRow, width: number): string {
 
 /**
  * A file's tools as its row draws them: each its glyph or emoji and its color, the one just pressed green.
- * 📥 is lit only while 📋 has taken a file or a folder to paste (`hasClip`).
+ * 📥 is lit only while 📋 has taken a file or a folder to paste (`hasClip`). On a disk's root (`isDisk`) 📋, ✏
+ * and 🗑 are grey.
  */
 export function fileTools(
   icons: IconSet,
   flashed: string,
   path: string,
   hasClip = false,
+  isDisk = false,
 ): Array<{ kind: FileToolKind; label: string; gap: number; color: string }> {
   return FILE_TOOLS.map(([kind, emoji, glyph, color], index) => {
-    const isIdle = kind === "paste" && !hasClip
+    const isIdle = (kind === "paste" && !hasClip) || (isDisk && DISK_IDLE_TOOLS.includes(kind))
     // An emoji, or a glyph with the cell it spills over: two cells, the tool's own.
-    const icon = icons === "nerd" ? `${glyph}\u00a0` : isIdle ? PASTE_IDLE_MARK : emoji
+    const icon = icons === "nerd" ? `${glyph}\u00a0` : kind === "paste" && isIdle ? PASTE_IDLE_MARK : emoji
     return {
       kind,
       label: icon + " ".repeat(Math.max(0, 2 - cells(icon))),
@@ -567,6 +578,8 @@ export interface Explorer {
   filter(text: string): void
   /** The filter's ×: the search ends, the field empties and the whole tree is back. */
   clearFilter(): void
+  /** ‖ pausar: a search that still runs stops where it is, and the tree keeps the files found so far. */
+  pauseFilter(): void
 }
 
 /** The explorer's state and what its presses do; `onChange` hears every new state. */
@@ -670,6 +683,12 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     homes.set(remote.host, home)
     return home
   }
+  // A disk is not copied, renamed or trashed: 📋, ✏ and 🗑 do nothing on its root but say so.
+  const notOnDisk = (path: string) => {
+    const isDisk = state.drives.some((drive) => pathKey(drive, state.caseless) === pathKey(path, state.caseless))
+    if (isDisk) io.toast("un disco no se copia, no se renombra ni se borra.", true)
+    return isDisk
+  }
   const explorer: Explorer = {
     state: () => state,
     async open(where) {
@@ -725,17 +744,21 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     pressFile(path) {
       forget()
-      if (isViewable(nameOf(path))) io.view(path)
+      if (!isViewable(nameOf(path))) return
+      // The name is green for a second, in place of the pointer's yellow: the press was taken.
+      flash(`view:${path}`)
+      io.view(path)
     },
     async copyFile(path) {
       forget()
+      if (notOnDisk(path)) return
       flash(`copy:${path}`)
       const native = nativeOf(path, platform)
       const isCopied = await io.copyFile(native)
       // A file of another machine: its copy here went to the clipboard, and its path there goes into the prompt.
       const remote = remoteOf(path)
-      // 📥 pastes what was taken last, a file or a folder of this machine.
-      if (!remote && isCopied) set((now) => ({ ...now, clip: slashed(path) }))
+      // 📥 pastes what was taken last: a file or a folder of this machine, or a file of another one.
+      if (isCopied) set((now) => ({ ...now, clip: slashed(path) }))
       if (remote) {
         await io.insert(slashed(path), " ")
         if (isCopied) io.toast(`la ruta de ${nameOf(path)} en ${remote.host} está en el prompt y una copia suya en el portapapeles; pegala en una carpeta.`)
@@ -762,14 +785,14 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async rename(path) {
       forget()
-      if (notOnRemote(path)) return
+      if (notOnDisk(path) || notOnRemote(path)) return
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
       const name = newNameOf(await io.ask("rename", nativeOf(path, platform), kind))
       if (name) await renameTo(path, name)
     },
     async trash(path) {
       forget()
-      if (notOnRemote(path)) return
+      if (notOnDisk(path) || notOnRemote(path)) return
       const native = nativeOf(path, platform)
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
       if ((await io.ask("delete", native, kind)) !== "delete") return
@@ -791,16 +814,21 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
         return io.toast(`${name} ya no está donde se copió.`, true)
       }
       const isFolder = await io.isDir(clip).catch(() => false)
+      // A file taken on another machine is fetched and its copy pasted: copied, never moved, and no folder.
+      const from = remoteOf(clip)
+      if (from && isFolder) return io.toast(`de ${from.host} se pegan archivos, no carpetas.`, true)
       const folder = (await io.isDir(path).catch(() => false)) ? slashed(path) : folderOf(slashed(path))
       const target = joinPath(folder, name)
       const key = (one: string) => pathKey(one, state.caseless)
       if (key(folderOf(clip)) === key(folder)) return io.toast(`${name} ya está en esa carpeta.`, true)
       if (isFolder && isUnder(key(folder), key(clip))) return io.toast(`${name} no puede ir dentro de sí misma.`, true)
       if (await io.exists(nativeOf(target, platform))) return io.toast(`ya hay un ${name} en esa carpeta.`, true)
-      const verb = await io.ask("paste", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform))
+      const verb = await io.ask("paste", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform), from !== undefined)
       if (verb !== "copy" && verb !== "move") return
-      const isMove = verb === "move"
-      if (!(await io.paste(verb, nativeOf(clip, platform), nativeOf(target, platform)))) {
+      const isMove = verb === "move" && !from
+      const source = from ? await (io.fetch?.(clip).catch(() => "") ?? "") : nativeOf(clip, platform)
+      if (!source) return io.toast(`no pude traer ${name} de ${from?.host ?? ""}.`, true)
+      if (!(await io.paste(isMove ? "move" : "copy", source, nativeOf(target, platform)))) {
         return io.toast(`no pude ${isMove ? "mover" : "copiar"} ${name}.`, true)
       }
       io.toast(`${name} se ${isMove ? "movió" : "copió"} a ${driveLabel(folder)}.`)
@@ -869,6 +897,11 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       else clearFilter()
     },
     clearFilter,
+    pauseFilter() {
+      if (!state.filter?.isBusy) return
+      endFinding()
+      set((now) => (now.filter ? { ...now, filter: { ...now.filter, isBusy: false, isPaused: true } } : now))
+    },
   }
   return explorer
 }

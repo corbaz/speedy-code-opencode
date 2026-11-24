@@ -56,6 +56,10 @@ export function withRemotes(io: ExplorerIO, runner: RemoteRunner, platform: stri
       const said = await runner.ask("hosts", "", "").catch(() => undefined)
       return Array.isArray(said) ? said.filter((one): one is string => typeof one === "string" && /^[A-Za-z][\w.-]+$/.test(one)) : []
     },
+    async fetch(path) {
+      const remote = remoteOf(path)
+      return remote ? fetched(remote.host, remote.path) : path
+    },
     async home(host) {
       const home = field(await runner.ask("home", host, "/").catch(() => undefined), "home")
       return typeof home === "string" ? home : ""

@@ -181,6 +181,8 @@ describe("explorer helpers", () => {
     expect(fileTools("emoji", "", row.path, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color]).at(-1)).toEqual(["paste", "📥", "#ffa94d"])
     expect(fileTools("nerd", "", row.path).map((tool) => tool.label)).toEqual(["\uf0c5\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf0ea\u00a0"])
     expect([fileTools("nerd", "", row.path).at(-1)?.color, fileTools("nerd", "", row.path, true).at(-1)?.color]).toEqual(["#495057", "#ffa94d"])
+    // On a disk's root 📋, ✏ and 🗑 are grey: a disk is not copied, renamed or trashed; 🔗 and 📥 are as on any row.
+    expect(fileTools("nerd", "", "C:/", true, true).map((tool) => tool.color)).toEqual(["#495057", "#63e6be", "#495057", "#495057", "#ffa94d"])
     // The five tools, and two empty cells after them that part the last one from the scroll bar.
     expect(FILE_TOOLS_WIDTH).toBe(1 + 2 + 4 * 4 + 2)
     // A folder's row is laid out as a file's: its open mark and name, filled up to the same four tools.
@@ -269,7 +271,7 @@ function fakeIO(tree: typeof TREE = TREE) {
     insert: async (text, separator) => {
       prompt.text += promptInsertion(prompt.text, text, separator)
     },
-    ask: async (mode, native, kind, into) => (dialog.asked.push(`${mode} ${native}${kind === "dir" ? " dir" : ""}${into ? ` into ${into}` : ""}`), dialog.answer),
+    ask: async (mode, native, kind, into, isOnlyCopy) => (dialog.asked.push(`${mode} ${native}${kind === "dir" ? " dir" : ""}${into ? ` into ${into}` : ""}${isOnlyCopy ? " only copy" : ""}`), dialog.answer),
     paste: async (verb, native, target) => (files.pasted.push(`${verb} ${native} -> ${target}`), true),
     rename: async (native, name, target) => (files.renamed.push(`${native} -> ${name} (${target})`), true),
     trash: async (native) => (files.trashed.push(native), true),
@@ -533,9 +535,20 @@ describe("each file's tools", () => {
     expect(fake.toasts.at(-1)).toBe("notas.txt se copió a Windows.")
     expect(explorer.state().open).toContain("c:/windows")
     expect(explorer.state().clip).toBe(NOTAS)
-    // On a file's row it goes into the folder the file is in: a disk's root here.
+    // On a file's row it goes into the folder the file is in: a disk's root here. On the root's own row too.
     await explorer.paste("C:/pagefile.sys")
     expect(fake.files.pasted.at(-1)).toBe(`copy ${NATIVE} -> C:\\notas.txt`)
+    fake.files.pasted.length = 0
+    await explorer.paste("C:/")
+    expect(fake.files.pasted).toEqual([`copy ${NATIVE} -> C:\\notas.txt`])
+    expect(fake.toasts.at(-1)).toBe("notas.txt se copió a C:.")
+    // A disk itself is not copied, renamed or trashed: nothing is asked, and it says so.
+    const before = fake.dialog.asked.length
+    await explorer.trash("C:/")
+    await explorer.rename("C:/")
+    await explorer.copyFile("C:/")
+    expect(fake.toasts.at(-1)).toBe("un disco no se copia, no se renombra ni se borra.")
+    expect([fake.dialog.asked.length, explorer.state().clip]).toEqual([before, NOTAS])
     // Into the folder it is in already, or where a file of its name is, nothing is asked.
     const asked = fake.dialog.asked.length
     await explorer.paste("C:/Users/test/proyectos/app.exe")
@@ -565,6 +578,30 @@ describe("each file's tools", () => {
     await explorer.paste("C:/Windows")
     expect(fake.toasts.at(-1)).toBe("proyectos ya no está donde se copió.")
     expect(explorer.state().clip).toBeUndefined()
+  })
+
+  test("a file pressed is green for a second; ‖ pausar stops a search that runs and keeps what it found", async () => {
+    const fake = fakeIO()
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    explorer.pressFile(NOTAS)
+    expect([fake.viewed, explorer.state().flashed]).toEqual([[NOTAS], `view:${NOTAS}`])
+    fake.second()
+    await Promise.resolve()
+    expect(explorer.state().flashed).toBe("")
+    // With no search running it does nothing.
+    explorer.pauseFilter()
+    expect(explorer.state().filter).toBeUndefined()
+    explorer.filter("*.pdf")
+    fake.searches[0]!.say({ paths: ["C:/a.pdf"], seen: 10 })
+    expect(ruleLabel(explorer.state(), 40)).toContain("buscando…")
+    explorer.pauseFilter()
+    expect(fake.searches[0]!.isStopped).toBe(true)
+    expect(explorer.state().filter).toMatchObject({ paths: ["C:/a.pdf"], isBusy: false, isPaused: true })
+    expect(ruleLabel(explorer.state(), 40)).toContain(" *.pdf: 1 archivo, en pausa ")
+    // What the stopped search still says is not heard.
+    fake.searches[0]!.say({ paths: ["C:/b.pdf"], seen: 20 })
+    expect(explorer.state().filter?.paths).toEqual(["C:/a.pdf"])
   })
 
   test("🗑 asks in the dialog: cancel leaves the file; delete sends it to the trash and the folder is read again", async () => {

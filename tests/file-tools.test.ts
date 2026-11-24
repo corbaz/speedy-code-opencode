@@ -53,6 +53,11 @@ describe("the commands behind each file's tools", () => {
     expect(mac.argv.slice(-2)).toEqual(["a.md", "/Users/me/docs"])
     expect(mac.argv.join(" ")).toContain('buttons {"Cancelar", "Mover", "Copiar"}')
     expect(mac.argv.join(" ")).toContain('return "move"')
+    // A file of another machine is copied, never moved: the dialog is told, and only asks whether for sure.
+    expect(dialogCommand("win32", "paste", NATIVE, "C:/plugin", "file", "", "D:\\destino", true)?.env.SPEEDY_ONLY).toBe("copy")
+    const only = dialogCommand("darwin", "paste", "/tmp/a.md", "/plugin", "file", "py", "/Users/me/docs", true)!
+    expect(only.env.SPEEDY_ONLY).toBe("copy")
+    expect(only.argv.join(" ")).not.toContain("Mover")
     expect(pasteCommand("move", NATIVE, "D:\\destino\\notas.txt", "C:\\plugin\\", "py")).toEqual({
       argv: ["py", "C:\\plugin/engine/paste.py"],
       env: { SPEEDY_FILE: NATIVE, SPEEDY_TARGET: "D:\\destino\\notas.txt", SPEEDY_VERB: "move", PYTHONIOENCODING: "utf-8" },

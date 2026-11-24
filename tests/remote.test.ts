@@ -19,6 +19,8 @@ function world(hosts: string[] = ["mac"], home = "/") {
   const inserted: string[] = []
   const toasts: string[] = []
   const dialogs: string[] = []
+  const pasted: string[] = []
+  const answer = { says: "cancel" }
   const asked: string[] = []
   const searches: Array<{ host: string; pattern: string; most: number; say: (line: object) => void; isStopped: boolean }> = []
   const own: ExplorerIO = {
@@ -32,8 +34,8 @@ function world(hosts: string[] = ["mac"], home = "/") {
     copyFile: async (native) => (copied.push(native), true),
     copyText: async (text) => (texts.push(text), true),
     insert: async (text) => void inserted.push(text),
-    ask: async (mode) => (dialogs.push(mode), "cancel"),
-    paste: async () => false,
+    ask: async (mode, _native, _kind, _into, isOnlyCopy) => (dialogs.push(isOnlyCopy ? `${mode} only copy` : mode), answer.says),
+    paste: async (verb, native, target) => (pasted.push(`${verb} ${native} -> ${target}`), true),
     rename: async () => false,
     trash: async () => false,
     exists: async () => false,
@@ -58,7 +60,7 @@ function world(hosts: string[] = ["mac"], home = "/") {
   }
   const explorer = createExplorer(withRemotes(own, runner, "win32"), "win32")
   const rows = () => treeRows(explorer.state()).map((row) => `${"  ".repeat(row.depth)}${row.name}`)
-  return { explorer, rows, viewed, copied, texts, inserted, toasts, dialogs, asked, searches }
+  return { explorer, rows, viewed, copied, texts, inserted, toasts, dialogs, asked, searches, pasted, answer }
 }
 
 /** Lets what a press started (a file fetched, then shown) end. */
@@ -119,11 +121,21 @@ describe("another machine's disk, reached by ssh", () => {
       await windows.explorer.pickDrive("windows:/")
       expect(windows.rows()).toEqual(["windows:/", "  Users", "  nota.md"])
       expect(windows.explorer.state().found).toBeUndefined()
-      // 📥 takes nothing there, and 📋 takes none of its files to paste.
+      // 📥 takes nothing there.
       await w.explorer.copyFile("C:/notas.txt")
       await w.explorer.paste("mac:/Users")
       expect(w.toasts.at(-1)).toBe("pegar no está disponible en mac: sus archivos se leen por ssh.")
       expect(w.dialogs).toEqual([])
+      // But a file 📋 took there is pasted here: copied, never moved, so the dialog only asks whether for sure,
+      // and what goes is the copy fetched, under the file's own name.
+      await w.explorer.copyFile("mac:/nota.md")
+      expect(w.explorer.state().clip).toBe("mac:/nota.md")
+      w.answer.says = "copy"
+      await w.explorer.paste("C:/")
+      expect(w.dialogs).toEqual(["paste only copy"])
+      expect(w.pasted).toEqual(["copy C:\\Temp\\speedy-remote\\ab12\\nota.md -> C:\\nota.md"])
+      expect(w.toasts.at(-1)).toBe("nota.md se copió a C:.")
+      expect(w.explorer.state().clip).toBe("mac:/nota.md")
     } finally {
       delete FAR["/Users/ana"]
     }

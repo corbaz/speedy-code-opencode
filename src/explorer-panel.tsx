@@ -21,6 +21,7 @@ import {
   FILE_TOOLS_WIDTH,
   FILTER_HINT,
   UNFILTER_LABEL,
+  PAUSE_LABEL,
   ruleLabel,
   collapseLabel,
   driveLabel,
@@ -70,6 +71,8 @@ export interface ExplorerPanelApi {
   filter(text: string): void
   /** The filter's ×: the whole tree is back. */
   clearFilter(): void
+  /** ‖ pausar: a search that still runs stops, and the tree keeps what it found. */
+  pauseFilter(): void
   openSystem(): void
   close(): void
 }
@@ -147,6 +150,8 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
     // The path the field found keeps the fill until the pointer is on another row: the fill follows the pointer.
     const isFound = () => row.isFound === true && hovered() === ""
     const isHovered = () => hovered() === row.path || isFound()
+    // A file just pressed is green for a second, in place of the pointer's yellow: the press was taken.
+    const isPressed = () => api.state().flashed === `view:${row.path}`
     return (
       // The pointer's over and out reach the row from its name and its tools alike: an out from one part
       // comes before the over of the next, so the row stays marked while the pointer is anywhere on it.
@@ -160,16 +165,16 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           <text
             wrapMode="none"
             selectable={false}
-            fg={isHovered() ? HOVER_TEXT : tint}
+            fg={isPressed() || isHovered() ? HOVER_TEXT : tint}
             // The path found is marked yellow, a folder too; under the pointer, the row's own fill.
-            bg={isHovered() ? (isFound() ? VIEWABLE_COLOR : fill) : undefined}
+            bg={isPressed() ? FLASH_COLOR : isHovered() ? (isFound() ? VIEWABLE_COLOR : fill) : undefined}
             attributes={isFolder && row.isHere ? BOLD : 0}
           >
             {fileNameLabel(row, room())}
           </text>
         </box>
         <box flexDirection="row" flexShrink={0} width={FILE_TOOLS_WIDTH}>
-          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip))}>
+          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip), isFolder && row.depth === 0)}>
             {(tool) => (
               <>
                 {/* A plain gap before each icon takes no press: one a little off an icon does nothing. */}
@@ -269,6 +274,12 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
             api.clearFilter()
           }}
         />
+        <Btn
+          label={PAUSE_LABEL}
+          color={api.state().filter?.isBusy ? VIEWABLE_COLOR : "#868e96"}
+          bold={api.state().filter?.isBusy === true}
+          onPress={() => api.pauseFilter()}
+        />
       </box>
       <text
         wrapMode="none"
@@ -282,9 +293,9 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
       <scrollbox ref={(box: ScrollBoxRenderable) => (tree = box)} flexGrow={1} minHeight={0} scrollY>
         <For each={rows()}>
           {(row) => {
-            // A row's kind never changes: a file's or a folder's row is drawn with its tools, a disk's root and
-            // any other as its label.
-            if (row.kind === "file" || (row.kind === "dir" && row.depth > 0)) return fileRow(row)
+            // A row's kind never changes: a file's or a folder's row is drawn with its tools, a disk's root too
+            // (to paste into it), and any other as its label.
+            if (row.kind === "file" || row.kind === "dir") return fileRow(row)
             const look = rowLook(row)
             return (
               <box flexShrink={0} onMouseUp={rowAction(row) === "none" ? undefined : () => press(row)}>

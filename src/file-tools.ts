@@ -47,7 +47,8 @@ export function fileCopyCommand(platform: string, native: string): FileCommand |
  * dialog.py says nothing, and an AppleScript dialog asks. It answers `rename <base64 name>` (the
  * AppleScript dialog: `name <name>`), `delete` or `cancel`. `python` is the engine's Python, for macOS.
  * 📥's (`paste`) asks whether the file is copied or moved into the folder `into`, then whether for sure, and
- * answers `copy`, `move` or `cancel`.
+ * answers `copy`, `move` or `cancel`; `isOnlyCopy`, for a file of another machine, which stays there: it only
+ * asks whether for sure.
  */
 export function dialogCommand(
   platform: string,
@@ -57,9 +58,10 @@ export function dialogCommand(
   kind: "file" | "dir" = "file",
   python = "",
   into = "",
+  isOnlyCopy = false,
 ): FileCommand | undefined {
   // The folder a paste goes into, for the dialog to name.
-  const where: Record<string, string> = mode === "paste" ? { SPEEDY_TARGET: into } : {}
+  const where: Record<string, string> = mode === "paste" ? { SPEEDY_TARGET: into, ...(isOnlyCopy ? { SPEEDY_ONLY: "copy" } : {}) } : {}
   if (platform === "win32") {
     return {
       argv: [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", `${root.replace(/\\/g, "/")}/engine/dialog.ps1`],
@@ -70,7 +72,18 @@ export function dialogCommand(
   if (platform !== "darwin") return undefined
   const name = native.split("/").pop() ?? native
   const script =
-    mode === "paste"
+    mode === "paste" && isOnlyCopy
+      ? [
+          "on run argv",
+          "try",
+          'display dialog ("¿Copiar " & (item 1 of argv) & " a " & (item 2 of argv) & "?") with title "Pegar" buttons {"No", "Sí, copiar"} default button "No" cancel button "No"',
+          'return "copy"',
+          "on error",
+          'return "cancel"',
+          "end try",
+          "end run",
+        ]
+      : mode === "paste"
       ? [
           "on run argv",
           "try",
