@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { chainOf, createExplorer, driveLabel, pastedPath, remoteOf, treeRows, type ExplorerIO, type FsEntry } from "../src/explorer"
+import { chainOf, createExplorer, driveLabel, pastedPath, remoteOf, thereOf, treeRows, type ExplorerIO, type FsEntry } from "../src/explorer"
 import { remoteAnswer, remoteCommand, withRemotes, type RemoteRunner } from "../src/remote"
 
 /** The other machine's folders, by their paths there. */
@@ -68,6 +68,9 @@ describe("another machine's disk, reached by ssh", () => {
     expect(remoteOf("mac:\\Users\\ana")).toEqual({ host: "mac", path: "/Users/ana" })
     expect([remoteOf("C:/Users"), remoteOf("/Users/ana"), remoteOf("notas.txt")]).toEqual([undefined, undefined, undefined])
     expect(driveLabel("mac:/")).toBe("mac")
+    // A machine with Windows has its disks under its root; a path of it is copied as Windows writes it.
+    expect(remoteOf("windows:/C:/Users/ana")).toEqual({ host: "windows", path: "/C:/Users/ana" })
+    expect([thereOf("/Users/ana"), thereOf("/C:/Users/ana"), thereOf("/C:")]).toEqual(["/Users/ana", "C:\\Users\\ana", "C:\\"])
     expect(chainOf("mac:/Users/ana", "mac:/")).toEqual(["mac:/", "mac:/Users", "mac:/Users/ana"])
     expect([pastedPath("mac:"), pastedPath("mac:/"), pastedPath("mac:/Users/ana/")]).toEqual(["mac:/", "mac:/", "mac:/Users/ana"])
   })

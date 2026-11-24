@@ -158,6 +158,12 @@ export function remoteOf(path: string): { host: string; path: string } | undefin
   return found ? { host: found[1] as string, path: found[2] as string } : undefined
 }
 
+/**
+ * A path of another machine as that machine writes it: a Mac's as it is; one of Windows, under the machine's
+ * root as `/C:/Users/ana`, is `C:\\Users\\ana`.
+ */
+export const thereOf = (path: string) => /^\/[A-Za-z]:/.test(path) ? (path.length === 3 ? `${path.slice(1)}\\` : path.slice(1).replace(/\//g, '\\')) : path
+
 /** The disk a path is on: the longest of `drives` it lies under, or the first disk when none holds it. */
 export function driveOf(path: string, drives: readonly string[], caseless: boolean): string {
   const key = pathKey(path, caseless)
@@ -697,7 +703,8 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       forget()
       flash(`path:${path}`)
       // A path of another machine is copied as that machine writes it.
-      const native = remoteOf(path)?.path ?? nativeOf(path, platform)
+      const there = remoteOf(path)
+      const native = there ? thereOf(there.path) : nativeOf(path, platform)
       const isCopied = await io.copyText(native)
       // Into the prompt as well, so it need not be pasted; the clipboard keeps it for elsewhere.
       await io.insert(native, " ")
