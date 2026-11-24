@@ -430,11 +430,15 @@ export default Plugin.define({
     /**
      * Reads `answer` aloud with the voice of the language narrated in: as it
      * is, or translated or told short by a model when it is in another
-     * language or long, as the original does.
+     * language or long, as the original does. `inPopup`, for an answer: where there is the viewer's popup
+     * the narration is made first, whole, and then played in the popup, with its bar to seek and its speeds.
      */
-    const narrate = async (answer: string) => {
+    const narrate = async (answer: string, inPopup = false) => {
       const voice = voiceForCode(settings.picks.active)
       const lang = settings.picks.active || "es"
+      const wantsPopup = inPopup && (await hasPopup())
+      // Said again where there is the popup: the file it was kept in plays there.
+      if (wantsPopup && kept.answer === answer && kept.lang === lang && (await playInViewer(kept.file))) return
       const mine = ++narrating
       // The same answer in the same language keeps the file it was kept in: it is not kept again.
       if (kept.answer !== answer || kept.lang !== lang) kept = { answer, lang, file: "" }
@@ -454,7 +458,9 @@ export default Plugin.define({
         `${new Date().toISOString()} voice=${voice} active=${settings.picks.active} chars=${text.length}\n`,
       ).catch(() => {})
       await stopClips()
-      await narration.narrate({ text, voice })
+      const isOnlyMade = await narration.narrate({ text, voice, isOnlyMade: wantsPopup })
+      // Made: it plays in the popup at once, unless another narration was asked meanwhile.
+      if (isOnlyMade && mine === narrating) await playInViewer(kept.file)
     }
 
     /** The prompt's text field, when it has the focus. */
@@ -765,7 +771,7 @@ export default Plugin.define({
       }
       // The answer already read and kept plays in the popup, where it can be sought; otherwise it is read again.
       if (kept.answer === text && kept.lang === (settings.picks.active || "es") && (await playInViewer(kept.file))) return
-      await narrate(text)
+      await narrate(text, true)
     }
 
     // Switching the narrator off while it speaks pauses it, so switching it on goes on from there.
@@ -1662,7 +1668,7 @@ export default Plugin.define({
       if (unread !== event.data.sessionID) return
       unread = ""
       const text = plain(reply.text).trim()
-      if (settings.narrator && text) void narrate(text)
+      if (settings.narrator && text) void narrate(text, true)
     })
     // A message sent takes its image chips with it.
     const disposeSent = context.data.on("session.execution.started", () => {

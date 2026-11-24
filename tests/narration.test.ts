@@ -124,6 +124,12 @@ describe("speakCommand", () => {
     })
   })
 
+  test("a narration only made is asked so; one spoken is not", () => {
+    const command = speakCommand({ platform: "win32", root: "C:/plugin", python: "python.exe", request: { ...request, isOnlyMade: true } })
+    expect(command.env.NARRATOR_ONLY_MAKE).toBe("1")
+    expect(speakCommand({ platform: "win32", root: "C:/plugin", python: "python.exe", request }).env.NARRATOR_ONLY_MAKE).toBeUndefined()
+  })
+
   test("omits the history target when the narration is not kept", () => {
     const command = speakCommand({
       platform: "darwin",
@@ -188,6 +194,26 @@ describe("Narration", () => {
     expect(speaker.state.request?.speed).toBe(SPEED)
     expect(speaker.state.request?.savePath).toBe("audio.mp3")
     expect(narration.state).toBe("idle")
+  })
+
+  test("for the popup it is only made, when it is kept: it says whether it was, and never shows as playing", async () => {
+    const speaker = gatedSpeaker(["", ".\n", "made\n"])
+    const states: string[] = []
+    const narration = new Narration({
+      speak: speaker.speak,
+      controlPath: () => "control.txt",
+      savePath: () => "audio.mp3",
+      writeControl: async () => {},
+      onState: (state) => states.push(state),
+    })
+    expect(await narration.narrate({ text: "hola", voice: "x", isOnlyMade: true })).toBe(true)
+    expect(speaker.state.request?.isOnlyMade).toBe(true)
+    expect(states).toEqual(["idle", "thinking", "idle"])
+    // Not kept, there is no file for the popup: it is spoken.
+    const spoken = gatedSpeaker(["voice x\n"])
+    const aloud = new Narration({ speak: spoken.speak, controlPath: () => "control.txt", savePath: () => undefined, writeControl: async () => {}, onState: () => {} })
+    expect(await aloud.narrate({ text: "hola", voice: "x", isOnlyMade: true })).toBe(false)
+    expect(spoken.state.request?.isOnlyMade).toBe(false)
   })
 
   test("pauses and goes on through the control file", async () => {

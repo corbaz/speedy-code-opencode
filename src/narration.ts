@@ -40,6 +40,8 @@ export interface SpeakRequest {
   readonly speed: number
   readonly controlPath: string
   readonly savePath?: string
+  /** Made and kept, not played: the engine says `made` once the file is whole, and it is played in the popup. */
+  readonly isOnlyMade?: boolean
 }
 
 /** The engine under way: its output and the way to end it. */
@@ -127,6 +129,7 @@ export function speakCommand(input: {
     NARRATOR_PYTHON: python,
   }
   if (request.savePath) env.NARRATOR_SAVE_AS = request.savePath
+  if (request.isOnlyMade) env.NARRATOR_ONLY_MAKE = "1"
 
   return { argv, env }
 }
@@ -162,25 +165,28 @@ export class Narration {
     return this.#session.state
   }
 
-  async narrate(input: { readonly text: string; readonly voice: string }): Promise<void> {
+  /**
+   * Reads a text aloud. `isOnlyMade`, for the viewer's popup: the narration is made and kept, whole, and not
+   * played; it needs the file it is kept in, so one not kept is spoken. It says whether it was only made.
+   */
+  async narrate(input: { readonly text: string; readonly voice: string; readonly isOnlyMade?: boolean }): Promise<boolean> {
     const text = input.text.trim().slice(0, MAX_TEXT)
     if (!text || !input.voice) {
       await this.#session.stop()
-      return
+      return false
     }
 
+    let isOnlyMade = false
     await this.#session.run({
       initial: "thinking",
       flipOnVoice: true,
-      start: (control) =>
-        this.#options.speak({
-          text,
-          voice: input.voice,
-          speed: SPEED,
-          controlPath: control,
-          savePath: this.#options.savePath({ text, voice: input.voice }),
-        }),
+      start: (control) => {
+        const savePath = this.#options.savePath({ text, voice: input.voice })
+        isOnlyMade = input.isOnlyMade === true && savePath !== undefined
+        return this.#options.speak({ text, voice: input.voice, speed: SPEED, controlPath: control, savePath, isOnlyMade })
+      },
     })
+    return isOnlyMade
   }
 
   pause(): Promise<void> {
