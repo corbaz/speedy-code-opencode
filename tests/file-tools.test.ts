@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { dialogAnswer, dialogCommand, fileCopyCommand, newNameOf, renameCommand, trashCommand } from "../src/file-tools"
+import { dialogAnswer, dialogCommand, fileCopyCommand, newNameOf, pasteCommand, renameCommand, trashCommand } from "../src/file-tools"
 import { POWERSHELL } from "../src/powershell"
 
 const NATIVE = "C:\\Users\\me\\notas.txt"
@@ -41,6 +41,22 @@ describe("the commands behind each file's tools", () => {
     expect(remove.env.SPEEDY_MODE).toBe("delete")
     expect(remove.argv.join(" ")).toContain('return "delete"')
     expect(dialogCommand("linux", "delete", "/a", "/plugin")).toBeUndefined()
+  })
+
+  test("📥 asks in the same dialog, the folder it goes into in the environment; paste.py then copies or moves", () => {
+    expect(dialogCommand("win32", "paste", NATIVE, "C:/plugin", "file", "", "D:\\destino")?.env).toEqual({ SPEEDY_FILE: NATIVE, SPEEDY_MODE: "paste", SPEEDY_KIND: "file", SPEEDY_TARGET: "D:\\destino" })
+    // The other dialogs name no folder.
+    expect(Object.keys(dialogCommand("win32", "delete", NATIVE, "C:/plugin")!.env)).not.toContain("SPEEDY_TARGET")
+    // macOS: the popup first; the AppleScript dialog after it asks which, then whether for sure.
+    const mac = dialogCommand("darwin", "paste", "/Users/me/a.md", "/plugin", "file", "/venv/bin/python", "/Users/me/docs")!
+    expect(mac.env).toMatchObject({ SPEEDY_MODE: "paste", SPEEDY_TARGET: "/Users/me/docs", SPEEDY_POPUP: "/plugin/engine/dialog.py" })
+    expect(mac.argv.slice(-2)).toEqual(["a.md", "/Users/me/docs"])
+    expect(mac.argv.join(" ")).toContain('buttons {"Cancelar", "Mover", "Copiar"}')
+    expect(mac.argv.join(" ")).toContain('return "move"')
+    expect(pasteCommand("move", NATIVE, "D:\\destino\\notas.txt", "C:\\plugin\\", "py")).toEqual({
+      argv: ["py", "C:\\plugin/engine/paste.py"],
+      env: { SPEEDY_FILE: NATIVE, SPEEDY_TARGET: "D:\\destino\\notas.txt", SPEEDY_VERB: "move", PYTHONIOENCODING: "utf-8" },
+    })
   })
 
   test("the dialog's answer: its first line; a new name from `rename <base64>` or `name <text>`; nothing for cancel", () => {

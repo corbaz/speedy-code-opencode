@@ -28,7 +28,7 @@ import {
   type FooterControl,
   type SpeechState,
 } from "./footer"
-import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, renameCommand, trashCommand } from "./file-tools"
+import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, pasteCommand, renameCommand, trashCommand } from "./file-tools"
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
 import { createViewerReader, mediaSaid, popupCheckCommand, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
@@ -1375,9 +1375,13 @@ export default Plugin.define({
       copyText: async (text) => (await writeClipboard(text)) || (context.renderer?.copyToClipboardOSC52?.(text) ?? false),
       // A file's mention never goes through the clipboard: it holds the file 📋 just put there.
       insert: (text, separator) => insertInPrompt(text, separator, false),
-      ask: async (mode, native, kind) => {
-        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind, pythonPath())
+      ask: async (mode, native, kind, into) => {
+        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind, pythonPath(), into)
         return command ? dialogAnswer((await run(command.argv, command.env)).stdout) : "cancel"
+      },
+      paste: async (verb, native, target) => {
+        const command = pasteCommand(verb, native, target, PLUGIN_ROOT, pythonPath())
+        return (await run(command.argv, command.env)).stdout.trim() === "done"
       },
       rename: async (native, name, target) => {
         const command = renameCommand(process.platform, native, name, target)
@@ -1980,6 +1984,7 @@ export default Plugin.define({
         if (kind === "copy") void explorer.copyFile(path)
         else if (kind === "path") void explorer.copyPath(path)
         else if (kind === "rename") void explorer.rename(path)
+        else if (kind === "paste") void explorer.paste(path)
         else void explorer.trash(path)
       },
       collapse: () => explorer.collapse(),

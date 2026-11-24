@@ -11,7 +11,7 @@ import { remoteOf, type ExplorerIO, type FsEntry } from "./explorer"
 import type { FileCommand } from "./file-tools"
 
 /** What remote.py is asked: the machines there are, a folder's entries, what a path is, a file's copy here, a search. */
-export type RemoteMode = "hosts" | "list" | "stat" | "fetch" | "find"
+export type RemoteMode = "hosts" | "list" | "stat" | "fetch" | "find" | "home"
 
 /** remote.py run for one asking; the machine, the path and the pattern go in by the environment. */
 export function remoteCommand(mode: RemoteMode, pluginRoot: string, python: string, env: Record<string, string> = {}): FileCommand {
@@ -33,7 +33,7 @@ const field = (said: unknown, name: string): unknown =>
 
 /** What runs remote.py: an asking answered once, and a search that says lines until it ends or is stopped. */
 export interface RemoteRunner {
-  ask(mode: "hosts" | "list" | "stat" | "fetch", host: string, path: string): Promise<unknown>
+  ask(mode: "hosts" | "list" | "stat" | "fetch" | "home", host: string, path: string): Promise<unknown>
   find(host: string, pattern: string, most: number, onLine: (line: string) => void, onEnd: () => void): () => void
 }
 
@@ -55,6 +55,10 @@ export function withRemotes(io: ExplorerIO, runner: RemoteRunner, platform: stri
     async remotes() {
       const said = await runner.ask("hosts", "", "").catch(() => undefined)
       return Array.isArray(said) ? said.filter((one): one is string => typeof one === "string" && /^[A-Za-z][\w.-]+$/.test(one)) : []
+    },
+    async home(host) {
+      const home = field(await runner.ask("home", host, "/").catch(() => undefined), "home")
+      return typeof home === "string" ? home : ""
     },
     async list(path) {
       const remote = remoteOf(path)

@@ -160,14 +160,14 @@ describe("explorer helpers", () => {
     }
   })
 
-  test("a file's row: its name cut and filled with spaces up to its four tools, emoji or Nerd Fonts glyphs in their colors", () => {
+  test("a file's row: its name cut and filled with spaces up to its five tools, emoji or Nerd Fonts glyphs in their colors", () => {
     const row = { path: "C:/x/un_nombre_muy_largo_de_archivo.txt", name: "un_nombre_muy_largo_de_archivo.txt", depth: 2, kind: "file" as const, isOpen: false, isHere: false }
-    const label = fileNameLabel(row, 30)
-    expect(cells(label)).toBe(30 - FILE_TOOLS_WIDTH)
+    const label = fileNameLabel(row, 36)
+    expect(cells(label)).toBe(36 - FILE_TOOLS_WIDTH)
     expect(label.startsWith("      un_nomb")).toBe(true)
     expect(label.trimEnd().endsWith("…")).toBe(true)
-    const short = fileNameLabel({ ...row, name: "a.md", depth: 0 }, 30)
-    expect(short).toBe("  a.md".padEnd(30 - FILE_TOOLS_WIDTH))
+    const short = fileNameLabel({ ...row, name: "a.md", depth: 0 }, 36)
+    expect(short).toBe("  a.md".padEnd(36 - FILE_TOOLS_WIDTH))
     // Each icon on its own two cells, pressed there alone; before each, a plain gap that takes no press, so a
     // press a little off an icon does nothing instead of its neighbour's work.
     expect(fileTools("emoji", "", row.path).map((tool) => [tool.kind, tool.label.trimEnd(), cells(tool.label), tool.gap, tool.color])).toEqual([
@@ -175,15 +175,20 @@ describe("explorer helpers", () => {
       ["path", "🔗", 2, 2, "#63e6be"],
       ["rename", "✏", 2, 2, "#b197fc"],
       ["trash", "🗑", 2, 2, "#ff8787"],
+      // 📥 is grey, a plain mark, until 📋 took a file or a folder to paste; then it is lit.
+      ["paste", "↧", 2, 2, "#495057"],
     ])
-    expect(fileTools("nerd", "", row.path).map((tool) => tool.label)).toEqual(["\uf0c5\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0"])
-    expect(FILE_TOOLS_WIDTH).toBe(15)
+    expect(fileTools("emoji", "", row.path, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color]).at(-1)).toEqual(["paste", "📥", "#ffa94d"])
+    expect(fileTools("nerd", "", row.path).map((tool) => tool.label)).toEqual(["\uf0c5\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf0ea\u00a0"])
+    expect([fileTools("nerd", "", row.path).at(-1)?.color, fileTools("nerd", "", row.path, true).at(-1)?.color]).toEqual(["#495057", "#ffa94d"])
+    // The five tools, and two empty cells after them that part the last one from the scroll bar.
+    expect(FILE_TOOLS_WIDTH).toBe(1 + 2 + 4 * 4 + 2)
     // A folder's row is laid out as a file's: its open mark and name, filled up to the same four tools.
     const folder = { path: "C:/x/docs", name: "docs", depth: 1, kind: "dir" as const, isOpen: false, isHere: false }
-    expect(fileNameLabel(folder, 30)).toBe("  ▸ docs".padEnd(30 - FILE_TOOLS_WIDTH))    // The tool just pressed is green, with no fill; the others keep their colors.
+    expect(fileNameLabel(folder, 36)).toBe("  ▸ docs".padEnd(36 - FILE_TOOLS_WIDTH))    // The tool just pressed is green, with no fill; the others keep their colors.
     const flashed = fileTools("emoji", `path:${row.path}`, row.path)
-    expect(flashed.map((tool) => tool.color)).toEqual(["#74c0fc", "#51cf66", "#b197fc", "#ff8787"])
-    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#74c0fc", "#63e6be", "#b197fc", "#ff8787"])
+    expect(flashed.map((tool) => tool.color)).toEqual(["#74c0fc", "#51cf66", "#b197fc", "#ff8787", "#495057"])
+    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#74c0fc", "#63e6be", "#b197fc", "#ff8787", "#495057"])
     expect(Object.keys(flashed[0]!)).not.toContain("bg")
     expect([collapseLabel("emoji"), collapseLabel("nerd")]).toEqual([" ⊟ ", "  "])
   })
@@ -217,6 +222,7 @@ const noTools = {
   copyText: async () => false,
   insert: async () => {},
   ask: async () => "cancel",
+  paste: async () => false,
   rename: async () => false,
   trash: async () => false,
   exists: async () => false,
@@ -228,7 +234,7 @@ const noTools = {
 function fakeIO(tree: typeof TREE = TREE) {
   const opened: string[] = []
   const viewed: string[] = []
-  const files = { copied: [] as string[], texts: [] as string[], renamed: [] as string[], trashed: [] as string[] }
+  const files = { copied: [] as string[], texts: [] as string[], renamed: [] as string[], trashed: [] as string[], pasted: [] as string[] }
   const dialog = { answer: "cancel", asked: [] as string[] }
   const toasts: string[] = []
   // The prompt as the person left it: what is inserted lands at its end, where the cursor is.
@@ -263,7 +269,8 @@ function fakeIO(tree: typeof TREE = TREE) {
     insert: async (text, separator) => {
       prompt.text += promptInsertion(prompt.text, text, separator)
     },
-    ask: async (mode, native, kind) => (dialog.asked.push(`${mode} ${native}${kind === "dir" ? " dir" : ""}`), dialog.answer),
+    ask: async (mode, native, kind, into) => (dialog.asked.push(`${mode} ${native}${kind === "dir" ? " dir" : ""}${into ? ` into ${into}` : ""}`), dialog.answer),
+    paste: async (verb, native, target) => (files.pasted.push(`${verb} ${native} -> ${target}`), true),
     rename: async (native, name, target) => (files.renamed.push(`${native} -> ${name} (${target})`), true),
     trash: async (native) => (files.trashed.push(native), true),
     exists: async (native) => existing.has(native),
@@ -503,6 +510,61 @@ describe("each file's tools", () => {
     await onMac.rename("/Users/me/a.md")
     expect(mac.dialog.asked).toEqual(["rename /Users/me/a.md"])
     expect(mac.files.renamed).toEqual(["/Users/me/a.md -> b.md (/Users/me/b.md)"])
+  })
+
+  test("📥 copies or moves into a row's folder what 📋 took, once the dialog said which; it asks nothing with nothing taken, or where the file is already", async () => {
+    const fake = fakeIO()
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    // Nothing taken yet: it says what to do first.
+    await explorer.paste("C:/Windows")
+    expect(fake.toasts.at(-1)).toBe("primero copiá un archivo o una carpeta con 📋.")
+    expect(fake.dialog.asked).toEqual([])
+    await explorer.copyFile(NOTAS)
+    expect(explorer.state().clip).toBe(NOTAS)
+    fake.existing.add(NATIVE)
+    // On a folder's row: Cancelar does nothing; Copiar copies it there, the folder opens, and the file stays taken.
+    await explorer.paste("C:/Windows")
+    expect(fake.dialog.asked).toEqual([`paste ${NATIVE} into C:\\Windows`])
+    expect(fake.files.pasted).toEqual([])
+    fake.dialog.answer = "copy"
+    await explorer.paste("C:/Windows")
+    expect(fake.files.pasted).toEqual([`copy ${NATIVE} -> C:\\Windows\\notas.txt`])
+    expect(fake.toasts.at(-1)).toBe("notas.txt se copió a Windows.")
+    expect(explorer.state().open).toContain("c:/windows")
+    expect(explorer.state().clip).toBe(NOTAS)
+    // On a file's row it goes into the folder the file is in: a disk's root here.
+    await explorer.paste("C:/pagefile.sys")
+    expect(fake.files.pasted.at(-1)).toBe(`copy ${NATIVE} -> C:\\notas.txt`)
+    // Into the folder it is in already, or where a file of its name is, nothing is asked.
+    const asked = fake.dialog.asked.length
+    await explorer.paste("C:/Users/test/proyectos/app.exe")
+    expect(fake.toasts.at(-1)).toBe("notas.txt ya está en esa carpeta.")
+    fake.existing.add("C:\\Users\\Public\\notas.txt")
+    await explorer.paste("C:/Users/Public")
+    expect(fake.toasts.at(-1)).toBe("ya hay un notas.txt en esa carpeta.")
+    expect(fake.dialog.asked.length).toBe(asked)
+    // What could not be done is said, and the file stays taken.
+    fake.io.paste = async () => false
+    await explorer.paste("C:/Windows")
+    expect(fake.toasts.at(-1)).toBe("no pude copiar notas.txt.")
+    expect(explorer.state().clip).toBe(NOTAS)
+    // Mover moves it: nothing is taken any more.
+    fake.io.paste = async (verb, native, target) => (fake.files.pasted.push(`${verb} ${native} -> ${target}`), true)
+    fake.dialog.answer = "move"
+    await explorer.paste("C:/Windows")
+    expect(fake.files.pasted.at(-1)).toBe(`move ${NATIVE} -> C:\\Windows\\notas.txt`)
+    expect(fake.toasts.at(-1)).toBe("notas.txt se movió a Windows.")
+    expect(explorer.state().clip).toBeUndefined()
+    // A folder taken does not go into itself, nor under itself; and one gone since it was taken is taken no more.
+    await explorer.copyFile("C:/Users/test/proyectos")
+    fake.existing.add("C:\\Users\\test\\proyectos")
+    await explorer.paste("C:/Users/test/proyectos/facturas")
+    expect(fake.toasts.at(-1)).toBe("proyectos no puede ir dentro de sí misma.")
+    fake.existing.delete("C:\\Users\\test\\proyectos")
+    await explorer.paste("C:/Windows")
+    expect(fake.toasts.at(-1)).toBe("proyectos ya no está donde se copió.")
+    expect(explorer.state().clip).toBeUndefined()
   })
 
   test("🗑 asks in the dialog: cancel leaves the file; delete sends it to the trash and the folder is read again", async () => {

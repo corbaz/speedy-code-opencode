@@ -11,8 +11,8 @@ const FAR: Record<string, FsEntry[]> = {
   "/Users": [{ name: "ana", kind: "dir", isLink: false }],
 }
 
-/** This machine's IO, with one disk, and the other machine as remote.py would answer for it. */
-function world(hosts: string[] = ["mac"]) {
+/** This machine's IO, with one disk, and the other machine as remote.py would answer for it; `home` is where its disk opens. */
+function world(hosts: string[] = ["mac"], home = "/") {
   const viewed: string[] = []
   const copied: string[] = []
   const texts: string[] = []
@@ -33,6 +33,7 @@ function world(hosts: string[] = ["mac"]) {
     copyText: async (text) => (texts.push(text), true),
     insert: async (text) => void inserted.push(text),
     ask: async (mode) => (dialogs.push(mode), "cancel"),
+    paste: async () => false,
     rename: async () => false,
     trash: async () => false,
     exists: async () => false,
@@ -44,6 +45,7 @@ function world(hosts: string[] = ["mac"]) {
     ask: async (mode, host, path) => {
       asked.push(`${mode} ${host} ${path}`.trim())
       if (mode === "hosts") return hosts
+      if (mode === "home") return { home }
       if (mode === "list") return FAR[path] ? { entries: FAR[path] } : { error: "not reached" }
       if (mode === "stat") return { kind: FAR[path] ? "dir" : path === "/nota.md" ? "file" : "" }
       return path === "/nota.md" ? { file: "C:/Temp/speedy-remote/ab12/nota.md" } : { error: "not fetched" }
@@ -96,6 +98,35 @@ describe("another machine's disk, reached by ssh", () => {
     // A folder that does not answer says so, as one of this machine's.
     await w.explorer.toggleFolder("mac:/Users/ana")
     expect(w.rows()).toContain("      (sin acceso)")
+  })
+
+  test("a machine's disk opens at its person's folder, marked and in the middle; one with Windows at its root; 📥 is not for its folders", async () => {
+    FAR["/Users/ana"] = [{ name: "apuntes.txt", kind: "file", isLink: false }]
+    try {
+      const w = world(["mac"], "/Users/ana")
+      await w.explorer.open("C:/")
+      await w.explorer.pickDrive("mac:/")
+      expect(w.asked).toContain("home mac /")
+      expect(w.rows()).toEqual(["mac:/", "  Users", "    ana", "      apuntes.txt", "  nota.md"])
+      expect([w.explorer.state().found, w.explorer.state().top]).toEqual(["mac:/users/ana", -1])
+      // Where it opens is asked once.
+      await w.explorer.pickDrive("C:/")
+      await w.explorer.pickDrive("mac:/")
+      expect(w.asked.filter((one) => one.startsWith("home "))).toEqual(["home mac /"])
+      // One with Windows says `/`: its root, where its disks are, with nothing marked.
+      const windows = world(["windows"], "/")
+      await windows.explorer.open("C:/")
+      await windows.explorer.pickDrive("windows:/")
+      expect(windows.rows()).toEqual(["windows:/", "  Users", "  nota.md"])
+      expect(windows.explorer.state().found).toBeUndefined()
+      // 📥 takes nothing there, and 📋 takes none of its files to paste.
+      await w.explorer.copyFile("C:/notas.txt")
+      await w.explorer.paste("mac:/Users")
+      expect(w.toasts.at(-1)).toBe("pegar no está disponible en mac: sus archivos se leen por ssh.")
+      expect(w.dialogs).toEqual([])
+    } finally {
+      delete FAR["/Users/ana"]
+    }
   })
 
   test("with no machine named there is no such disk, and one not reached says so", async () => {

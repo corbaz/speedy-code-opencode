@@ -46,26 +46,44 @@ export function fileCopyCommand(platform: string, native: string): FileCommand |
  * Recycle Bin), the engine's dialog.py popup on macOS, drawn the same. Where pywebview is not installed
  * dialog.py says nothing, and an AppleScript dialog asks. It answers `rename <base64 name>` (the
  * AppleScript dialog: `name <name>`), `delete` or `cancel`. `python` is the engine's Python, for macOS.
+ * 📥's (`paste`) asks whether the file is copied or moved into the folder `into`, then whether for sure, and
+ * answers `copy`, `move` or `cancel`.
  */
 export function dialogCommand(
   platform: string,
-  mode: "rename" | "delete",
+  mode: "rename" | "delete" | "paste",
   native: string,
   root: string,
   kind: "file" | "dir" = "file",
   python = "",
+  into = "",
 ): FileCommand | undefined {
+  // The folder a paste goes into, for the dialog to name.
+  const where: Record<string, string> = mode === "paste" ? { SPEEDY_TARGET: into } : {}
   if (platform === "win32") {
     return {
       argv: [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", `${root.replace(/\\/g, "/")}/engine/dialog.ps1`],
       // A folder: one name with no extension, and Borrar says it goes with what it holds.
-      env: { SPEEDY_FILE: native, SPEEDY_MODE: mode, SPEEDY_KIND: kind },
+      env: { SPEEDY_FILE: native, SPEEDY_MODE: mode, SPEEDY_KIND: kind, ...where },
     }
   }
   if (platform !== "darwin") return undefined
   const name = native.split("/").pop() ?? native
   const script =
-    mode === "rename"
+    mode === "paste"
+      ? [
+          "on run argv",
+          "try",
+          'set verb to button returned of (display dialog ("¿Copiar o mover " & (item 1 of argv) & " a " & (item 2 of argv) & "?") with title "Pegar" buttons {"Cancelar", "Mover", "Copiar"} default button "Copiar" cancel button "Cancelar")',
+          'display dialog ("¿Seguro? " & verb & " " & (item 1 of argv) & " a " & (item 2 of argv)) with title "Pegar" buttons {"No", "Sí"} default button "No" cancel button "No"',
+          'if verb is "Mover" then return "move"',
+          'return "copy"',
+          "on error",
+          'return "cancel"',
+          "end try",
+          "end run",
+        ]
+      : mode === "rename"
       ? [
           "on run argv",
           "try",
@@ -93,8 +111,19 @@ export function dialogCommand(
     'exec "$@"',
   ].join("\n")
   return {
-    argv: ["/bin/sh", "-c", ask, "sh", "osascript", ...script.flatMap((line) => ["-e", line]), name],
-    env: { SPEEDY_FILE: native, SPEEDY_MODE: mode, SPEEDY_KIND: kind, SPEEDY_PYTHON: python, SPEEDY_POPUP: `${root}/engine/dialog.py` },
+    argv: ["/bin/sh", "-c", ask, "sh", "osascript", ...script.flatMap((line) => ["-e", line]), name, ...(mode === "paste" ? [into] : [])],
+    env: { SPEEDY_FILE: native, SPEEDY_MODE: mode, SPEEDY_KIND: kind, ...where, SPEEDY_PYTHON: python, SPEEDY_POPUP: `${root}/engine/dialog.py` },
+  }
+}
+
+/**
+ * 📥: paste.py copies or moves a file or a folder to `nativeTarget`, its own name included. It writes over
+ * nothing and says `done` when it did.
+ */
+export function pasteCommand(verb: "copy" | "move", native: string, nativeTarget: string, pluginRoot: string, python: string): FileCommand {
+  return {
+    argv: [python, `${pluginRoot.replace(/[\\/]+$/, "")}/engine/paste.py`],
+    env: { SPEEDY_FILE: native, SPEEDY_TARGET: nativeTarget, SPEEDY_VERB: verb, PYTHONIOENCODING: "utf-8" },
   }
 }
 

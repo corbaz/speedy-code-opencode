@@ -7,7 +7,8 @@
  * under a rule, the disk's tree, the session's folder marked ● and put in the middle when the explorer
  * opens. The tree scrolls under the disks and the field, which stay.
  *
- * Every file is yellow and opens in the viewer; at its right, its four tools. While the pointer is anywhere
+ * Every file is yellow and opens in the viewer; at its right, its five tools, the last one, 📥, grey until 📋
+ * took a file or a folder to paste; two empty cells part them from the scroll bar. While the pointer is anywhere
  * on a file's row, its tools included, the name keeps a yellow fill: the row is marked as the one the
  * tools act on. The tools themselves never take a fill; a pressed one turns green for a second.
  */
@@ -136,7 +137,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
 
   /**
    * A file's or a folder's row: its name, which opens the viewer (a file) or opens and closes it (a folder),
-   * and its four tools, none with a fill under the pointer. A file's name is yellow and fills yellow; a
+   * and its five tools, none with a fill under the pointer. A file's name is yellow and fills yellow; a
    * folder's is blue and fills blue.
    */
   const fileRow = (row: TreeRow) => {
@@ -168,7 +169,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           </text>
         </box>
         <box flexDirection="row" flexShrink={0} width={FILE_TOOLS_WIDTH}>
-          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path)}>
+          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip))}>
             {(tool) => (
               <>
                 {/* A plain gap before each icon takes no press: one a little off an icon does nothing. */}
