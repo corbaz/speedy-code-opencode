@@ -32,6 +32,7 @@ import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, renameComman
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
 import { createViewerReader, mediaSaid, popupCheckCommand, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
+import { remoteAnswer, remoteCommand, withRemotes } from "./remote"
 import { EXPLORER_PANEL, ExplorerPanel, type ExplorerPanelApi } from "./explorer-panel"
 import { behindOrigin, takeUpdate, type Git } from "./update"
 import { ClipPlayer, listClips, readSource, withStarted, type HistoryClip, type LastRead } from "./history"
@@ -1326,7 +1327,38 @@ export default Plugin.define({
 
     // The explorer the folder after the exit opens beside the chat, in the host's side panel.
     const [explorerState, setExplorerState] = createSignal<ExplorerState>(EMPTY_EXPLORER)
-    const explorerIO: ExplorerIO = {
+    // A program that says lines until it ends: each whole line is heard, and what is given back stops it.
+    const spawnLines = (command: { argv: string[]; env: Record<string, string> }, onLine: (line: string) => void, onEnd: () => void) => {
+      try {
+        const child = spawn(command.argv[0] as string, command.argv.slice(1), {
+          env: { ...process.env, ...command.env },
+          stdio: ["ignore", "pipe", "ignore"],
+          windowsHide: true,
+        })
+        // What it says comes in pieces: a line is heard once it is whole.
+        let pending = ""
+        child.stdout?.setEncoding("utf8")
+        child.stdout?.on("data", (chunk: string) => {
+          pending += chunk
+          const lines = pending.split(/\r?\n/)
+          pending = lines.pop() ?? ""
+          for (const line of lines) onLine(line)
+        })
+        child.on("error", onEnd)
+        child.on("close", onEnd)
+        return () => {
+          try {
+            child.kill()
+          } catch {
+            // Already gone.
+          }
+        }
+      } catch {
+        onEnd()
+        return () => {}
+      }
+    }
+    const ownExplorerIO: ExplorerIO = {
       list: async (path) =>
         (await readdir(path, { withFileTypes: true })).map((entry) => ({
           name: entry.name,
@@ -1361,38 +1393,21 @@ export default Plugin.define({
       ),
       toast: (message, isError) => toast(message, isError ? "error" : "info"),
       wait: (ms) => new Promise((done) => setTimeout(done, ms)),
-      find: (ask, onLine, onEnd) => {
-        const { argv, env } = findCommand(ask, PLUGIN_ROOT, pythonPath())
-        try {
-          const child = spawn(argv[0] as string, argv.slice(1), {
-            env: { ...process.env, ...env },
-            stdio: ["ignore", "pipe", "ignore"],
-            windowsHide: true,
-          })
-          // What it says comes in pieces: a line is heard once it is whole.
-          let pending = ""
-          child.stdout?.setEncoding("utf8")
-          child.stdout?.on("data", (chunk: string) => {
-            pending += chunk
-            const lines = pending.split(/\r?\n/)
-            pending = lines.pop() ?? ""
-            for (const line of lines) onLine(line)
-          })
-          child.on("error", onEnd)
-          child.on("close", onEnd)
-          return () => {
-            try {
-              child.kill()
-            } catch {
-              // Already gone.
-            }
-          }
-        } catch {
-          onEnd()
-          return () => {}
-        }
-      },
+      find: (ask, onLine, onEnd) => spawnLines(findCommand(ask, PLUGIN_ROOT, pythonPath()), onLine, onEnd),
     }
+    // The other machines' disks, reached by ssh: the engine's remote.py asks them.
+    const explorerIO = withRemotes(
+      ownExplorerIO,
+      {
+        ask: async (mode, host, path) => {
+          const command = remoteCommand(mode, PLUGIN_ROOT, pythonPath(), { SPEEDY_HOST: host, SPEEDY_PATH: path })
+          return remoteAnswer((await run(command.argv, command.env)).stdout)
+        },
+        find: (host, pattern, most, onLine, onEnd) =>
+          spawnLines(remoteCommand("find", PLUGIN_ROOT, pythonPath(), { SPEEDY_HOST: host, SPEEDY_PATTERN: pattern, SPEEDY_MOST: String(most) }), onLine, onEnd),
+      },
+      process.platform,
+    )
     const explorer = createExplorer(explorerIO, process.platform, (state) => setExplorerState(() => state))
 
     // The explorer on the home screen, where the host has no side panel: drawn by the mod at the right,

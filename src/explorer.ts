@@ -115,6 +115,11 @@ export interface ExplorerIO {
    * `most`: each line find_files.py says goes to `onLine`, and `onEnd` hears its end. What it gives back stops it.
    */
   find(ask: { root: string; first: string; pattern: string; most: number }, onLine: (line: string) => void, onEnd: () => void): () => void
+  /**
+   * The other machines reached by ssh, by the names ssh knows them: each one's disk stands after this
+   * machine's, `mac:/`. Where there is none to ask, there are no such disks.
+   */
+  remotes?(): Promise<string[]>
 }
 
 /** The most entries a folder shows: a folder with thousands would bury the tree. */
@@ -144,6 +149,15 @@ export const pathKey = (path: string, caseless: boolean) => (caseless ? slashed(
 const isUnder = (path: string, folder: string) =>
   path === folder || path.startsWith(folder.endsWith("/") ? folder : `${folder}/`)
 
+/**
+ * A path on another machine's disk, reached by ssh: `mac:/Users/ana` is the machine, as ssh knows it, and its
+ * own path. A disk of Windows has one letter before its `:`, a machine two at least.
+ */
+export function remoteOf(path: string): { host: string; path: string } | undefined {
+  const found = /^([A-Za-z][\w.-]+):(\/.*)$/.exec(slashed(path))
+  return found ? { host: found[1] as string, path: found[2] as string } : undefined
+}
+
 /** The disk a path is on: the longest of `drives` it lies under, or the first disk when none holds it. */
 export function driveOf(path: string, drives: readonly string[], caseless: boolean): string {
   const key = pathKey(path, caseless)
@@ -165,6 +179,9 @@ export function chainOf(path: string, drive: string): string[] {
 /** A disk as its button names it: `C:` on Windows, `/` for the Mac's own and its name for another volume. */
 export function driveLabel(drive: string): string {
   if (/^[A-Za-z]:\/?$/.test(drive)) return drive.slice(0, 2).toUpperCase()
+  // Another machine's disk is named as the machine.
+  const remote = remoteOf(drive)
+  if (remote?.path === "/") return remote.host
   return drive === "/" ? "/" : (drive.split("/").filter(Boolean).pop() ?? drive)
 }
 
@@ -295,7 +312,8 @@ export function treeRows(state: ExplorerState): TreeRow[] {
     if (!isOpen) return
     const listed = state.listed[key]
     if (listed === undefined) return note(path, "leyendo…", depth + 1)
-    if (listed === "denied") return note(path, "(sin acceso)", depth + 1)
+    // Another machine's disk that does not answer was not reached by ssh.
+    if (listed === "denied") return note(path, depth === 0 && remoteOf(path) ? "(sin conexión por ssh)" : "(sin acceso)", depth + 1)
     if (listed.entries.length === 0) return note(path, "(vacía)", depth + 1)
     for (const entry of listed.entries) walk(joinPath(path, entry.name), entry.name, entry.kind, depth + 1)
     if (listed.left > 0) note(path, `… y ${listed.left} más`, depth + 1)
@@ -429,11 +447,13 @@ export function rowAction(row: TreeRow): "folder" | "view" | "none" {
 export function pastedPath(text: string): string {
   const path = slashed(text.trim().replace(/^@/, "").replace(/^["']+|["']+$/g, "").trim())
   if (/^[A-Za-z]:\/?$/.test(path)) return `${path.slice(0, 2)}/`
+  // Another machine's disk, `mac:` or `mac:/`: its root too ends in `/`.
+  if (/^[A-Za-z][\w.-]+:\/*$/.test(path)) return `${path.slice(0, path.indexOf(":"))}:/`
   return path.length > 1 ? path.replace(/\/+$/, "") : path
 }
 
-/** A path as the system writes it: with `\` on Windows. */
-const nativeOf = (path: string, platform: string) => (platform === "win32" ? path.replace(/\//g, "\\") : path)
+/** A path as the system writes it: with `\` on Windows. A path of another machine stays as the explorer writes it. */
+const nativeOf = (path: string, platform: string) => (platform === "win32" && !remoteOf(path) ? path.replace(/\//g, "\\") : path)
 
 /** The folder a file of the tree is in: a disk's root keeps its `/`. */
 const folderOf = (path: string) => {
@@ -454,8 +474,14 @@ async function readFolder(io: ExplorerIO, path: string): Promise<ExplorerListing
   }
 }
 
-/** The disks there are: each lettered root that answers on Windows; `/` and each volume mounted elsewhere. */
+/** The disks there are: this machine's, then those of the other machines reached by ssh. */
 async function readDrives(io: ExplorerIO, platform: string): Promise<string[]> {
+  const [own, remote] = await Promise.all([ownDrives(io, platform), io.remotes?.().catch(() => [] as string[]) ?? []])
+  return [...own, ...remote.map((host) => `${host}:/`)]
+}
+
+/** This machine's disks: each lettered root that answers on Windows; `/` and each volume mounted elsewhere. */
+async function ownDrives(io: ExplorerIO, platform: string): Promise<string[]> {
   if (platform === "win32") {
     const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
     const found = await Promise.all(
@@ -572,6 +598,12 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     const listed = await readFolder(io, path)
     set((now) => ({ ...now, listed: { ...now.listed, [key]: listed } }))
   }
+  // ✏ and 🗑 are not for another machine's files: a toast says so, and nothing is done.
+  const notOnRemote = (path: string) => {
+    const remote = remoteOf(path)
+    if (remote) io.toast(`renombrar y borrar no están disponibles en ${remote.host}: sus archivos se leen por ssh.`, true)
+    return remote !== undefined
+  }
   const renameTo = async (path: string, wanted: string) => {
     const name = wanted.trim()
     const old = nameOf(path)
@@ -647,6 +679,14 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       flash(`copy:${path}`)
       const native = nativeOf(path, platform)
       const isCopied = await io.copyFile(native)
+      // A file of another machine: its copy here went to the clipboard, and its path there goes into the prompt.
+      const remote = remoteOf(path)
+      if (remote) {
+        await io.insert(slashed(path), " ")
+        if (isCopied) io.toast(`la ruta de ${nameOf(path)} en ${remote.host} está en el prompt y una copia suya en el portapapeles; pegala en una carpeta.`)
+        else io.toast(`la ruta de ${nameOf(path)} en ${remote.host} está en el prompt; no pude copiar el archivo al portapapeles.`, true)
+        return
+      }
       // Attached to the prompt too, as a file is mentioned there: @path.
       await io.insert(fileMention(native), " ")
       const name = nameOf(path)
@@ -656,7 +696,8 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     async copyPath(path) {
       forget()
       flash(`path:${path}`)
-      const native = nativeOf(path, platform)
+      // A path of another machine is copied as that machine writes it.
+      const native = remoteOf(path)?.path ?? nativeOf(path, platform)
       const isCopied = await io.copyText(native)
       // Into the prompt as well, so it need not be pasted; the clipboard keeps it for elsewhere.
       await io.insert(native, " ")
@@ -665,12 +706,14 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async rename(path) {
       forget()
+      if (notOnRemote(path)) return
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
       const name = newNameOf(await io.ask("rename", nativeOf(path, platform), kind))
       if (name) await renameTo(path, name)
     },
     async trash(path) {
       forget()
+      if (notOnRemote(path)) return
       const native = nativeOf(path, platform)
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
       if ((await io.ask("delete", native, kind)) !== "delete") return
@@ -694,7 +737,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     async goTo(text) {
       const pasted = pastedPath(text)
       if (!pasted) return
-      const isAbsolute = /^[A-Za-z]:\//.test(pasted) || pasted.startsWith("/")
+      const isAbsolute = /^[A-Za-z]:\//.test(pasted) || pasted.startsWith("/") || remoteOf(pasted) !== undefined
       const path = isAbsolute ? pasted : joinPath(state.here, pasted)
       if (!(await io.exists(nativeOf(path, platform)))) return io.toast(`no existe ${pasted}.`, true)
       const key = pathKey(path, state.caseless)
