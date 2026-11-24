@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { dialogAnswer, dialogCommand, fileCopyCommand, newNameOf, pasteCommand, renameCommand, trashCommand } from "../src/file-tools"
+import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, newNameOf, pasteCommand, renameCommand, trashCommand } from "../src/file-tools"
 import { POWERSHELL } from "../src/powershell"
 
 const NATIVE = "C:\\Users\\me\\notas.txt"
@@ -53,14 +53,17 @@ describe("the commands behind each file's tools", () => {
     expect(mac.argv.slice(-2)).toEqual(["a.md", "/Users/me/docs"])
     expect(mac.argv.join(" ")).toContain('buttons {"Cancelar", "Mover", "Copiar"}')
     expect(mac.argv.join(" ")).toContain('return "move"')
-    // A file of another machine is copied, never moved: the dialog is told, and only asks whether for sure.
-    expect(dialogCommand("win32", "paste", NATIVE, "C:/plugin", "file", "", "D:\\destino", true)?.env.SPEEDY_ONLY).toBe("copy")
-    const only = dialogCommand("darwin", "paste", "/tmp/a.md", "/plugin", "file", "py", "/Users/me/docs", true)!
-    expect(only.env.SPEEDY_ONLY).toBe("copy")
-    expect(only.argv.join(" ")).not.toContain("Mover")
     expect(pasteCommand("move", NATIVE, "D:\\destino\\notas.txt", "C:\\plugin\\", "py")).toEqual({
       argv: ["py", "C:\\plugin/engine/paste.py"],
       env: { SPEEDY_FILE: NATIVE, SPEEDY_TARGET: "D:\\destino\\notas.txt", SPEEDY_VERB: "move", PYTHONIOENCODING: "utf-8" },
+    })
+  })
+
+  test("the filter's search is told the file it is held by", () => {
+    const ask = { root: "C:\\", first: "C:\\Users\\me", pattern: "*.pdf", most: 50000 }
+    expect(findCommand(ask, "C:\\plugin\\", "py", "C:\\Temp\\find-1.pause")).toEqual({
+      argv: ["py", "C:\\plugin/engine/find_files.py"],
+      env: { SPEEDY_ROOT: "C:\\", SPEEDY_FIRST: "C:\\Users\\me", SPEEDY_PATTERN: "*.pdf", SPEEDY_MOST: "50000", SPEEDY_PAUSE: "C:\\Temp\\find-1.pause" },
     })
   })
 

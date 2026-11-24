@@ -20,6 +20,10 @@ function world(hosts: string[] = ["mac"], home = "/") {
   const toasts: string[] = []
   const dialogs: string[] = []
   const pasted: string[] = []
+  // What went across by remote.py, the tokens its searches were started with, and what it says of a paste.
+  const ran: string[] = []
+  const tokens: string[] = []
+  const across = { says: "done" }
   const answer = { says: "cancel" }
   const asked: string[] = []
   const searches: Array<{ host: string; pattern: string; most: number; say: (line: object) => void; isStopped: boolean }> = []
@@ -34,11 +38,11 @@ function world(hosts: string[] = ["mac"], home = "/") {
     copyFile: async (native) => (copied.push(native), true),
     copyText: async (text) => (texts.push(text), true),
     insert: async (text) => void inserted.push(text),
-    ask: async (mode, _native, _kind, _into, isOnlyCopy) => (dialogs.push(isOnlyCopy ? `${mode} only copy` : mode), answer.says),
+    ask: async (mode) => (dialogs.push(mode), answer.says),
     paste: async (verb, native, target) => (pasted.push(`${verb} ${native} -> ${target}`), true),
     rename: async () => false,
     trash: async () => false,
-    exists: async () => false,
+    exists: async (native) => native === "C:\\notas.txt",
     toast: (message) => void toasts.push(message),
     wait: async () => {},
     find: () => () => {},
@@ -52,7 +56,12 @@ function world(hosts: string[] = ["mac"], home = "/") {
       if (mode === "stat") return { kind: FAR[path] ? "dir" : path === "/nota.md" ? "file" : "" }
       return path === "/nota.md" ? { file: "C:/Temp/speedy-remote/ab12/nota.md" } : { error: "not fetched" }
     },
-    find: (host, pattern, most, onLine) => {
+    run: async (mode, env) => {
+      ran.push(`${mode} ${Object.entries(env).map(([name, value]) => `${name.replace("SPEEDY_", "")}=${value}`).join(" ")}`)
+      return mode === "pause" ? { held: env.SPEEDY_PAUSED === "1" } : { said: across.says }
+    },
+    find: (host, pattern, most, token, onLine) => {
+      tokens.push(token)
       const search = { host, pattern, most, say: (line: object) => onLine(JSON.stringify(line)), isStopped: false }
       searches.push(search)
       return () => void (search.isStopped = true)
@@ -60,7 +69,7 @@ function world(hosts: string[] = ["mac"], home = "/") {
   }
   const explorer = createExplorer(withRemotes(own, runner, "win32"), "win32")
   const rows = () => treeRows(explorer.state()).map((row) => `${"  ".repeat(row.depth)}${row.name}`)
-  return { explorer, rows, viewed, copied, texts, inserted, toasts, dialogs, asked, searches, pasted, answer }
+  return { explorer, rows, viewed, copied, texts, inserted, toasts, dialogs, asked, searches, pasted, answer, ran, tokens, across }
 }
 
 /** Lets what a press started (a file fetched, then shown) end. */
@@ -121,21 +130,40 @@ describe("another machine's disk, reached by ssh", () => {
       await windows.explorer.pickDrive("windows:/")
       expect(windows.rows()).toEqual(["windows:/", "  Users", "  nota.md"])
       expect(windows.explorer.state().found).toBeUndefined()
-      // 📥 takes nothing there.
+      // 📥 goes across machines, copied or moved as the dialog said. From here to the machine (`push`):
       await w.explorer.copyFile("C:/notas.txt")
+      w.answer.says = "move"
       await w.explorer.paste("mac:/Users")
-      expect(w.toasts.at(-1)).toBe("pegar no está disponible en mac: sus archivos se leen por ssh.")
-      expect(w.dialogs).toEqual([])
-      // But a file 📋 took there is pasted here: copied, never moved, so the dialog only asks whether for sure,
-      // and what goes is the copy fetched, under the file's own name.
-      await w.explorer.copyFile("mac:/nota.md")
-      expect(w.explorer.state().clip).toBe("mac:/nota.md")
+      expect(w.dialogs).toEqual(["paste"])
+      expect(w.ran).toEqual(["push HOST=mac FILE=C:\\notas.txt PATH=/Users/notas.txt VERB=move"])
+      expect(w.toasts.slice(-2)).toEqual(["moviendo notas.txt…", "notas.txt se movió a Users."])
+      expect(w.explorer.state().clip).toBeUndefined()
+      // From the machine here (`pull`): a file, and a folder, which 📋 takes without the clipboard.
+      await w.explorer.copyFile("mac:/Users")
+      expect([w.explorer.state().clip, w.toasts.at(-1)]).toEqual(["mac:/Users", "la carpeta Users de mac está lista para pegar con 📥."])
       w.answer.says = "copy"
       await w.explorer.paste("C:/")
-      expect(w.dialogs).toEqual(["paste only copy"])
-      expect(w.pasted).toEqual(["copy C:\\Temp\\speedy-remote\\ab12\\nota.md -> C:\\nota.md"])
-      expect(w.toasts.at(-1)).toBe("nota.md se copió a C:.")
+      expect(w.ran.at(-1)).toBe("pull HOST=mac PATH=/Users TARGET=C:\\Users VERB=copy")
+      expect(w.pasted).toEqual([])
+      expect(w.toasts.at(-1)).toBe("Users se copió a C:.")
+      // Within the machine (`paste`), but not into itself.
+      await w.explorer.paste("mac:/Users/ana")
+      expect(w.toasts.at(-1)).toBe("Users no puede ir dentro de sí misma.")
+      await w.explorer.copyFile("mac:/nota.md")
+      await w.explorer.paste("mac:/Users/ana")
+      expect(w.ran.at(-1)).toBe("paste HOST=mac PATH=/nota.md TARGET=/Users/ana/nota.md VERB=copy")
+      // Copied, but not removed where it was: it says so, and the file stays taken. What failed says so too.
+      w.answer.says = "move"
+      w.across.says = "kept"
+      await w.explorer.paste("C:/")
+      expect(w.toasts.at(-1)).toBe("nota.md se copió a C:, pero no pude quitarlo de donde estaba.")
       expect(w.explorer.state().clip).toBe("mac:/nota.md")
+      w.across.says = "error"
+      await w.explorer.paste("C:/")
+      expect(w.toasts.at(-1)).toBe("no pude mover nota.md.")
+      // Not from one machine to another one.
+      await w.explorer.paste("otra:/tmp")
+      expect(w.toasts.at(-1)).toBe("de mac a otra no se pega: traelo primero a esta máquina.")
     } finally {
       delete FAR["/Users/ana"]
     }
@@ -200,10 +228,16 @@ describe("another machine's disk, reached by ssh", () => {
     expect(w.explorer.state().drive).toBe("mac:/")
     expect(w.rows()).toEqual(["mac:/", "  Users", "    ana", "  nota.md"])
     w.explorer.filter("*.pdf")
-    expect(w.searches.map(({ host, pattern, most }) => ({ host, pattern, most }))).toEqual([{ host: "mac", pattern: "*.pdf", most: 1000 }])
+    expect(w.searches.map(({ host, pattern, most }) => ({ host, pattern, most }))).toEqual([{ host: "mac", pattern: "*.pdf", most: 50000 }])
     w.searches[0]?.say({ paths: ["mac:/Users/ana/informe.pdf"], seen: 12, done: true, cut: false })
     expect(w.rows()).toEqual(["mac:/", "  Users", "    ana", "      informe.pdf"])
+    // A search there is held by its token, through remote.py.
+    w.explorer.filter("*.txt")
+    w.explorer.pauseFilter()
+    w.explorer.pauseFilter()
+    expect(w.ran).toEqual([`pause HOST=mac TOKEN=${w.tokens[1]} PAUSED=1`, `pause HOST=mac TOKEN=${w.tokens[1]} PAUSED=0`])
+    expect(w.tokens[1]).toMatch(/^[A-Za-z0-9-]+$/)
     w.explorer.clearFilter()
-    expect(w.searches[0]?.isStopped).toBe(true)
+    expect(w.searches[1]?.isStopped).toBe(true)
   })
 })

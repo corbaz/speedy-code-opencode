@@ -1,7 +1,7 @@
 import { execFile, spawn, spawnSync } from "node:child_process"
 import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
-import { homedir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { dirname, join, resolve, sep } from "node:path"
 
 import { Plugin } from "@opencode/plugin/tui"
@@ -1182,7 +1182,14 @@ export default Plugin.define({
      * Shows a file in a popup in the middle of the screen, as the original does: `view.ps1` a pasted
      * image in its own proportions, `view_file.ps1` a file the explorer lists. One at a time.
      */
-    const viewFile = (path: string, script: ViewerScript, failure: string, control = "") => {
+    const viewFile = (path: string, script: ViewerScript, failure: string, control = "", onShown?: (isShown: boolean) => void) => {
+      // The popup says `shown` once it is up; ended before that, it never was.
+      let isTold = false
+      const tell = (isShown: boolean) => {
+        if (isTold) return
+        isTold = true
+        onShown?.(isShown)
+      }
       // Another file shown ends a narration sounding in the popup, with its popup.
       if (!control) popup.end()
       closeViewer()
@@ -1206,6 +1213,7 @@ export default Plugin.define({
         child.stdout?.setEncoding("utf8")
         child.stdout?.on("data", (chunk: string) => {
           reader.push(chunk)
+          if (/(^|\n)shown\r?\n/.test(chunk)) tell(true)
           // `media playing`, `media paused`, `media ended`: the popup's own button, or its sound's end. The
           // control file is set to match, so the next pause or play asked from here is a change the popup sees.
           if (!control || popup.control !== control) return
@@ -1215,8 +1223,12 @@ export default Plugin.define({
             popup.set(state)
           }
         })
-        child.on("error", () => toast(failure, "error"))
+        child.on("error", () => {
+          tell(false)
+          toast(failure, "error")
+        })
         child.on("exit", () => {
+          tell(false)
           if (viewer === child) viewer = undefined
           if (control && popup.control === control) popup.end()
         })
@@ -1358,6 +1370,9 @@ export default Plugin.define({
         return () => {}
       }
     }
+    // The file the filter's search running is held by.
+    let findPause = ""
+    let findCount = 0
     const ownExplorerIO: ExplorerIO = {
       list: async (path) =>
         (await readdir(path, { withFileTypes: true })).map((entry) => ({
@@ -1367,7 +1382,7 @@ export default Plugin.define({
         })),
       isDir: async (path) => (await stat(path)).isDirectory(),
       openFolder: openSystemFolder,
-      view: (path) => viewFile(path, "view_file.ps1", "no pude abrir el archivo"),
+      view: (path, onShown) => viewFile(path, "view_file.ps1", "no pude abrir el archivo", "", onShown),
       copyFile: async (native) => {
         const command = fileCopyCommand(process.platform, native)
         return command !== undefined && (await run(command.argv, command.env)).stdout.trim() === "copied"
@@ -1375,8 +1390,8 @@ export default Plugin.define({
       copyText: async (text) => (await writeClipboard(text)) || (context.renderer?.copyToClipboardOSC52?.(text) ?? false),
       // A file's mention never goes through the clipboard: it holds the file 📋 just put there.
       insert: (text, separator) => insertInPrompt(text, separator, false),
-      ask: async (mode, native, kind, into, isOnlyCopy) => {
-        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind, pythonPath(), into, isOnlyCopy)
+      ask: async (mode, native, kind, into) => {
+        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind, pythonPath(), into)
         return command ? dialogAnswer((await run(command.argv, command.env)).stdout) : "cancel"
       },
       paste: async (verb, native, target) => {
@@ -1397,7 +1412,14 @@ export default Plugin.define({
       ),
       toast: (message, isError) => toast(message, isError ? "error" : "info"),
       wait: (ms) => new Promise((done) => setTimeout(done, ms)),
-      find: (ask, onLine, onEnd) => spawnLines(findCommand(ask, PLUGIN_ROOT, pythonPath()), onLine, onEnd),
+      // Each search has a file of its own it is held by: `1` in it, and it waits where it is.
+      find: (ask, onLine, onEnd) => {
+        findPause = join(tmpdir(), `speedy-find-${Date.now().toString(36)}-${process.pid}-${++findCount}.pause`)
+        return spawnLines(findCommand(ask, PLUGIN_ROOT, pythonPath(), findPause), onLine, onEnd)
+      },
+      hold: (isHeld) => {
+        if (findPause) void writeFile(findPause, isHeld ? "1" : "0").catch(() => undefined)
+      },
     }
     // The other machines' disks, reached by ssh: the engine's remote.py asks them.
     const explorerIO = withRemotes(
@@ -1407,8 +1429,12 @@ export default Plugin.define({
           const command = remoteCommand(mode, PLUGIN_ROOT, pythonPath(), { SPEEDY_HOST: host, SPEEDY_PATH: path })
           return remoteAnswer((await run(command.argv, command.env)).stdout)
         },
-        find: (host, pattern, most, onLine, onEnd) =>
-          spawnLines(remoteCommand("find", PLUGIN_ROOT, pythonPath(), { SPEEDY_HOST: host, SPEEDY_PATTERN: pattern, SPEEDY_MOST: String(most) }), onLine, onEnd),
+        run: async (mode, env) => {
+          const command = remoteCommand(mode, PLUGIN_ROOT, pythonPath(), env)
+          return remoteAnswer((await run(command.argv, { ...command.env, PYTHONIOENCODING: "utf-8" })).stdout)
+        },
+        find: (host, pattern, most, token, onLine, onEnd) =>
+          spawnLines(remoteCommand("find", PLUGIN_ROOT, pythonPath(), { SPEEDY_HOST: host, SPEEDY_PATTERN: pattern, SPEEDY_MOST: String(most), SPEEDY_TOKEN: token }), onLine, onEnd),
       },
       process.platform,
     )

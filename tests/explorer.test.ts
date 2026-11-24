@@ -20,7 +20,9 @@ import {
   filterNote,
   filterPattern,
   filterRows,
+  FILTER_ROWS_MOST,
   ruleLabel,
+  pauseLabel,
   rowAction,
   rowLabel,
   treeRows,
@@ -239,6 +241,8 @@ function fakeIO(tree: typeof TREE = TREE) {
   const files = { copied: [] as string[], texts: [] as string[], renamed: [] as string[], trashed: [] as string[], pasted: [] as string[] }
   const dialog = { answer: "cancel", asked: [] as string[] }
   const toasts: string[] = []
+  const held: boolean[] = []
+  let shown: (isShown: boolean) => void = () => {}
   // The prompt as the person left it: what is inserted lands at its end, where the cursor is.
   const prompt = { text: "mirá este" }
   const existing = new Set<string>()
@@ -265,13 +269,18 @@ function fakeIO(tree: typeof TREE = TREE) {
       return /^[CD]:\/$/.test(plain) || tree[plain] !== undefined || isListed
     },
     openFolder: (folder) => void opened.push(folder),
-    view: (path) => void viewed.push(path),
+    // The popup is up when the test says so.
+    view: (path, onShown) => {
+      viewed.push(path)
+      shown = onShown ?? (() => {})
+    },
     copyFile: async (native) => (files.copied.push(native), true),
     copyText: async (text) => (files.texts.push(text), true),
     insert: async (text, separator) => {
       prompt.text += promptInsertion(prompt.text, text, separator)
     },
-    ask: async (mode, native, kind, into, isOnlyCopy) => (dialog.asked.push(`${mode} ${native}${kind === "dir" ? " dir" : ""}${into ? ` into ${into}` : ""}${isOnlyCopy ? " only copy" : ""}`), dialog.answer),
+    ask: async (mode, native, kind, into) => (dialog.asked.push(`${mode} ${native}${kind === "dir" ? " dir" : ""}${into ? ` into ${into}` : ""}`), dialog.answer),
+    hold: (isHeld) => void held.push(isHeld),
     paste: async (verb, native, target) => (files.pasted.push(`${verb} ${native} -> ${target}`), true),
     rename: async (native, name, target) => (files.renamed.push(`${native} -> ${name} (${target})`), true),
     trash: async (native) => (files.trashed.push(native), true),
@@ -280,7 +289,7 @@ function fakeIO(tree: typeof TREE = TREE) {
     // A second passes when the test says so.
     wait: () => new Promise<void>((done) => (release = done)),
   }
-  return { io, opened, viewed, files, dialog, toasts, prompt, existing, searches, second: () => release() }
+  return { io, opened, viewed, files, dialog, toasts, prompt, existing, searches, held, second: () => release(), shown: (isShown: boolean) => shown(isShown) }
 }
 
 describe("the explorer the footer's folder opens", () => {
@@ -580,28 +589,51 @@ describe("each file's tools", () => {
     expect(explorer.state().clip).toBeUndefined()
   })
 
-  test("a file pressed is green for a second; ‖ pausar stops a search that runs and keeps what it found", async () => {
+  test("a file pressed is green until its popup is up, then stays marked until another press", async () => {
     const fake = fakeIO()
     const explorer = createExplorer(fake.io, "win32")
     await explorer.open("C:\\Users\\test\\proyectos")
     explorer.pressFile(NOTAS)
-    expect([fake.viewed, explorer.state().flashed]).toEqual([[NOTAS], `view:${NOTAS}`])
-    fake.second()
-    await Promise.resolve()
-    expect(explorer.state().flashed).toBe("")
+    expect([fake.viewed, explorer.state().flashed, explorer.state().viewed]).toEqual([[NOTAS], `view:${NOTAS}`, undefined])
+    // The popup is up: the green ends, and the file is the one marked.
+    fake.shown(true)
+    expect([explorer.state().flashed, explorer.state().viewed]).toEqual(["", NOTAS.toLowerCase()])
+    // Another press takes the mark off.
+    await explorer.toggleFolder("C:/Windows")
+    expect(explorer.state().viewed).toBeUndefined()
+    // A popup that never came up: the green ends, and nothing is marked.
+    explorer.pressFile(NOTAS)
+    fake.shown(false)
+    expect([explorer.state().flashed, explorer.state().viewed]).toEqual(["", undefined])
+  })
+
+  test("‖ pausar holds a search that runs, and ▶ seguir lets it go on from where it was", async () => {
+    const fake = fakeIO()
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
     // With no search running it does nothing.
     explorer.pauseFilter()
-    expect(explorer.state().filter).toBeUndefined()
+    expect([explorer.state().filter, fake.held]).toEqual([undefined, []])
     explorer.filter("*.pdf")
     fake.searches[0]!.say({ paths: ["C:/a.pdf"], seen: 10 })
-    expect(ruleLabel(explorer.state(), 40)).toContain("buscando…")
+    expect([pauseLabel(explorer.state().filter), ruleLabel(explorer.state(), 40).includes("buscando…")]).toEqual([" ‖ pausar ", true])
     explorer.pauseFilter()
-    expect(fake.searches[0]!.isStopped).toBe(true)
+    // It is held, not ended: the search is still there.
+    expect([fake.held, fake.searches[0]!.isStopped]).toEqual([[true], false])
     expect(explorer.state().filter).toMatchObject({ paths: ["C:/a.pdf"], isBusy: false, isPaused: true })
     expect(ruleLabel(explorer.state(), 40)).toContain(" *.pdf: 1 archivo, en pausa ")
-    // What the stopped search still says is not heard.
-    fake.searches[0]!.say({ paths: ["C:/b.pdf"], seen: 20 })
-    expect(explorer.state().filter?.paths).toEqual(["C:/a.pdf"])
+    expect(pauseLabel(explorer.state().filter)).toBe(" ▸ seguir ")
+    // Held, it only says it is still there: it stays held.
+    fake.searches[0]!.say({ paths: [], seen: 10 })
+    expect(explorer.state().filter).toMatchObject({ isBusy: false, isPaused: true })
+    explorer.pauseFilter()
+    expect(fake.held).toEqual([true, false])
+    expect(explorer.state().filter).toMatchObject({ isBusy: true, isPaused: false })
+    fake.searches[0]!.say({ paths: ["C:/b.pdf"], seen: 20, done: true, cut: false })
+    expect(explorer.state().filter).toMatchObject({ paths: ["C:/a.pdf", "C:/b.pdf"], isBusy: false, isPaused: false })
+    // Ended, there is nothing to hold.
+    explorer.pauseFilter()
+    expect(fake.held).toEqual([true, false])
   })
 
   test("🗑 asks in the dialog: cancel leaves the file; delete sends it to the trash and the folder is read again", async () => {
@@ -671,6 +703,10 @@ describe("the explorer's filter", () => {
     expect(texts(filterRows(state, { ...filter, paths: [] }))).toEqual(["▾ /", "  buscando…"])
     expect(texts(filterRows(state, { ...filter, paths: [], isBusy: false }))).toEqual(["▾ /", "  (ningún archivo coincide)"])
     expect(texts(filterRows(state, { ...filter, paths: ["/a.docx"], isCut: true }))).toEqual(["▾ /", "    a.docx", "  … hay más: son los primeros 1"])
+    // The panel draws every row it is given: past the most it shows, the tree says how many files more were found.
+    const many = filterRows(state, { ...filter, paths: Array.from({ length: 1500 }, (_, index) => `/f${index}.docx`) })
+    expect(many.length).toBe(FILTER_ROWS_MOST + 1)
+    expect(many.at(-1)).toMatchObject({ kind: "note", name: `… y ${(1500 - (FILTER_ROWS_MOST - 1)).toLocaleString("es-AR")} más: afiná el filtro para verlos` })
     expect(filterNote(filter)).toBe(" a*.docx: 3 archivos, buscando… (1.200 vistos) ")
     expect(filterNote({ ...filter, paths: ["/a.docx"], isBusy: false })).toBe(" a*.docx: 1 archivo ")
     expect(ruleLabel(state, 12)).toBe("─".repeat(12))
@@ -691,7 +727,7 @@ describe("the explorer's filter", () => {
     await explorer.open("C:\\Users\\test\\proyectos")
     const whole = texts(treeRows(explorer.state()))
     explorer.filter(' "*.pdf" ')
-    expect(searches[0]!.ask).toEqual({ root: "C:\\", first: "C:\\Users\\test\\proyectos", pattern: "*.pdf", most: 1000 })
+    expect(searches[0]!.ask).toEqual({ root: "C:\\", first: "C:\\Users\\test\\proyectos", pattern: "*.pdf", most: 50000 })
     expect(texts(treeRows(explorer.state()))).toEqual(["▾ C:\\", "  buscando…"])
     searches[0]!.say({ paths: ["C:/Users/test/proyectos/informe.pdf"], seen: 40 })
     searches[0]!.say({ paths: ["C:/Users/Public/Guía.PDF", "C:/apuntes.pdf"], seen: 90, done: true, cut: false })

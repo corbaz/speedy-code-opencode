@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -30,6 +30,33 @@ describe.skipIf(!python)("the search behind the explorer's filter", () => {
       expect(await find(root, "*.pdf")).toEqual(["app/src/e.PDF", "docs/a.pdf"])
     } finally {
       rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test("held by its file it waits, saying nothing found; let go, it goes on and ends, and removes the file", async () => {
+    const root = mkdtempSync(join(tmpdir(), "speedy-find-"))
+    const pause = join(mkdtempSync(join(tmpdir(), "speedy-hold-")), "find.pause")
+    try {
+      writeFileSync(join(root, "a.pdf"), "")
+      writeFileSync(pause, "1")
+      const child = Bun.spawn([python ?? "python", script], {
+        env: { ...process.env, SPEEDY_ROOT: root, SPEEDY_PATTERN: "*.pdf", SPEEDY_FIRST: "", SPEEDY_PAUSE: pause },
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      // Held from its first folder: a second later it has not ended.
+      const ended = await Promise.race([child.exited.then(() => true), new Promise<boolean>((done) => setTimeout(() => done(false), 1000))])
+      expect(ended).toBe(false)
+      writeFileSync(pause, "0")
+      const out = await new Response(child.stdout).text()
+      expect(await child.exited).toBe(0)
+      const lines = out.trim().split("\n").map((line) => JSON.parse(line))
+      expect(lines.at(-1).done).toBe(true)
+      expect(lines.flatMap((line) => line.paths as string[]).map((path) => path.split("/").pop())).toEqual(["a.pdf"])
+      expect(existsSync(pause)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+      rmSync(join(pause, ".."), { recursive: true, force: true })
     }
   })
 })

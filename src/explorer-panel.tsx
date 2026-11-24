@@ -21,7 +21,8 @@ import {
   FILE_TOOLS_WIDTH,
   FILTER_HINT,
   UNFILTER_LABEL,
-  PAUSE_LABEL,
+  pauseLabel,
+  pathKey,
   ruleLabel,
   collapseLabel,
   driveLabel,
@@ -148,9 +149,11 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
     const tint = isFolder ? (row.isHere ? FOLDER_COLOR : DIR_COLOR) : VIEWABLE_COLOR
     const fill = isFolder ? DIR_COLOR : VIEWABLE_COLOR
     // The path the field found keeps the fill until the pointer is on another row: the fill follows the pointer.
-    const isFound = () => row.isFound === true && hovered() === ""
+    // So does the file the viewer was last opened on.
+    const isViewed = () => api.state().viewed !== undefined && api.state().viewed === pathKey(row.path, api.state().caseless)
+    const isFound = () => (row.isFound === true || isViewed()) && hovered() === ""
     const isHovered = () => hovered() === row.path || isFound()
-    // A file just pressed is green for a second, in place of the pointer's yellow: the press was taken.
+    // A file pressed is green until its popup is up, in place of the pointer's yellow: the press was taken.
     const isPressed = () => api.state().flashed === `view:${row.path}`
     return (
       // The pointer's over and out reach the row from its name and its tools alike: an out from one part
@@ -275,9 +278,9 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           }}
         />
         <Btn
-          label={PAUSE_LABEL}
-          color={api.state().filter?.isBusy ? VIEWABLE_COLOR : "#868e96"}
-          bold={api.state().filter?.isBusy === true}
+          label={pauseLabel(api.state().filter)}
+          color={api.state().filter?.isPaused ? FLASH_COLOR : api.state().filter?.isBusy ? VIEWABLE_COLOR : "#868e96"}
+          bold={api.state().filter?.isBusy === true || api.state().filter?.isPaused === true}
           onPress={() => api.pauseFilter()}
         />
       </box>

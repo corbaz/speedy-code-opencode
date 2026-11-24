@@ -47,8 +47,7 @@ export function fileCopyCommand(platform: string, native: string): FileCommand |
  * dialog.py says nothing, and an AppleScript dialog asks. It answers `rename <base64 name>` (the
  * AppleScript dialog: `name <name>`), `delete` or `cancel`. `python` is the engine's Python, for macOS.
  * 📥's (`paste`) asks whether the file is copied or moved into the folder `into`, then whether for sure, and
- * answers `copy`, `move` or `cancel`; `isOnlyCopy`, for a file of another machine, which stays there: it only
- * asks whether for sure.
+ * answers `copy`, `move` or `cancel`.
  */
 export function dialogCommand(
   platform: string,
@@ -58,10 +57,9 @@ export function dialogCommand(
   kind: "file" | "dir" = "file",
   python = "",
   into = "",
-  isOnlyCopy = false,
 ): FileCommand | undefined {
   // The folder a paste goes into, for the dialog to name.
-  const where: Record<string, string> = mode === "paste" ? { SPEEDY_TARGET: into, ...(isOnlyCopy ? { SPEEDY_ONLY: "copy" } : {}) } : {}
+  const where: Record<string, string> = mode === "paste" ? { SPEEDY_TARGET: into } : {}
   if (platform === "win32") {
     return {
       argv: [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", `${root.replace(/\\/g, "/")}/engine/dialog.ps1`],
@@ -72,18 +70,7 @@ export function dialogCommand(
   if (platform !== "darwin") return undefined
   const name = native.split("/").pop() ?? native
   const script =
-    mode === "paste" && isOnlyCopy
-      ? [
-          "on run argv",
-          "try",
-          'display dialog ("¿Copiar " & (item 1 of argv) & " a " & (item 2 of argv) & "?") with title "Pegar" buttons {"No", "Sí, copiar"} default button "No" cancel button "No"',
-          'return "copy"',
-          "on error",
-          'return "cancel"',
-          "end try",
-          "end run",
-        ]
-      : mode === "paste"
+    mode === "paste"
       ? [
           "on run argv",
           "try",
@@ -142,12 +129,13 @@ export function pasteCommand(verb: "copy" | "move", native: string, nativeTarget
 
 /**
  * The explorer's filter: find_files.py searches `root` for the files whose names match `pattern`, `first`
- * before the rest, up to `most`, and says what it finds a JSON line at a time.
+ * before the rest, up to `most`, and says what it finds a JSON line at a time. `pause` is the file it is held
+ * by: while that holds `1` the search waits where it is.
  */
-export function findCommand(ask: { root: string; first: string; pattern: string; most: number }, pluginRoot: string, python: string): FileCommand {
+export function findCommand(ask: { root: string; first: string; pattern: string; most: number }, pluginRoot: string, python: string, pause = ""): FileCommand {
   return {
     argv: [python, `${pluginRoot.replace(/[\\/]+$/, "")}/engine/find_files.py`],
-    env: { SPEEDY_ROOT: ask.root, SPEEDY_FIRST: ask.first, SPEEDY_PATTERN: ask.pattern, SPEEDY_MOST: String(ask.most) },
+    env: { SPEEDY_ROOT: ask.root, SPEEDY_FIRST: ask.first, SPEEDY_PATTERN: ask.pattern, SPEEDY_MOST: String(ask.most), ...(pause ? { SPEEDY_PAUSE: pause } : {}) },
   }
 }
 

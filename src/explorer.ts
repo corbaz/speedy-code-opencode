@@ -65,6 +65,8 @@ export interface ExplorerState {
   readonly cleared?: number
   /** The file or the folder 📋 took last, which 📥 copies or moves into another folder; absent: none, and 📥 is grey. */
   readonly clip?: string
+  /** The key of the file the viewer was last opened on, marked yellow until another press. */
+  readonly viewed?: string
 }
 
 /** The explorer's filter: the files of the disk shown whose names match a pattern, as the search finds them. */
@@ -81,7 +83,7 @@ export interface ExplorerFilter {
   readonly isCut: boolean
   /** The keys of the folders closed by hand in the filter's tree, where every folder is open. */
   readonly closed: readonly string[]
-  /** Whether its search was stopped by hand, by ‖ pausar: the tree keeps the files found so far. */
+  /** Whether its search is held by hand, by ‖ pausar: it waits where it is, and ▶ seguir lets it go on. */
   readonly isPaused?: boolean
 }
 
@@ -92,8 +94,8 @@ export interface ExplorerIO {
   isDir(path: string): Promise<boolean>
   /** Opens a folder in the system's file manager. */
   openFolder(folder: string): void
-  /** Shows a file in the viewer popup. */
-  view(path: string): void
+  /** Shows a file in the viewer popup; `onShown` hears when it is up (`true`), or that it never was (`false`). */
+  view(path: string, onShown?: (isShown: boolean) => void): void
   /** Puts a file on the clipboard as a file, to paste in a folder; whether it went. */
   copyFile(native: string): Promise<boolean>
   /** Puts a text on the clipboard; whether it went. */
@@ -105,9 +107,14 @@ export interface ExplorerIO {
    * asked one name, with no extension, and goes to the trash with what it holds. 📥's (`paste`) asks whether
    * the file is copied or moved into the folder `into`, then whether for sure: `copy`, `move` or `cancel`.
    */
-  ask(mode: "rename" | "delete" | "paste", native: string, kind?: "file" | "dir", into?: string, isOnlyCopy?: boolean): Promise<string>
-  /** Copies or moves a file or a folder to `nativeTarget`, its own name included, writing over nothing; whether it did. */
-  paste(verb: "copy" | "move", native: string, nativeTarget: string): Promise<boolean>
+  ask(mode: "rename" | "delete" | "paste", native: string, kind?: "file" | "dir", into?: string): Promise<string>
+  /**
+   * Copies or moves a file or a folder to `nativeTarget`, its own name included, writing over nothing; whether
+   * it did. `kept`: it was copied, but what was to move could not be removed where it was.
+   */
+  paste(verb: "copy" | "move", native: string, nativeTarget: string): Promise<boolean | "kept">
+  /** Holds the search `find` started last where it is (`true`), or lets it go on from there (`false`). */
+  hold?(isHeld: boolean): void
   /** Renames a file in its folder; whether it did. */
   rename(native: string, name: string, nativeTarget: string): Promise<boolean>
   /** Sends a file to the trash, where it can be got back; whether it went. */
@@ -128,8 +135,6 @@ export interface ExplorerIO {
    * machine's, `mac:/`. Where there is none to ask, there are no such disks.
    */
   remotes?(): Promise<string[]>
-  /** The copy here of a file of another machine, as this machine writes its path; empty when it was not fetched. */
-  fetch?(path: string): Promise<string>
   /** Where another machine's disk opens: its person's folder there, and `/` on one with Windows. Empty: it did not say. */
   home?(host: string): Promise<string>
 }
@@ -138,7 +143,10 @@ export interface ExplorerIO {
 export const EXPLORER_MOST = 500
 
 /** The most files a filter shows: more would bury the tree, and the pattern can be made narrower. */
-export const FILTER_MOST = 1000
+export const FILTER_MOST = 50000
+
+/** The most rows a filter's tree shows: the search goes on past them, and the rule counts every file found. */
+export const FILTER_ROWS_MOST = 300
 
 /** What the filter's field says while empty. */
 export const FILTER_HINT = "filtro: *.pdf, a*.docx"
@@ -146,8 +154,11 @@ export const FILTER_HINT = "filtro: *.pdf, a*.docx"
 /** The filter's ×, beside its field. */
 export const UNFILTER_LABEL = " × limpiar "
 
-/** Beside it: stops a search that still runs. */
-export const PAUSE_LABEL = " ‖ pausar "
+/** Beside it: holds a search that runs; held, it is the one that lets it go on from where it was. */
+export const pauseLabel = (filter: ExplorerFilter | undefined) => (filter?.isPaused ? " ▸ seguir " : " ‖ pausar ")
+
+/** How long a file pressed stays green when its popup never says it is up. */
+export const OPENING_MOST_MS = 20000
 
 export const EMPTY_EXPLORER: ExplorerState = { drives: [], drive: "", open: [], listed: {}, here: "", caseless: false, top: 0 }
 
@@ -272,6 +283,14 @@ export function filterRows(state: ExplorerState, filter: ExplorerFilter): TreeRo
   const note = (name: string) => void rows.push({ path: `${state.drive}#${name}`, name, depth: 1, kind: "note", isOpen: false, isHere: false })
   if (rows.length === 1) note(filter.isBusy ? "buscando…" : "(ningún archivo coincide)")
   else if (filter.isCut) note(`… hay más: son los primeros ${filter.paths.length}`)
+  // The panel draws every row it is given, and thousands of them stall it: the tree shows the first ones,
+  // and says how many files more the search found.
+  if (rows.length > FILTER_ROWS_MOST) {
+    const shown = rows.slice(0, FILTER_ROWS_MOST)
+    const left = filter.paths.length - shown.filter((row) => row.kind === "file").length
+    shown.push({ path: `${state.drive}#más`, name: `… y ${left.toLocaleString("es-AR")} más: afiná el filtro para verlos`, depth: 1, kind: "note", isOpen: false, isHere: false })
+    return shown
+  }
   return rows
 }
 
@@ -578,7 +597,7 @@ export interface Explorer {
   filter(text: string): void
   /** The filter's ×: the search ends, the field empties and the whole tree is back. */
   clearFilter(): void
-  /** ‖ pausar: a search that still runs stops where it is, and the tree keeps the files found so far. */
+  /** ‖ pausar: a search that runs waits where it is, the tree keeping the files found; pressed again, it goes on. */
   pauseFilter(): void
 }
 
@@ -618,13 +637,14 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
         if (!said || isOver) return
         set((now) =>
           now.filter
-            ? { ...now, filter: { ...now.filter, paths: said.paths.length > 0 ? [...now.filter.paths, ...said.paths] : now.filter.paths, seen: Math.max(said.seen, now.filter.seen), isBusy: !said.isDone, isCut: said.isCut } }
+            ? // A search held only says it is still there: it stays held until let go, or until it ends.
+              { ...now, filter: { ...now.filter, paths: said.paths.length > 0 ? [...now.filter.paths, ...said.paths] : now.filter.paths, seen: Math.max(said.seen, now.filter.seen), isBusy: !said.isDone && !now.filter.isPaused, isPaused: !said.isDone && now.filter.isPaused === true, isCut: said.isCut } }
             : now,
         )
       },
       () => {
         if (isOver) return
-        set((now) => (now.filter?.isBusy ? { ...now, filter: { ...now.filter, isBusy: false } } : now))
+        set((now) => (now.filter?.isBusy || now.filter?.isPaused ? { ...now, filter: { ...now.filter, isBusy: false, isPaused: false } } : now))
       },
     )
     stopFinding = () => {
@@ -638,7 +658,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
   }
   // Any press in the explorer takes the mark off the path the field found: the yellow fill follows the pointer again.
   const forget = () => {
-    if (state.found !== undefined) set((now) => ({ ...now, found: undefined }))
+    if (state.found !== undefined || state.viewed !== undefined) set((now) => ({ ...now, found: undefined, viewed: undefined }))
   }
   // A folder of the tree read again, after a file in it was renamed or sent to the trash.
   const reread = async (path: string) => {
@@ -745,18 +765,30 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     pressFile(path) {
       forget()
       if (!isViewable(nameOf(path))) return
-      // The name is green for a second, in place of the pointer's yellow: the press was taken.
-      flash(`view:${path}`)
-      io.view(path)
+      // The name is green from the press until the popup is up, however long that takes; then the file stays
+      // marked yellow, as the one being looked at, until another press.
+      const key = `view:${path}`
+      set((now) => ({ ...now, flashed: key }))
+      const over = (isShown: boolean) => {
+        if (state.flashed !== key) return
+        set((now) => ({ ...now, flashed: "", viewed: isShown ? pathKey(path, now.caseless) : now.viewed }))
+      }
+      void io.wait(OPENING_MOST_MS).then(() => over(false))
+      io.view(path, over)
     },
     async copyFile(path) {
       forget()
       if (notOnDisk(path)) return
       flash(`copy:${path}`)
       const native = nativeOf(path, platform)
+      // A folder of another machine is not brought here to be taken: 📥 brings it where it is pasted.
+      const remote = remoteOf(path)
+      if (remote && (await io.isDir(path).catch(() => false))) {
+        set((now) => ({ ...now, clip: slashed(path) }))
+        return io.toast(`la carpeta ${nameOf(path) || remote.host} de ${remote.host} está lista para pegar con 📥.`)
+      }
       const isCopied = await io.copyFile(native)
       // A file of another machine: its copy here went to the clipboard, and its path there goes into the prompt.
-      const remote = remoteOf(path)
       // 📥 pastes what was taken last: a file or a folder of this machine, or a file of another one.
       if (isCopied) set((now) => ({ ...now, clip: slashed(path) }))
       if (remote) {
@@ -806,39 +838,40 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       forget()
       const clip = state.clip
       if (!clip) return io.toast("primero copiá un archivo o una carpeta con 📋.", true)
-      const remote = remoteOf(path)
-      if (remote) return io.toast(`pegar no está disponible en ${remote.host}: sus archivos se leen por ssh.`, true)
       const name = nameOf(clip)
       if (!(await io.exists(nativeOf(clip, platform)))) {
         set((now) => ({ ...now, clip: undefined }))
         return io.toast(`${name} ya no está donde se copió.`, true)
       }
       const isFolder = await io.isDir(clip).catch(() => false)
-      // A file taken on another machine is fetched and its copy pasted: copied, never moved, and no folder.
-      const from = remoteOf(clip)
-      if (from && isFolder) return io.toast(`de ${from.host} se pegan archivos, no carpetas.`, true)
       const folder = (await io.isDir(path).catch(() => false)) ? slashed(path) : folderOf(slashed(path))
+      // Across machines it goes by remote.py: from another machine here, from here to it, or within it.
+      const from = remoteOf(clip)
+      const to = remoteOf(folder)
+      if (from && to && from.host !== to.host) return io.toast(`de ${from.host} a ${to.host} no se pega: traelo primero a esta máquina.`, true)
       const target = joinPath(folder, name)
       const key = (one: string) => pathKey(one, state.caseless)
       if (key(folderOf(clip)) === key(folder)) return io.toast(`${name} ya está en esa carpeta.`, true)
       if (isFolder && isUnder(key(folder), key(clip))) return io.toast(`${name} no puede ir dentro de sí misma.`, true)
       if (await io.exists(nativeOf(target, platform))) return io.toast(`ya hay un ${name} en esa carpeta.`, true)
-      const verb = await io.ask("paste", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform), from !== undefined)
+      const verb = await io.ask("paste", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform))
       if (verb !== "copy" && verb !== "move") return
-      const isMove = verb === "move" && !from
-      const source = from ? await (io.fetch?.(clip).catch(() => "") ?? "") : nativeOf(clip, platform)
-      if (!source) return io.toast(`no pude traer ${name} de ${from?.host ?? ""}.`, true)
-      if (!(await io.paste(isMove ? "move" : "copy", source, nativeOf(target, platform)))) {
-        return io.toast(`no pude ${isMove ? "mover" : "copiar"} ${name}.`, true)
-      }
-      io.toast(`${name} se ${isMove ? "movió" : "copió"} a ${driveLabel(folder)}.`)
+      const isMove = verb === "move"
+      // Across machines it takes a while: it says it started.
+      if (from || to) io.toast(`${isMove ? "moviendo" : "copiando"} ${name}…`)
+      const said = await io.paste(verb, nativeOf(clip, platform), nativeOf(target, platform))
+      if (!said) return io.toast(`no pude ${isMove ? "mover" : "copiar"} ${name}.`, true)
+      // Copied, but what was to move could not be removed where it was.
+      const isMoved = isMove && said !== "kept"
+      if (said === "kept") io.toast(`${name} se copió a ${driveLabel(folder)}, pero no pude quitarlo de donde estaba.`, true)
+      else io.toast(`${name} se ${isMove ? "movió" : "copió"} a ${driveLabel(folder)}.`)
       // The folder it went into is read again, and opened to show it; moved, the one it left too.
       set((now) => {
         const next = { ...now, open: now.open.includes(key(folder)) ? now.open : [...now.open, key(folder)] }
-        return isMove ? filterMoved({ ...next, clip: undefined }, clip, target) : next
+        return isMoved ? filterMoved({ ...next, clip: undefined }, clip, target) : next
       })
       await reread(folder)
-      if (isMove) await reread(folderOf(clip))
+      if (isMoved) await reread(folderOf(clip))
     },
     collapse() {
       flash("collapse:")
@@ -898,9 +931,11 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     clearFilter,
     pauseFilter() {
-      if (!state.filter?.isBusy) return
-      endFinding()
-      set((now) => (now.filter ? { ...now, filter: { ...now.filter, isBusy: false, isPaused: true } } : now))
+      const filter = state.filter
+      if (!filter || !(filter.isBusy || filter.isPaused)) return
+      const isHeld = !filter.isPaused
+      set((now) => (now.filter ? { ...now, filter: { ...now.filter, isBusy: !isHeld, isPaused: isHeld } } : now))
+      io.hold?.(isHeld)
     },
   }
   return explorer

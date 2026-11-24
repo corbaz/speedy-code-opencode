@@ -11,7 +11,7 @@ import { remoteOf, type ExplorerIO, type FsEntry } from "./explorer"
 import type { FileCommand } from "./file-tools"
 
 /** What remote.py is asked: the machines there are, a folder's entries, what a path is, a file's copy here, a search. */
-export type RemoteMode = "hosts" | "list" | "stat" | "fetch" | "find" | "home"
+export type RemoteMode = "hosts" | "list" | "stat" | "fetch" | "find" | "home" | "pause" | "pull" | "push" | "paste"
 
 /** remote.py run for one asking; the machine, the path and the pattern go in by the environment. */
 export function remoteCommand(mode: RemoteMode, pluginRoot: string, python: string, env: Record<string, string> = {}): FileCommand {
@@ -34,7 +34,13 @@ const field = (said: unknown, name: string): unknown =>
 /** What runs remote.py: an asking answered once, and a search that says lines until it ends or is stopped. */
 export interface RemoteRunner {
   ask(mode: "hosts" | "list" | "stat" | "fetch" | "home", host: string, path: string): Promise<unknown>
-  find(host: string, pattern: string, most: number, onLine: (line: string) => void, onEnd: () => void): () => void
+  /**
+   * remote.py run for what goes by the environment alone: a search held or let go (`pause`), a file or a folder
+   * from the machine here (`pull`), from here to it (`push`), or within it (`paste`).
+   */
+  run(mode: "pause" | "pull" | "push" | "paste", env: Record<string, string>): Promise<unknown>
+  /** A search of the machine's disk; `token` is what it is held by. */
+  find(host: string, pattern: string, most: number, token: string, onLine: (line: string) => void, onEnd: () => void): () => void
 }
 
 /**
@@ -50,15 +56,32 @@ export function withRemotes(io: ExplorerIO, runner: RemoteRunner, platform: stri
     return typeof file === "string" && file ? (platform === "win32" ? file.replace(/\//g, "\\") : file) : ""
   }
   const kindOf = async (host: string, path: string) => field(await runner.ask("stat", host, path).catch(() => undefined), "kind")
+  // The search running on another machine, while one does: the machine, and the token it is held by.
+  let searching: { host: string; token: string } | undefined
+  let searches = 0
   return {
     ...io,
     async remotes() {
       const said = await runner.ask("hosts", "", "").catch(() => undefined)
       return Array.isArray(said) ? said.filter((one): one is string => typeof one === "string" && /^[A-Za-z][\w.-]+$/.test(one)) : []
     },
-    async fetch(path) {
-      const remote = remoteOf(path)
-      return remote ? fetched(remote.host, remote.path) : path
+    async paste(verb, native, nativeTarget) {
+      const from = remoteOf(native)
+      const to = remoteOf(nativeTarget)
+      if (!from && !to) return io.paste(verb, native, nativeTarget)
+      if (from && to && from.host !== to.host) return false
+      const answer = await (from && to
+        ? runner.run("paste", { SPEEDY_HOST: from.host, SPEEDY_PATH: from.path, SPEEDY_TARGET: to.path, SPEEDY_VERB: verb })
+        : from
+          ? runner.run("pull", { SPEEDY_HOST: from.host, SPEEDY_PATH: from.path, SPEEDY_TARGET: nativeTarget, SPEEDY_VERB: verb })
+          : runner.run("push", { SPEEDY_HOST: to?.host ?? "", SPEEDY_FILE: native, SPEEDY_PATH: to?.path ?? "", SPEEDY_VERB: verb })
+      ).catch(() => undefined)
+      const said = field(answer, "said")
+      return said === "kept" ? "kept" : said === "done"
+    },
+    hold(isHeld) {
+      if (!searching) return io.hold?.(isHeld)
+      void runner.run("pause", { SPEEDY_HOST: searching.host, SPEEDY_TOKEN: searching.token, SPEEDY_PAUSED: isHeld ? "1" : "0" }).catch(() => undefined)
     },
     async home(host) {
       const home = field(await runner.ask("home", host, "/").catch(() => undefined), "home")
@@ -81,12 +104,13 @@ export function withRemotes(io: ExplorerIO, runner: RemoteRunner, platform: stri
       const kind = await kindOf(remote.host, remote.path)
       return kind === "dir" || kind === "file"
     },
-    view(path) {
+    view(path, onShown) {
       const remote = remoteOf(path)
-      if (!remote) return io.view(path)
+      if (!remote) return io.view(path, onShown)
       void fetched(remote.host, remote.path).then((file) => {
-        if (file) io.view(file)
-        else io.toast(`no pude traer ${nameOf(remote.path)} de ${remote.host}.`, true)
+        if (file) return io.view(file, onShown)
+        onShown?.(false)
+        io.toast(`no pude traer ${nameOf(remote.path)} de ${remote.host}.`, true)
       })
     },
     async copyFile(native) {
@@ -97,7 +121,8 @@ export function withRemotes(io: ExplorerIO, runner: RemoteRunner, platform: stri
     },
     find(ask, onLine, onEnd) {
       const remote = remoteOf(ask.root)
-      return remote ? runner.find(remote.host, ask.pattern, ask.most, onLine, onEnd) : io.find(ask, onLine, onEnd)
+      searching = remote ? { host: remote.host, token: `${Date.now().toString(36)}-${++searches}` } : undefined
+      return remote && searching ? runner.find(remote.host, ask.pattern, ask.most, searching.token, onLine, onEnd) : io.find(ask, onLine, onEnd)
     },
   }
 }
