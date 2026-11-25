@@ -47,6 +47,17 @@ describe.skipIf(!python)("another machine over a network that falters", () => {
     expect(await withSsh([[255, 8]], "print(json.dumps([remote.find_way('windows'), clock['calls']]))")).toEqual([null, 1])
   })
 
+  test("the folders that are another machine's disk are told from what mount lists, by their file system", async () => {
+    const listing = [
+      "/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)",
+      "//ana@192.168.1.50/pc-d on /Volumes/pc-d (smbfs, nodev, nosuid, mounted by ana)",
+      "/dev/disk4s1 on /Volumes/USB (exfat, local, nodev, nosuid, noowners)",
+      "//ana@nas/Mis fotos on /Volumes/Mis fotos (afpfs, nodev, nosuid)",
+      "map auto_home on /System/Volumes/Data/home (autofs, automounted, nobrowse)",
+    ].join("\n")
+    expect(await withSsh([[0, 0]], `print(json.dumps(remote.network_mounts(${JSON.stringify(listing)})))`)).toEqual(["/Volumes/pc-d", "/Volumes/Mis fotos"])
+  })
+
   test("how a machine is reached is found on the second try when the first was cut", async () => {
     expect(await withSsh([[255, 0.2], [0, 0.4]], "print(json.dumps([remote.find_way('windows'), clock['calls']]))")).toEqual([["ssh", "python3"], 2])
   })

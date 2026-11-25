@@ -426,6 +426,34 @@ describe("the explorer the footer's folder opens", () => {
     expect(treeRows(explorer.state()).map(rowLabel)).toEqual(["▾ /", "  ▾ Users", "    ▾ me ●", "      (vacía)"])
   })
 
+  test("on a Mac another machine's disk mounted over the network is left out where the machine is reached by ssh", async () => {
+    const mac = (remotes: string[]): ExplorerIO => ({
+      list: async (path) => {
+        if (path === "/Volumes") {
+          return [
+            { name: "USB", kind: "dir", isLink: false },
+            { name: "pc-d", kind: "dir", isLink: false },
+          ]
+        }
+        return []
+      },
+      isDir: async () => false,
+      openFolder: () => {},
+      view: () => {},
+      remotes: async () => remotes,
+      mounts: async () => ["/Volumes/pc-d"],
+      ...noTools,
+    })
+    const reached = createExplorer(mac(["windows"]), "darwin")
+    await reached.open("/Users/me")
+    // The disk is shown once, under its machine; a disk of the Mac's own stays.
+    expect(reached.state().drives).toEqual(["/", "/Volumes/USB", "windows:/"])
+    // With no machine by ssh, the mounted folder is the only way to that disk: it stays.
+    const alone = createExplorer(mac([]), "darwin")
+    await alone.open("/Users/me")
+    expect(alone.state().drives).toEqual(["/", "/Volumes/USB", "/Volumes/pc-d"])
+  })
+
   test("every change reaches the listener", async () => {
     const { io } = fakeIO()
     const seen: string[] = []

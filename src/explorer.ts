@@ -135,6 +135,8 @@ export interface ExplorerIO {
    * machine's, `mac:/`. Where there is none to ask, there are no such disks.
    */
   remotes?(): Promise<string[]>
+  /** This machine's folders that are another machine's disk mounted over the network, as remote.py names them. */
+  mounts?(): Promise<string[]>
   /** Where another machine's disk opens: its person's folder there, and `/` on one with Windows. Empty: it did not say. */
   home?(host: string): Promise<string>
 }
@@ -529,10 +531,22 @@ async function readFolder(io: ExplorerIO, path: string): Promise<ExplorerListing
   }
 }
 
-/** The disks there are: this machine's, then those of the other machines reached by ssh. */
+/** A Mac's disks without those that are another machine's disk mounted over the network. */
+export function withoutMounted(own: readonly string[], mounted: readonly string[]): string[] {
+  const left = new Set(mounted.map((one) => one.replace(/\/+$/, "")))
+  return own.filter((drive) => drive === "/" || !left.has(drive.replace(/\/+$/, "")))
+}
+
+/**
+ * The disks there are: this machine's, then those of the other machines reached by ssh. Where there is one of
+ * those, a Mac's folders that are another machine's disk mounted over the network are left out: that disk is
+ * shown once, under its machine.
+ */
 async function readDrives(io: ExplorerIO, platform: string): Promise<string[]> {
   const [own, remote] = await Promise.all([ownDrives(io, platform), io.remotes?.().catch(() => [] as string[]) ?? []])
-  return [...own, ...remote.map((host) => `${host}:/`)]
+  const disks = remote.map((host) => `${host}:/`)
+  if (platform === "win32" || disks.length === 0) return [...own, ...disks]
+  return [...withoutMounted(own, (await io.mounts?.().catch(() => [] as string[])) ?? []), ...disks]
 }
 
 /** This machine's disks: each lettered root that answers on Windows; `/` and each volume mounted elsewhere. */
