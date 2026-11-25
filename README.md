@@ -145,6 +145,7 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 - Paste, clear, send, new conversation, compact, reload, exit, the model and
   the effort run the host's own commands.
 - Preferences survive a restart in one durable store entry.
+- The popups (the viewer, the player and its Resumen, the image, the dialogs of ✏ 🗑 📥 📁) belong to the terminal they were opened from: they stand above its window and no other, open on its screen, and another program in front covers them. On Windows they are owned by the terminal's window, so they go and come back with it when it is minimized and restored; on macOS they hide while another program is in front and come back with the terminal. Where no terminal is found (over ssh, under tmux's server) they stay above every window, as before.
 
 ## Known limitations
 
