@@ -149,6 +149,7 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
 - Translating a reply and telling a long one short need `GROQ_API_KEY`;
   without it the reply is read as written.
 - The 5-hour and weekly windows are the OpenCode Go plan's; another plan shows none.
+- Another machine's disk in the explorer is reached by ssh (a `Host mac` or `Host windows` in `~/.ssh/config`, with a key that asks no password, and a Python there; `remote.py`). A connection cut at once, as on a network that falters, is tried again twice before the explorer says there is none. On a Mac, a folder that is that machine's disk mounted over the network (`/Volumes/share`) is left out of the disks: the disk shows once, under its machine.
 
 ## Install
 

@@ -10,18 +10,16 @@ into the global plugin directory.
 | --- | --- |
 | This repository (Windows) | `C:\Users\Sancho\.config\opencode\plugins\speedy-code` |
 | This repository (macOS clone) | `~/.config/opencode/plugins/speedy-code` |
-| Original Claude Code plugin (READ ONLY) | `C:\Users\Sancho\.claude\local-mods\plugins\speedy-code` |
+| Original Claude Code plugin | `C:\Users\Sancho\.claude\local-mods\plugins\speedy-code` |
 
-**Never modify anything under `C:\Users\Sancho\.claude\local-mods`.** It is the
-reference implementation, kept byte-identical on purpose. The engine under
-`engine/` is a faithful copy of that project's MIT-licensed scripts; the host
-code under `src/` is the rewrite.
+The engine under `engine/` is a copy of that project's MIT-licensed scripts
+(`hooks/` there): a script changed in one is copied to the other, and the two
+stay byte-identical (`cmp`), as does `setup/extras.py`. The host code under
+`src/` is the rewrite.
 
 ## Git
 
-- Branch: `feature/opencode-port`.
-- The repository has **no remote yet**. Creating one, pushing, opening a pull
-  request and merging are the maintainer's decisions; do not do them unasked.
+- Branch: `main`, pushed to `origin` (github.com/corbaz/speedy-code-opencode).
 - Commit in reviewable work units (about 400 authored changed lines) with
   Conventional Commit messages. Tests and docs travel with the behavior.
 
@@ -158,8 +156,6 @@ anything outside this list without checking it first.
 2. **Narration voice report.** The maintainer heard a female English voice
    once while `Victor · ES` was chosen. It did not reproduce; every narration
    now appends its voice to `~/.config/opencode/speedy-code/narrations.log`.
-3. **Remote.** No remote URL yet, so the port has never been cloned or pulled
-   anywhere.
 
 ## Verifying in the real TUI
 
