@@ -160,6 +160,8 @@ Office is not needed on Windows: with none, Office's old files are read by the r
 
 The setup also looks for what the mod uses beside its own Python (`setup/extras.py`), and ⚙️ → Instalación shows each: ffmpeg, which on Windows it downloads when there is none (gyan.dev's release build, about 120 MB, into the mod's own folder; on macOS it only says how to get it); git and bun; the other machines the explorer reaches by ssh, each tried; and on macOS the Accessibility permission, whose settings' pane it opens when the terminal does not have it.
 
+⚙️ → Instalación has two buttons more: **Instalar sin dictado** installs all but the dictation's model (750 MB less; `SPEEDY_NO_DICTATION`), and **Desinstalar**, pressed twice, takes away what the setup put in the mod's own folder (the Python environment, the model and its own ffmpeg; `setup/uninstall.ps1`, `uninstall.sh`) and keeps the audios, images, history and settings, the fonts and uv.
+
 ### Windows
 
 ```powershell

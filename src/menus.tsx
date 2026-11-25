@@ -105,7 +105,7 @@ export const SETUP_STEPS: ReadonlyArray<readonly [string, string]> = [
   ["git", "git (la rama y la actualización)"],
   ["bun", "bun (arma el plugin)"],
   ["remotes", "Otras máquinas por ssh (opcional)"],
-  ["access", "Accesibilidad (macOS: pegar imágenes y ⏎)"],
+  ["access", "Accesibilidad (macOS: pegar imágenes y enviar)"],
   ["groq", "Clave de Groq (la pluma, opcional)"],
 ]
 
@@ -175,7 +175,8 @@ export interface MenuApi {
   readonly editSocial: (key: string) => void
   readonly addAccount: (id: string) => void
   readonly removeAccount: (key: string) => void
-  readonly runSetup: () => void
+  /** The setup run: whole, without the dictation's model (`lean`), or what it installed taken away (`remove`). */
+  readonly runSetup: (what?: "all" | "lean" | "remove") => void
   readonly adjustLevel: (key: LevelKey, delta: number) => void
   readonly movePart: (key: BarPart, delta: -1 | 1) => void
   readonly resetBar: () => void
@@ -723,6 +724,10 @@ function SettingsMenu(props: { api: MenuApi }) {
           bg={api.state.installing ? "#ffd43b" : "#51cf66"}
           onPress={() => api.runSetup()}
         />
+        <Label text=" " />
+        <Btn label=" Instalar sin dictado (750 MB menos) " bold color="black" bg="#74c0fc" onPress={() => api.runSetup("lean")} />
+        <Label text=" " />
+        <Btn label=" Desinstalar " bold color="black" bg="#ff6b6b" onPress={() => api.runSetup("remove")} />
       </box>
       <For each={api.state.setupLog}>{(line) => <Label text={`   ${line}`} dim />}</For>
     </box>

@@ -895,13 +895,32 @@ export default Plugin.define({
       )
     }
 
-    /** Runs the installer, showing each step as it reports it. */
-    const runSetup = () => {
+    /** When Desinstalar was pressed a first time: a second press within ten seconds is what removes. */
+    let removeAskedAt = 0
+
+    /**
+     * Runs the setup, showing each step as it reports it. `all` is the installer; `lean` the same without the
+     * dictation's model (750 MB less); `remove` is the uninstaller, which takes away what the setup put in the
+     * plugin's own folder: it is asked twice.
+     */
+    const runSetup = (what: "all" | "lean" | "remove" = "all") => {
       if (menus.installing) return
+      if (what === "remove" && Date.now() - removeAskedAt > 10000) {
+        removeAskedAt = Date.now()
+        setMenus((draft) => {
+          draft.setupLog = [
+            "¿Seguro? Se borran el entorno de Python, el modelo de dictado y el ffmpeg propio (vuelven con Instalar).",
+            "Tus audios, imágenes, historial y ajustes se quedan. Pulsá Desinstalar otra vez en 10 s para borrar.",
+          ]
+        })
+        return
+      }
+      removeAskedAt = 0
       setMenus((draft) => {
         draft.installing = true
         draft.setupLog = []
       })
+      const script = what === "remove" ? "uninstall" : "install"
       const argv =
         process.platform === "win32"
           ? [
@@ -911,9 +930,9 @@ export default Plugin.define({
               "-ExecutionPolicy",
               "Bypass",
               "-File",
-              join(PLUGIN_ROOT, "setup", "install.ps1"),
+              join(PLUGIN_ROOT, "setup", `${script}.ps1`),
             ]
-          : ["/bin/bash", join(PLUGIN_ROOT, "setup", "install.sh")]
+          : ["/bin/bash", join(PLUGIN_ROOT, "setup", `${script}.sh`)]
       const finish = () => {
         setMenus((draft) => {
           draft.installing = false
@@ -923,7 +942,8 @@ export default Plugin.define({
         void checkSetup()
       }
       try {
-        const child = spawn(argv[0] as string, argv.slice(1), { stdio: ["ignore", "pipe", "ignore"], windowsHide: true })
+        const env = what === "lean" ? { ...process.env, SPEEDY_NO_DICTATION: "1" } : process.env
+        const child = spawn(argv[0] as string, argv.slice(1), { stdio: ["ignore", "pipe", "ignore"], windowsHide: true, env })
         let pending = ""
         child.stdout?.setEncoding("utf8")
         child.stdout?.on("data", (chunk: string) => {
