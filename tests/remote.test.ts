@@ -237,13 +237,30 @@ describe("another machine's disk, reached by ssh", () => {
     expect(w.viewed.at(-1)).toBe("C:/notas.txt")
   })
 
-  test("✏ and 🗑 are not for its files: no dialog asks", async () => {
+  test("✏ renames its files there and 🗑 sends them to its Recycle Bin or Trash, by remote.py, once the dialog asked", async () => {
     const w = world()
     await w.explorer.open("C:/")
+    await w.explorer.pickDrive("mac:/")
+    w.answer.says = `rename ${btoa("notas viejas.md")}`
+    w.across.says = "renamed"
     await w.explorer.rename("mac:/nota.md")
+    expect(w.dialogs.at(-1)).toBe("rename")
+    expect(w.ran.at(-1)).toBe("rename HOST=mac PATH=/nota.md NAME=notas viejas.md")
+    expect(w.toasts.at(-1)).toBe("nota.md ahora se llama notas viejas.md.")
+    // A name already there is refused, and nothing is asked of the machine.
+    const ran = w.ran.length
+    w.answer.says = `rename ${btoa("Users")}`
+    await w.explorer.rename("mac:/nota.md")
+    expect(w.ran.length).toBe(ran)
+    expect(w.toasts.at(-1)).toBe("ya hay un archivo Users en esa carpeta.")
+    w.answer.says = "delete"
+    w.across.says = "trashed"
     await w.explorer.trash("mac:/nota.md")
-    expect(w.dialogs).toEqual([])
-    expect(w.toasts.at(-1)).toBe("renombrar y borrar no están disponibles en mac: sus archivos se leen por ssh.")
+    expect(w.ran.at(-1)).toBe("trash HOST=mac PATH=/nota.md")
+    expect(w.toasts.at(-1)).toBe("nota.md fue a la papelera.")
+    w.across.says = "error"
+    await w.explorer.trash("mac:/nota.md")
+    expect(w.toasts.at(-1)).toBe("no pude mandar nota.md a la papelera.")
   })
 
   test("a path of it pasted in the field opens the tree down to it, and the filter searches that machine", async () => {

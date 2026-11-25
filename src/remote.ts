@@ -11,7 +11,7 @@ import { remoteOf, type ExplorerIO, type FsEntry } from "./explorer"
 import type { FileCommand } from "./file-tools"
 
 /** What remote.py is asked: the machines there are, a folder's entries, what a path is, a file's copy here, a search. */
-export type RemoteMode = "hosts" | "mounts" | "list" | "stat" | "fetch" | "find" | "home" | "pause" | "pull" | "push" | "paste" | "mkdir"
+export type RemoteMode = "hosts" | "mounts" | "list" | "stat" | "fetch" | "find" | "home" | "pause" | "pull" | "push" | "paste" | "mkdir" | "rename" | "trash"
 
 /** remote.py run for one asking; the machine, the path and the pattern go in by the environment. */
 export function remoteCommand(mode: RemoteMode, pluginRoot: string, python: string, env: Record<string, string> = {}): FileCommand {
@@ -36,9 +36,10 @@ export interface RemoteRunner {
   ask(mode: "hosts" | "mounts" | "list" | "stat" | "fetch" | "home", host: string, path: string): Promise<unknown>
   /**
    * remote.py run for what goes by the environment alone: a search held or let go (`pause`), a file or a folder
-   * from the machine here (`pull`), from here to it (`push`), or within it (`paste`), a folder made there (`mkdir`).
+   * from the machine here (`pull`), from here to it (`push`), or within it (`paste`), a folder made there (`mkdir`),
+   * a file or a folder renamed there (`rename`) or sent to its Recycle Bin or Trash (`trash`).
    */
-  run(mode: "pause" | "pull" | "push" | "paste" | "mkdir", env: Record<string, string>): Promise<unknown>
+  run(mode: "pause" | "pull" | "push" | "paste" | "mkdir" | "rename" | "trash", env: Record<string, string>): Promise<unknown>
   /** A search of the machine's disk; `token` is what it is held by. */
   find(host: string, pattern: string, most: number, token: string, onLine: (line: string) => void, onEnd: () => void): () => void
 }
@@ -89,6 +90,20 @@ export function withRemotes(io: ExplorerIO, runner: RemoteRunner, platform: stri
       // 📁 there: remote.py makes it by ssh, writing over nothing.
       const answer = await runner.run("mkdir", { SPEEDY_HOST: remote.host, SPEEDY_PATH: remote.path }).catch(() => undefined)
       return field(answer, "said") === "made"
+    },
+    async rename(native, name, nativeTarget) {
+      const remote = remoteOf(native)
+      if (!remote) return io.rename(native, name, nativeTarget)
+      // ✏ there: remote.py renames it by ssh, in its folder, writing over nothing.
+      const answer = await runner.run("rename", { SPEEDY_HOST: remote.host, SPEEDY_PATH: remote.path, SPEEDY_NAME: name }).catch(() => undefined)
+      return field(answer, "said") === "renamed"
+    },
+    async trash(native) {
+      const remote = remoteOf(native)
+      if (!remote) return io.trash(native)
+      // 🗑 there: to that machine's Recycle Bin or Trash, where it can be got back.
+      const answer = await runner.run("trash", { SPEEDY_HOST: remote.host, SPEEDY_PATH: remote.path }).catch(() => undefined)
+      return field(answer, "said") === "trashed"
     },
     hold(isHeld) {
       if (!searching) return io.hold?.(isHeld)

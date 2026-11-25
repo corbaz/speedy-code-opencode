@@ -720,12 +720,6 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     const listed = await readFolder(io, path)
     set((now) => ({ ...now, listed: { ...now.listed, [key]: listed } }))
   }
-  // ✏ and 🗑 are not for another machine's files: a toast says so, and nothing is done.
-  const notOnRemote = (path: string) => {
-    const remote = remoteOf(path)
-    if (remote) io.toast(`renombrar y borrar no están disponibles en ${remote.host}: sus archivos se leen por ssh.`, true)
-    return remote !== undefined
-  }
   const renameTo = async (path: string, wanted: string) => {
     const name = wanted.trim()
     const old = nameOf(path)
@@ -871,7 +865,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async rename(path) {
       forget()
-      if (notOnDisk(path) || notOnRemote(path)) return
+      if (notOnDisk(path)) return
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
       const name = newNameOf(await io.ask("rename", nativeOf(path, platform), kind))
       if (name) await renameTo(path, name)
@@ -895,7 +889,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async trash(path) {
       forget()
-      if (notOnDisk(path) || notOnRemote(path)) return
+      if (notOnDisk(path)) return
       const native = nativeOf(path, platform)
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
       if ((await io.ask("delete", native, kind)) !== "delete") return
