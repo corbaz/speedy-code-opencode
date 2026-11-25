@@ -331,6 +331,30 @@ describe("the explorer the footer's folder opens", () => {
     expect(labels().slice(-3)).toEqual(["  ▾ Windows", "    ▸ System32", "    pagefile.sys"])
     await explorer.toggleFolder("C:/Windows")
     expect(labels().slice(-2)).toEqual(["  ▸ Windows", "    pagefile.sys"])
+    // A folder closed and opened again is read afresh, and so is every folder still open under it: what came
+    // and went on the disk meanwhile shows.
+    await explorer.toggleFolder("C:/Users")
+    TREE["C:/Users"]?.push({ name: "Invitado", kind: "dir" })
+    TREE["C:/Users/test/proyectos"]?.push({ name: "nuevo.txt", kind: "file" })
+    try {
+      await explorer.toggleFolder("C:/Users")
+      expect(labels().slice(2, 11)).toEqual([
+        "  ▾ Users",
+        "    ▸ Invitado",
+        "    ▸ Public",
+        "    ▾ test",
+        "      ▾ proyectos ●",
+        "        ▸ facturas",
+        "          app.exe",
+        "          notas.txt",
+        "          nuevo.txt",
+      ])
+    } finally {
+      TREE["C:/Users"]?.pop()
+      TREE["C:/Users/test/proyectos"]?.pop()
+    }
+    await explorer.toggleFolder("C:/Users")
+    await explorer.toggleFolder("C:/Users")
     // One that cannot be read says so.
     await explorer.toggleFolder("C:/Users/test/proyectos/facturas")
     expect(labels()).toContain("          (sin acceso)")

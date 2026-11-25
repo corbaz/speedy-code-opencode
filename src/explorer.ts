@@ -545,6 +545,25 @@ async function readFolder(io: ExplorerIO, path: string): Promise<ExplorerListing
   }
 }
 
+/**
+ * A folder read afresh with every folder still open under it, all at once, here or on another machine: what
+ * came and went on the disk while it was closed shows when it opens again.
+ */
+async function readOpenTree(io: ExplorerIO, path: string, state: ExplorerState): Promise<ExplorerState["listed"]> {
+  const fresh: Record<string, ExplorerListing | "denied"> = {}
+  const walk = async (folder: string): Promise<void> => {
+    const listed = await readFolder(io, folder)
+    fresh[pathKey(folder, state.caseless)] = listed
+    if (listed === "denied") return
+    const open = listed.entries.filter(
+      (entry) => entry.kind === "dir" && state.open.includes(pathKey(joinPath(folder, entry.name), state.caseless)),
+    )
+    await Promise.all(open.map((entry) => walk(joinPath(folder, entry.name))))
+  }
+  await walk(path)
+  return fresh
+}
+
 /** A Mac's disks without those that are another machine's disk mounted over the network. */
 export function withoutMounted(own: readonly string[], mounted: readonly string[]): string[] {
   const left = new Set(mounted.map((one) => one.replace(/\/+$/, "")))
@@ -774,8 +793,8 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
         return
       }
       set((now) => ({ ...now, open: [...now.open, key] }))
-      const listed = await readFolder(io, path)
-      set((now) => ({ ...now, listed: { ...now.listed, [key]: listed } }))
+      const fresh = await readOpenTree(io, path, state)
+      set((now) => ({ ...now, listed: { ...now.listed, ...fresh } }))
     },
     async pickDrive(drive) {
       forget()
