@@ -162,14 +162,14 @@ describe("explorer helpers", () => {
     }
   })
 
-  test("a file's row: its name cut and filled with spaces up to its five tools, emoji or Nerd Fonts glyphs in their colors", () => {
+  test("a file's row: its name cut and filled with spaces up to its six tools, emoji or Nerd Fonts glyphs in their colors", () => {
     const row = { path: "C:/x/un_nombre_muy_largo_de_archivo.txt", name: "un_nombre_muy_largo_de_archivo.txt", depth: 2, kind: "file" as const, isOpen: false, isHere: false }
-    const label = fileNameLabel(row, 36)
-    expect(cells(label)).toBe(36 - FILE_TOOLS_WIDTH)
+    const label = fileNameLabel(row, 40)
+    expect(cells(label)).toBe(40 - FILE_TOOLS_WIDTH)
     expect(label.startsWith("      un_nomb")).toBe(true)
     expect(label.trimEnd().endsWith("…")).toBe(true)
-    const short = fileNameLabel({ ...row, name: "a.md", depth: 0 }, 36)
-    expect(short).toBe("  a.md".padEnd(36 - FILE_TOOLS_WIDTH))
+    const short = fileNameLabel({ ...row, name: "a.md", depth: 0 }, 40)
+    expect(short).toBe("  a.md".padEnd(40 - FILE_TOOLS_WIDTH))
     // Each icon on its own two cells, pressed there alone; before each, a plain gap that takes no press, so a
     // press a little off an icon does nothing instead of its neighbour's work.
     expect(fileTools("emoji", "", row.path).map((tool) => [tool.kind, tool.label.trimEnd(), cells(tool.label), tool.gap, tool.color])).toEqual([
@@ -179,20 +179,24 @@ describe("explorer helpers", () => {
       ["trash", "🗑", 2, 2, "#ff8787"],
       // 📥 is grey, a plain mark, until 📋 took a file or a folder to paste; then it is lit.
       ["paste", "↧", 2, 2, "#495057"],
+      // 📍, the session goes to work there, is a folder's alone: a file has its two cells empty, pressed for nothing.
+      ["work", "", 2, 2, "#495057"],
     ])
-    expect(fileTools("emoji", "", row.path, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color]).at(-1)).toEqual(["paste", "📥", "#ffa94d"])
-    expect(fileTools("nerd", "", row.path).map((tool) => tool.label)).toEqual(["\uf0c5\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf0ea\u00a0"])
-    expect([fileTools("nerd", "", row.path).at(-1)?.color, fileTools("nerd", "", row.path, true).at(-1)?.color]).toEqual(["#495057", "#ffa94d"])
+    expect(fileTools("emoji", "", row.path).at(-1)?.isNone).toBe(true)
+    expect(fileTools("emoji", "", "C:/x/docs", false, false, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color, tool.isNone]).at(-1)).toEqual(["work", "📍", "#51cf66", false])
+    expect(fileTools("emoji", "", row.path, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color]).at(-2)).toEqual(["paste", "📥", "#ffa94d"])
+    expect(fileTools("nerd", "", "C:/x/docs", false, false, true).map((tool) => tool.label)).toEqual(["\uf0c5\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf0ea\u00a0", "\uf041\u00a0"])
+    expect([fileTools("nerd", "", row.path).at(-2)?.color, fileTools("nerd", "", row.path, true).at(-2)?.color]).toEqual(["#495057", "#ffa94d"])
     // On a disk's root 📋, ✏ and 🗑 are grey: a disk is not copied, renamed or trashed; 🔗 and 📥 are as on any row.
-    expect(fileTools("nerd", "", "C:/", true, true).map((tool) => tool.color)).toEqual(["#495057", "#63e6be", "#495057", "#495057", "#ffa94d"])
-    // The five tools, and two empty cells after them that part the last one from the scroll bar.
-    expect(FILE_TOOLS_WIDTH).toBe(1 + 2 + 4 * 4 + 2)
+    expect(fileTools("nerd", "", "C:/", true, true, true).map((tool) => tool.color)).toEqual(["#495057", "#63e6be", "#495057", "#495057", "#ffa94d", "#51cf66"])
+    // The six tools, and two empty cells after them that part the last one from the scroll bar.
+    expect(FILE_TOOLS_WIDTH).toBe(1 + 2 + 5 * 4 + 2)
     // A folder's row is laid out as a file's: its open mark and name, filled up to the same four tools.
     const folder = { path: "C:/x/docs", name: "docs", depth: 1, kind: "dir" as const, isOpen: false, isHere: false }
     expect(fileNameLabel(folder, 36)).toBe("  ▸ docs".padEnd(36 - FILE_TOOLS_WIDTH))    // The tool just pressed is green, with no fill; the others keep their colors.
     const flashed = fileTools("emoji", `path:${row.path}`, row.path)
-    expect(flashed.map((tool) => tool.color)).toEqual(["#74c0fc", "#51cf66", "#b197fc", "#ff8787", "#495057"])
-    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#74c0fc", "#63e6be", "#b197fc", "#ff8787", "#495057"])
+    expect(flashed.map((tool) => tool.color)).toEqual(["#74c0fc", "#51cf66", "#b197fc", "#ff8787", "#495057", "#495057"])
+    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#74c0fc", "#63e6be", "#b197fc", "#ff8787", "#495057", "#495057"])
     expect(Object.keys(flashed[0]!)).not.toContain("bg")
     expect([collapseLabel("emoji"), collapseLabel("nerd")]).toEqual([" ⊟ ", "  "])
   })

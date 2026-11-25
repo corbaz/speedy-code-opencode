@@ -67,6 +67,8 @@ export interface MenuState {
   setup: Record<string, SetupCheck>
   setupLog: string[]
   installing: boolean
+  /** The folder 📍 opened the `+` menu for: the session goes to work there. Empty: the footer's `+`. */
+  newFolder: string
 }
 
 /** The row that reads the selection: it plays as a kept narration does. */
@@ -89,6 +91,7 @@ export const INITIAL_MENU: MenuState = {
   setup: {},
   setupLog: [],
   installing: false,
+  newFolder: "",
 }
 
 export const SETUP_STEPS: ReadonlyArray<readonly [string, string]> = [
@@ -152,6 +155,10 @@ export interface MenuApi {
   readonly close: () => void
   /** Starts a session under the name typed in the `+` menu; an empty one is the host's own. */
   readonly startSession: (name: string) => void
+  /** Opened by 📍: this session moves to the folder, nothing new started. */
+  readonly keepSession: () => void
+  /** Opened by 📍: the menu closes, and the session stays where it is. */
+  readonly cancelNew: () => void
   /** Goes to a session of the `☰` menu. */
   readonly openSession: (id: string) => void
   /** Goes to the next agent, as Tab does. */
@@ -549,12 +556,23 @@ function MoreMenu(props: { api: MenuApi }) {
 /** The color of a new session: the footer's own `+`. */
 const NEW_SESSION_COLOR = "#51cf66"
 
-/** The menu `+` opens: the new session's name, typed in a framed field that has the keyboard as it opens. */
+/**
+ * The menu `+` opens: the new session's name, typed in a framed field that has the keyboard as it opens.
+ * Opened by 📍 it says the folder and names the session after it, and has two more buttons: Seguir esta
+ * moves this session there, Cancelar does nothing.
+ */
 function NewSessionMenu(props: { api: MenuApi }) {
   let field: { value?: string; plainText?: string } | undefined
   const typed = () => field?.value ?? field?.plainText ?? ""
+  const folder = () => props.api.state.newFolder
   return (
     <box flexDirection="column">
+      <Show when={folder()}>
+        <box flexDirection="row">
+          <Label text=" Trabajar en: " color={NEW_SESSION_COLOR} bold />
+          <Label text={folder()} />
+        </box>
+      </Show>
       <Label text=" Nombre de la pestaña" color="#74c0fc" bold />
       <box border borderStyle="rounded" borderColor={NEW_SESSION_COLOR} paddingLeft={1} paddingRight={1} width={48}>
         <input
@@ -562,6 +580,7 @@ function NewSessionMenu(props: { api: MenuApi }) {
             field = one as typeof field
           }}
           focused
+          value={folderName(folder())}
           placeholder="vacío: la nombra OpenCode"
           placeholderColor="#868e96"
           textColor="#ffd43b"
@@ -570,11 +589,20 @@ function NewSessionMenu(props: { api: MenuApi }) {
           onSubmit={() => props.api.startSession(typed())}
         />
       </box>
-      <box flexDirection="row">
-        <Btn label=" Empezar " color="#101113" bg={NEW_SESSION_COLOR} bold onPress={() => props.api.startSession(typed())} />
+      <box flexDirection="row" columnGap={2}>
+        <Btn label={folder() ? " Nueva sesión " : " Empezar "} color="#101113" bg={NEW_SESSION_COLOR} bold onPress={() => props.api.startSession(typed())} />
+        <Show when={folder()}>
+          <Btn label=" Seguir esta " color="#101113" bg="#74c0fc" bold onPress={() => props.api.keepSession()} />
+          <Btn label=" Cancelar " color="#101113" bg="#adb5bd" bold onPress={() => props.api.cancelNew()} />
+        </Show>
       </box>
     </box>
   )
+}
+
+/** A folder's own name, the last part of its path: `C:\www\alfajor` is `alfajor`; a disk's root, its letter. */
+export function folderName(path: string): string {
+  return (path.split(/[\\/]/).filter(Boolean).pop() ?? "").replace(/:$/, "")
 }
 
 /** How many rows of sessions show at once: the rest scroll. */

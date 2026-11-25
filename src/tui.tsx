@@ -39,6 +39,7 @@ import { ClipPlayer, listClips, readSource, withStarted, type HistoryClip, type 
 import {
   DraftImages,
   INITIAL_MENU,
+  folderName,
   MenuFrame,
   setMenuIcons,
   SELECTION_CLIP,
@@ -700,20 +701,63 @@ export default Plugin.define({
       if (!context.ui.tabs.focus(id)) context.ui.router.navigate({ type: "session", sessionID: id })
     }
 
-    /** The `+` menu's answer: a session under the name typed; an empty name is the host's own. */
+    /**
+     * The `+` menu's answer: a session under the name typed; an empty name is the host's own. Opened by 📍, the
+     * session is made in that folder.
+     */
     const startSession = async (name: string) => {
+      const folder = menus.newFolder
       closeMenu()
       const choice = newSessionChoice(name)
       if (choice.kind === "none") return
-      if (choice.kind === "plain") return context.keymap.dispatch("session.new")
+      if (choice.kind === "plain" && !folder) return context.keymap.dispatch("session.new")
       try {
         const made = await context.client.session.create({
-          title: choice.title,
-          location: context.location ?? context.data.location.default(),
+          ...(choice.kind === "named" ? { title: choice.title } : {}),
+          location: folder ? { directory: folder } : (context.location ?? context.data.location.default()),
         })
         if (!context.ui.tabs.focus(made.id)) context.ui.router.navigate({ type: "session", sessionID: made.id })
       } catch (error) {
         toast(`no pude crear la sesión: ${error instanceof Error ? error.message : String(error)}`, "error")
+      }
+    }
+
+    /** The folder the session works in, as the system writes it. */
+    const sessionFolder = () => {
+      const route = context.ui.router.current() as { type?: string; sessionID?: string } | undefined
+      const session = route?.type === "session" && route.sessionID ? context.data.session.get(route.sessionID) : undefined
+      return (session as { location?: { directory?: string } } | undefined)?.location?.directory ?? context.location?.directory ?? process.cwd()
+    }
+
+    /** 📍 on a folder of the explorer: the `+` menu for it, unless the session already works there. */
+    const workIn = async (path: string) => {
+      const folder = process.platform === "win32" ? path.replace(/\//g, "\\") : path
+      const key = (one: string) => (process.platform === "win32" ? one.toLowerCase() : one).replace(/[\\/]+$/, "")
+      if (key(sessionFolder()) === key(folder)) {
+        toast(`la sesión ya trabaja en ${folderName(folder)}.`)
+        return
+      }
+      closeMenu()
+      setMenus((draft) => {
+        draft.newFolder = folder
+      })
+      await openMenu("new")
+    }
+
+    /** Seguir esta: this session moves to the folder 📍 was pressed on, as OpenCode's own move does. */
+    const keepSession = async () => {
+      const folder = menus.newFolder
+      const route = context.ui.router.current() as { type?: string; sessionID?: string } | undefined
+      closeMenu()
+      if (!folder) return
+      if (route?.type !== "session" || !route.sessionID) {
+        // No session open yet: there is nothing to move, so one is made there.
+        return startSession("")
+      }
+      try {
+        await (context.client.session as unknown as { move: (input: { sessionID: string; directory: string }) => Promise<void> }).move({ sessionID: route.sessionID, directory: folder })
+      } catch (error) {
+        toast(`no pude pasar a ${folder}: ${error instanceof Error ? error.message : String(error)}`, "error")
       }
     }
 
@@ -1533,6 +1577,9 @@ export default Plugin.define({
         case "send":
           return context.keymap.dispatch("prompt.submit")
         case "new":
+          setMenus((draft) => {
+            draft.newFolder = ""
+          })
           return openMenu("new")
         case "sessions":
           return openMenu("sessions")
@@ -1931,6 +1978,13 @@ export default Plugin.define({
       systemName: process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux",
       openSocial: (key) => void openSocial(key),
       startSession: (name) => void startSession(name),
+      keepSession: () => void keepSession(),
+      cancelNew: () => {
+        closeMenu()
+        setMenus((draft) => {
+          draft.newFolder = ""
+        })
+      },
       openSession: (id) => openSession(id),
       cycleAgent: () => {
         closeMenu()
@@ -2048,7 +2102,10 @@ export default Plugin.define({
         else if (kind === "path") void explorer.copyPath(path)
         else if (kind === "rename") void explorer.rename(path)
         else if (kind === "paste") void explorer.paste(path)
-        else void explorer.trash(path)
+        else if (kind === "work") {
+          explorer.flash(`work:${path}`)
+          void workIn(path)
+        } else void explorer.trash(path)
       },
       collapse: () => explorer.collapse(),
       goTo: (text) => {

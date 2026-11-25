@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { INITIAL_MENU, SETUP_STEPS, menuHeading } from "../src/menus"
+import { INITIAL_MENU, SETUP_STEPS, folderName, menuHeading } from "../src/menus"
 import { DEFAULT_SETTINGS, cloneSettings, settingsFromSaved } from "../src/settings"
 
 describe("menuHeading", () => {
@@ -37,5 +37,16 @@ describe("the status line switch", () => {
     expect(DEFAULT_SETTINGS.statusBar).toBe(true)
     expect(settingsFromSaved({ statusBar: false }).statusBar).toBe(false)
     expect(settingsFromSaved({ statusBar: "no" }).statusBar).toBe(true)
+  })
+})
+
+describe("folderName", () => {
+  test("the + menu opened by 📍 names the session after the folder: its last part, a disk by its letter", () => {
+    expect(folderName("C:\\www\\alfajor")).toBe("alfajor")
+    expect(folderName("C:\\www\\alfajor\\")).toBe("alfajor")
+    expect(folderName("/Users/ana/proyecto con espacio")).toBe("proyecto con espacio")
+    expect(folderName("C:\\")).toBe("C")
+    expect(folderName("")).toBe("")
+    expect(INITIAL_MENU.newFolder).toBe("")
   })
 })

@@ -406,15 +406,19 @@ export function badFileName(name: string): string {
 }
 
 /** What each file's tool does. */
-export type FileToolKind = "copy" | "path" | "rename" | "trash" | "paste"
+export type FileToolKind = "copy" | "path" | "rename" | "trash" | "paste" | "work"
 
-/** Each file's tools: what a press does, its emoji, its Nerd Fonts glyph and its color. */
+/**
+ * Each file's tools: what a press does, its emoji, its Nerd Fonts glyph and its color. 📍, the last, is a
+ * folder's alone: the session goes to work there.
+ */
 export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, string]> = [
   ["copy", "📋", "", "#74c0fc"],
   ["path", "🔗", "", "#63e6be"],
   ["rename", "✏", "", "#b197fc"],
   ["trash", "🗑", "", "#ff8787"],
   ["paste", "📥", "\uf0ea", "#ffa94d"],
+  ["work", "📍", "\uf041", "#51cf66"],
 ]
 
 /** 📥 while 📋 took nothing: grey, and with emoji a plain mark, as an emoji keeps its own colors. */
@@ -425,11 +429,11 @@ export const PASTE_IDLE_COLOR = "#495057"
 export const DISK_IDLE_TOOLS: readonly FileToolKind[] = ["copy", "rename", "trash"]
 
 /**
- * The cells the five tools take at a row's right: each icon on its own two cells, a plain gap of two before
+ * The cells the six tools take at a row's right: each icon on its own two cells, a plain gap of two before
  * each but the first, which has one, and two empty cells after the last, which part it from the scroll bar.
  * A press a little off an icon lands on a gap and does nothing.
  */
-export const FILE_TOOLS_WIDTH = 21
+export const FILE_TOOLS_WIDTH = 25
 
 /** The color a pressed tool takes for a second, as a sign the press was taken: green, with no fill. */
 export const FLASH_COLOR = "#51cf66"
@@ -450,7 +454,8 @@ export function fileNameLabel(row: TreeRow, width: number): string {
 /**
  * A file's tools as its row draws them: each its glyph or emoji and its color, the one just pressed green.
  * 📥 is lit only while 📋 has taken a file or a folder to paste (`hasClip`). On a disk's root (`isDisk`) 📋, ✏
- * and 🗑 are grey.
+ * and 🗑 are grey. 📍 is on a folder of this machine alone (`isWorkable`); elsewhere its two cells are empty,
+ * `isNone`, and a press there does nothing.
  */
 export function fileTools(
   icons: IconSet,
@@ -458,8 +463,10 @@ export function fileTools(
   path: string,
   hasClip = false,
   isDisk = false,
-): Array<{ kind: FileToolKind; label: string; gap: number; color: string }> {
+  isWorkable = false,
+): Array<{ kind: FileToolKind; label: string; gap: number; color: string; isNone: boolean }> {
   return FILE_TOOLS.map(([kind, emoji, glyph, color], index) => {
+    if (kind === "work" && !isWorkable) return { kind, label: "  ", gap: 2, color: PASTE_IDLE_COLOR, isNone: true }
     const isIdle = (kind === "paste" && !hasClip) || (isDisk && DISK_IDLE_TOOLS.includes(kind))
     // An emoji, or a glyph with the cell it spills over: two cells, the tool's own.
     const icon = icons === "nerd" ? `${glyph}\u00a0` : kind === "paste" && isIdle ? PASTE_IDLE_MARK : emoji
@@ -468,6 +475,7 @@ export function fileTools(
       label: icon + " ".repeat(Math.max(0, 2 - cells(icon))),
       gap: index === 0 ? 1 : 2,
       color: flashed === `${kind}:${path}` ? FLASH_COLOR : isIdle ? PASTE_IDLE_COLOR : color,
+      isNone: false,
     }
   })
 }
@@ -583,6 +591,8 @@ export interface Explorer {
   copyFile(path: string): Promise<void>
   /** 🔗: the file's path, as the system writes it, to the clipboard and into the prompt. */
   copyPath(path: string): Promise<void>
+  /** A tool pressed turns green for a second, with no fill: the press was taken. `key` is `<tool>:<path>`. */
+  flash(key: string): void
   /** ✏: the dialog asks the new name, then the file is renamed in its folder and the folder read again. */
   rename(path: string): Promise<void>
   /** 🗑: the dialog asks, then the file goes to the trash and its folder is read again. */
@@ -886,6 +896,9 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       })
       await reread(folder)
       if (isMoved) await reread(folderOf(clip))
+    },
+    flash(key) {
+      flash(key)
     },
     collapse() {
       flash("collapse:")

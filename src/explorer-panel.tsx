@@ -7,8 +7,8 @@
  * under a rule, the disk's tree, the session's folder marked ● and put in the middle when the explorer
  * opens. The tree scrolls under the disks and the field, which stay.
  *
- * Every file is yellow and opens in the viewer; at its right, its five tools, the last one, 📥, grey until 📋
- * took a file or a folder to paste; two empty cells part them from the scroll bar. While the pointer is anywhere
+ * Every file is yellow and opens in the viewer; at its right, its six tools: 📥 grey until 📋 took a file or a
+ * folder to paste, and 📍, the last, on a folder of this machine alone; two empty cells part them from the scroll bar. While the pointer is anywhere
  * on a file's row, its tools included, the name keeps a yellow fill: the row is marked as the one the
  * tools act on. The tools themselves never take a fill; a pressed one turns green for a second.
  */
@@ -23,6 +23,7 @@ import {
   UNFILTER_LABEL,
   pauseLabel,
   pathKey,
+  remoteOf,
   ruleLabel,
   collapseLabel,
   driveLabel,
@@ -177,14 +178,15 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           </text>
         </box>
         <box flexDirection="row" flexShrink={0} width={FILE_TOOLS_WIDTH}>
-          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip), isFolder && row.depth === 0)}>
+          {/* 📍 is on a folder of this machine alone: the session works on no file, nor on another machine. */}
+          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip), isFolder && row.depth === 0, isFolder && !remoteOf(row.path))}>
             {(tool) => (
               <>
                 {/* A plain gap before each icon takes no press: one a little off an icon does nothing. */}
                 <text wrapMode="none" selectable={false} flexShrink={0}>
                   {" ".repeat(tool.gap)}
                 </text>
-                <box flexShrink={0} onMouseUp={() => api.tool(tool.kind, row.path)}>
+                <box flexShrink={0} onMouseUp={() => { if (!tool.isNone) api.tool(tool.kind, row.path) }}>
                   <text wrapMode="none" selectable={false} fg={tool.color} attributes={BOLD}>
                     {tool.label}
                   </text>
