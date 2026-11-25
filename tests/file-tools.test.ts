@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { spawn, spawnSync } from "node:child_process"
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, newNameOf, pasteCommand, renameCommand, trashCommand } from "../src/file-tools"
 import { POWERSHELL } from "../src/powershell"
@@ -97,4 +101,21 @@ describe("the commands behind each file's tools", () => {
     expect(mac.argv.at(-1)).toBe("/Users/me/a.md")
     expect(trashCommand("linux", "/home/me/a")).toBeUndefined()
   })
+
+  // A folder another program holds stays where it is: 🗑 must not say it went.
+  test.skipIf(process.platform !== "win32")("🗑 on Windows says deleted only when the folder is gone: one in use stays, and it says so", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "speedy-trash-"))
+    const holder = spawn(POWERSHELL, ["-NoProfile", "-Command", "Start-Sleep 30"], { cwd: folder })
+    try {
+      await new Promise((done) => setTimeout(done, 1500))
+      const command = trashCommand("win32", folder)!
+      const ran = spawnSync(command.argv[0], command.argv.slice(1), { env: { ...process.env, ...command.env }, encoding: "utf8" })
+      expect(ran.stdout.trim()).toBe("kept")
+      expect(existsSync(folder)).toBe(true)
+    } finally {
+      holder.kill()
+      await new Promise((done) => setTimeout(done, 500))
+      rmSync(folder, { recursive: true, force: true })
+    }
+  }, 30000)
 })

@@ -172,8 +172,9 @@ export function trashCommand(platform: string, native: string): FileCommand | un
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        // A folder goes whole, with what it holds.
-        "Add-Type -AssemblyName Microsoft.VisualBasic; if (Test-Path -LiteralPath $env:SPEEDY_FILE -PathType Container) { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($env:SPEEDY_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin') } else { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:SPEEDY_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin') }; 'deleted'",
+        // A folder goes whole, with what it holds. Said deleted only once it is gone: one another program
+        // holds (its working folder, a file open in it) stays, and the error alone would not stop the script.
+        "Add-Type -AssemblyName Microsoft.VisualBasic; try { if (Test-Path -LiteralPath $env:SPEEDY_FILE -PathType Container) { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($env:SPEEDY_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin') } else { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:SPEEDY_FILE, 'OnlyErrorDialogs', 'SendToRecycleBin') } } catch { }; if (Test-Path -LiteralPath $env:SPEEDY_FILE) { 'kept' } else { 'deleted' }",
       ],
       env: { SPEEDY_FILE: native },
     }
