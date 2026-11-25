@@ -156,6 +156,8 @@ Requirements: [OpenCode](https://opencode.ai) 2.3 or later, git and [bun](https:
 administrator rights; everything else (uv, Python 3.12, the voices, the dictation and its model, about
 750 MB) is installed under the user's own folders.
 
+Office is not needed on Windows: with none, Office's old files are read by the readers the setup adds (`msdoc2docx`, `sharepoint-to-text`): a .doc with its headings, bold and tables, an .xls as its sheets, and of a .ppt the words of each slide, not its drawing. With Office they open through it, as before; `SPEEDY_NO_OFFICE=1` in the environment shows them as on a machine with none.
+
 ### Windows
 
 ```powershell
