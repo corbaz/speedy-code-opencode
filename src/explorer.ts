@@ -106,8 +106,10 @@ export interface ExplorerIO {
    * Asks in the dialog: `rename <base64 name>` or `name <name>`, `delete`, or `cancel`. A folder (`dir`) is
    * asked one name, with no extension, and goes to the trash with what it holds. 📥's (`paste`) asks whether
    * the file is copied or moved into the folder `into`, then whether for sure: `copy`, `move` or `cancel`.
+   * 📁's (`mkdir`) asks the name of a folder to make in the folder `native`: `mkdir <base64 name>` or
+   * `name <name>`, or `cancel`.
    */
-  ask(mode: "rename" | "delete" | "paste", native: string, kind?: "file" | "dir", into?: string): Promise<string>
+  ask(mode: "rename" | "delete" | "paste" | "mkdir", native: string, kind?: "file" | "dir", into?: string): Promise<string>
   /**
    * Copies or moves a file or a folder to `nativeTarget`, its own name included, writing over nothing; whether
    * it did. `kept`: it was copied, but what was to move could not be removed where it was.
@@ -117,6 +119,8 @@ export interface ExplorerIO {
   hold?(isHeld: boolean): void
   /** Renames a file in its folder; whether it did. */
   rename(native: string, name: string, nativeTarget: string): Promise<boolean>
+  /** Makes a folder, writing over nothing; whether it did. */
+  mkdir(nativeTarget: string): Promise<boolean>
   /** Sends a file to the trash, where it can be got back; whether it went. */
   trash(native: string): Promise<boolean>
   /** Whether something is at a path. */
@@ -406,13 +410,15 @@ export function badFileName(name: string): string {
 }
 
 /** What each file's tool does. */
-export type FileToolKind = "copy" | "path" | "rename" | "trash" | "paste" | "work"
+export type FileToolKind = "mkdir" | "copy" | "path" | "rename" | "trash" | "paste" | "work"
 
 /**
- * Each file's tools: what a press does, its emoji, its Nerd Fonts glyph and its color. 📍, the last, is a
- * folder's alone: the session goes to work there.
+ * Each file's tools: what a press does, its emoji, its Nerd Fonts glyph and its color. 📁, the first, makes a
+ * folder there; 📍, the last, is a folder's alone: the session goes to work there. Both are for this machine's
+ * folders alone.
  */
 export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, string]> = [
+  ["mkdir", "📁", "\uea80", "#ffd43b"],
   ["copy", "📋", "", "#74c0fc"],
   ["path", "🔗", "", "#63e6be"],
   ["rename", "✏", "", "#b197fc"],
@@ -429,11 +435,11 @@ export const PASTE_IDLE_COLOR = "#495057"
 export const DISK_IDLE_TOOLS: readonly FileToolKind[] = ["copy", "rename", "trash"]
 
 /**
- * The cells the six tools take at a row's right: each icon on its own two cells, a plain gap of two before
+ * The cells the seven tools take at a row's right: each icon on its own two cells, a plain gap of two before
  * each but the first, which has one, and two empty cells after the last, which part it from the scroll bar.
  * A press a little off an icon lands on a gap and does nothing.
  */
-export const FILE_TOOLS_WIDTH = 25
+export const FILE_TOOLS_WIDTH = 29
 
 /** The color a pressed tool takes for a second, as a sign the press was taken: green, with no fill. */
 export const FLASH_COLOR = "#51cf66"
@@ -455,7 +461,7 @@ export function fileNameLabel(row: TreeRow, width: number): string {
  * A file's tools as its row draws them: each its glyph or emoji and its color, the one just pressed green.
  * 📥 is lit only while 📋 has taken a file or a folder to paste (`hasClip`). On a disk's root (`isDisk`) 📋, ✏
  * and 🗑 are grey. 📍 is on a folder of this machine alone (`isWorkable`); elsewhere its two cells are empty,
- * `isNone`, and a press there does nothing.
+ * `isNone`, and a press there does nothing. 📁 is on this machine's rows alone (`isMine`), empty elsewhere.
  */
 export function fileTools(
   icons: IconSet,
@@ -464,9 +470,10 @@ export function fileTools(
   hasClip = false,
   isDisk = false,
   isWorkable = false,
+  isMine = true,
 ): Array<{ kind: FileToolKind; label: string; gap: number; color: string; isNone: boolean }> {
   return FILE_TOOLS.map(([kind, emoji, glyph, color], index) => {
-    if (kind === "work" && !isWorkable) return { kind, label: "  ", gap: 2, color: PASTE_IDLE_COLOR, isNone: true }
+    if ((kind === "work" && !isWorkable) || (kind === "mkdir" && !isMine)) return { kind, label: "  ", gap: 2, color: PASTE_IDLE_COLOR, isNone: true }
     const isIdle = (kind === "paste" && !hasClip) || (isDisk && DISK_IDLE_TOOLS.includes(kind))
     // An emoji, or a glyph with the cell it spills over: two cells, the tool's own.
     const icon = icons === "nerd" ? `${glyph}\u00a0` : kind === "paste" && isIdle ? PASTE_IDLE_MARK : emoji
@@ -595,6 +602,11 @@ export interface Explorer {
   flash(key: string): void
   /** ✏: the dialog asks the new name, then the file is renamed in its folder and the folder read again. */
   rename(path: string): Promise<void>
+  /**
+   * 📁: the dialog asks the new folder's name, then the folder is made where the row is: in a folder, inside
+   * it; on a file, in the folder it is in. That folder is read again and opened, to show it.
+   */
+  newFolder(path: string): Promise<void>
   /** 🗑: the dialog asks, then the file goes to the trash and its folder is read again. */
   trash(path: string): Promise<void>
   /**
@@ -845,6 +857,24 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
       const name = newNameOf(await io.ask("rename", nativeOf(path, platform), kind))
       if (name) await renameTo(path, name)
+    },
+    async newFolder(path) {
+      forget()
+      if (remoteOf(path)) return
+      flash(`mkdir:${path}`)
+      const folder = (await io.isDir(path).catch(() => false)) ? slashed(path) : folderOf(slashed(path))
+      const name = newNameOf(await io.ask("mkdir", nativeOf(folder, platform), "dir")).trim()
+      if (!name) return
+      const why = badFileName(name)
+      if (why) return io.toast(`no creé la carpeta: ${why}.`, true)
+      const target = joinPath(folder, name)
+      // Nothing there is written over.
+      if (await io.exists(nativeOf(target, platform))) return io.toast(`ya hay un ${name} en esa carpeta.`, true)
+      if (!(await io.mkdir(nativeOf(target, platform)))) return io.toast(`no pude crear la carpeta ${name}.`, true)
+      io.toast(`se creó la carpeta ${name} en ${driveLabel(folder)}.`)
+      const key = pathKey(folder, state.caseless)
+      set((now) => ({ ...now, open: now.open.includes(key) ? now.open : [...now.open, key] }))
+      await reread(folder)
     },
     async trash(path) {
       forget()

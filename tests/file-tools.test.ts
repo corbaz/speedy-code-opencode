@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, newNameOf, pasteCommand, renameCommand, trashCommand } from "../src/file-tools"
+import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, mkdirCommand, newNameOf, pasteCommand, renameCommand, trashCommand } from "../src/file-tools"
 import { POWERSHELL } from "../src/powershell"
 
 const NATIVE = "C:\\Users\\me\\notas.txt"
@@ -100,6 +100,22 @@ describe("the commands behind each file's tools", () => {
     expect(mac.argv).toContain('tell application "Finder" to delete (POSIX file (item 1 of argv) as alias)')
     expect(mac.argv.at(-1)).toBe("/Users/me/a.md")
     expect(trashCommand("linux", "/home/me/a")).toBeUndefined()
+  })
+
+  test("📁 asks the new folder's name in the same dialog, then makes it, writing over nothing", () => {
+    expect(dialogCommand("win32", "mkdir", "C:\\Users\\me", "C:/plugin", "dir")?.env).toEqual({ SPEEDY_FILE: "C:\\Users\\me", SPEEDY_MODE: "mkdir", SPEEDY_KIND: "dir" })
+    // macOS: the popup first; the AppleScript dialog after it asks the name, Nueva carpeta offered.
+    const mac = dialogCommand("darwin", "mkdir", "/Users/me", "/plugin", "dir", "/venv/bin/python")!
+    expect(mac.env).toMatchObject({ SPEEDY_MODE: "mkdir", SPEEDY_POPUP: "/plugin/engine/dialog.py" })
+    expect(mac.argv.join(" ")).toContain('default answer "Nueva carpeta" with title "Nueva carpeta"')
+    expect(mac.argv.at(-1)).toBe("me")
+    expect(newNameOf("mkdir QcOxbyAyMDI1")).toBe("Año 2025")
+    expect(newNameOf("name Fotos")).toBe("Fotos")
+    const windows = mkdirCommand("win32", "C:\\a\\Fotos")
+    expect(windows.argv.at(-1)).toContain("[IO.Directory]::CreateDirectory($env:SPEEDY_TARGET)")
+    expect(windows.argv.at(-1)).toContain("if (Test-Path -LiteralPath $env:SPEEDY_TARGET) { 'exists' }")
+    expect(windows.env).toEqual({ SPEEDY_TARGET: "C:\\a\\Fotos" })
+    expect(mkdirCommand("darwin", "/Users/me/Fotos")).toEqual({ argv: ["/bin/sh", "-c", 'mkdir -- "$SPEEDY_TARGET" && echo made'], env: { SPEEDY_TARGET: "/Users/me/Fotos" } })
   })
 
   // A folder another program holds stays where it is: 🗑 must not say it went.

@@ -51,7 +51,7 @@ export function fileCopyCommand(platform: string, native: string): FileCommand |
  */
 export function dialogCommand(
   platform: string,
-  mode: "rename" | "delete" | "paste",
+  mode: "rename" | "delete" | "paste" | "mkdir",
   native: string,
   root: string,
   kind: "file" | "dir" = "file",
@@ -78,6 +78,17 @@ export function dialogCommand(
           'display dialog ("¿Seguro? " & verb & " " & (item 1 of argv) & " a " & (item 2 of argv)) with title "Pegar" buttons {"No", "Sí"} default button "No" cancel button "No"',
           'if verb is "Mover" then return "move"',
           'return "copy"',
+          "on error",
+          'return "cancel"',
+          "end try",
+          "end run",
+        ]
+      : mode === "mkdir"
+      ? [
+          "on run argv",
+          "try",
+          'set answer to text returned of (display dialog ("Nombre de la carpeta nueva, en " & (item 1 of argv) & ":") default answer "Nueva carpeta" with title "Nueva carpeta" buttons {"Cancelar", "Crear"} default button "Crear" cancel button "Cancelar")',
+          'return "name " & answer',
           "on error",
           'return "cancel"',
           "end try",
@@ -144,9 +155,10 @@ export function dialogAnswer(stdout: string): string {
   return stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? "cancel"
 }
 
-/** The new name a rename dialog answered; empty when it was cancelled. */
+/** The new name a rename dialog, or a new folder's, answered; empty when it was cancelled. */
 export function newNameOf(answer: string): string {
   if (answer.startsWith("rename ")) return fromBase64Utf8(answer.slice("rename ".length))
+  if (answer.startsWith("mkdir ")) return fromBase64Utf8(answer.slice("mkdir ".length))
   if (answer.startsWith("name ")) return answer.slice("name ".length)
   return ""
 }
@@ -161,6 +173,18 @@ export function renameCommand(platform: string, native: string, name: string, na
     }
   }
   return { argv: ["/bin/sh", "-c", 'mv -n -- "$SPEEDY_FILE" "$SPEEDY_TARGET" && echo renamed'], env }
+}
+
+/** 📁: the folder made; nothing there is written over. It says `made`. */
+export function mkdirCommand(platform: string, nativeTarget: string): FileCommand {
+  const env = { SPEEDY_TARGET: nativeTarget }
+  if (platform === "win32") {
+    return {
+      argv: [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", "if (Test-Path -LiteralPath $env:SPEEDY_TARGET) { 'exists' } else { [void][IO.Directory]::CreateDirectory($env:SPEEDY_TARGET); 'made' }"],
+      env,
+    }
+  }
+  return { argv: ["/bin/sh", "-c", 'mkdir -- "$SPEEDY_TARGET" && echo made'], env }
 }
 
 /** 🗑: the file to the Recycle Bin, or to the Trash by Finder, where it can be got back. It says `deleted`. */

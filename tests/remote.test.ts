@@ -41,6 +41,7 @@ function world(hosts: string[] = ["mac"], home = "/") {
     ask: async (mode) => (dialogs.push(mode), answer.says),
     paste: async (verb, native, target) => (pasted.push(`${verb} ${native} -> ${target}`), true),
     rename: async () => false,
+    mkdir: async () => false,
     trash: async () => false,
     exists: async (native) => native === "C:\\notas.txt",
     toast: (message) => void toasts.push(message),

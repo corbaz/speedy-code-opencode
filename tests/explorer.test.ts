@@ -162,18 +162,20 @@ describe("explorer helpers", () => {
     }
   })
 
-  test("a file's row: its name cut and filled with spaces up to its six tools, emoji or Nerd Fonts glyphs in their colors", () => {
+  test("a file's row: its name cut and filled with spaces up to its seven tools, emoji or Nerd Fonts glyphs in their colors", () => {
     const row = { path: "C:/x/un_nombre_muy_largo_de_archivo.txt", name: "un_nombre_muy_largo_de_archivo.txt", depth: 2, kind: "file" as const, isOpen: false, isHere: false }
-    const label = fileNameLabel(row, 40)
-    expect(cells(label)).toBe(40 - FILE_TOOLS_WIDTH)
+    const label = fileNameLabel(row, 44)
+    expect(cells(label)).toBe(44 - FILE_TOOLS_WIDTH)
     expect(label.startsWith("      un_nomb")).toBe(true)
     expect(label.trimEnd().endsWith("…")).toBe(true)
-    const short = fileNameLabel({ ...row, name: "a.md", depth: 0 }, 40)
-    expect(short).toBe("  a.md".padEnd(40 - FILE_TOOLS_WIDTH))
+    const short = fileNameLabel({ ...row, name: "a.md", depth: 0 }, 44)
+    expect(short).toBe("  a.md".padEnd(44 - FILE_TOOLS_WIDTH))
     // Each icon on its own two cells, pressed there alone; before each, a plain gap that takes no press, so a
     // press a little off an icon does nothing instead of its neighbour's work.
     expect(fileTools("emoji", "", row.path).map((tool) => [tool.kind, tool.label.trimEnd(), cells(tool.label), tool.gap, tool.color])).toEqual([
-      ["copy", "📋", 2, 1, "#74c0fc"],
+      // 📁 makes a folder there: in a folder, inside it; on a file, in its folder.
+      ["mkdir", "📁", 2, 1, "#ffd43b"],
+      ["copy", "📋", 2, 2, "#74c0fc"],
       ["path", "🔗", 2, 2, "#63e6be"],
       ["rename", "✏", 2, 2, "#b197fc"],
       ["trash", "🗑", 2, 2, "#ff8787"],
@@ -185,18 +187,20 @@ describe("explorer helpers", () => {
     expect(fileTools("emoji", "", row.path).at(-1)?.isNone).toBe(true)
     expect(fileTools("emoji", "", "C:/x/docs", false, false, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color, tool.isNone]).at(-1)).toEqual(["work", "📍", "#51cf66", false])
     expect(fileTools("emoji", "", row.path, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color]).at(-2)).toEqual(["paste", "📥", "#ffa94d"])
-    expect(fileTools("nerd", "", "C:/x/docs", false, false, true).map((tool) => tool.label)).toEqual(["\uf0c5\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf0ea\u00a0", "\uf041\u00a0"])
+    expect(fileTools("nerd", "", "C:/x/docs", false, false, true).map((tool) => tool.label)).toEqual(["\uea80\u00a0", "\uf0c5\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf0ea\u00a0", "\uf041\u00a0"])
     expect([fileTools("nerd", "", row.path).at(-2)?.color, fileTools("nerd", "", row.path, true).at(-2)?.color]).toEqual(["#495057", "#ffa94d"])
     // On a disk's root 📋, ✏ and 🗑 are grey: a disk is not copied, renamed or trashed; 🔗 and 📥 are as on any row.
-    expect(fileTools("nerd", "", "C:/", true, true, true).map((tool) => tool.color)).toEqual(["#495057", "#63e6be", "#495057", "#495057", "#ffa94d", "#51cf66"])
-    // The six tools, and two empty cells after them that part the last one from the scroll bar.
-    expect(FILE_TOOLS_WIDTH).toBe(1 + 2 + 5 * 4 + 2)
+    expect(fileTools("nerd", "", "C:/", true, true, true).map((tool) => tool.color)).toEqual(["#ffd43b", "#495057", "#63e6be", "#495057", "#495057", "#ffa94d", "#51cf66"])
+    // The seven tools, and two empty cells after them that part the last one from the scroll bar.
+    expect(FILE_TOOLS_WIDTH).toBe(1 + 2 + 6 * 4 + 2)
+    // 📁 makes a folder on this machine alone: on another machine's rows its two cells are empty.
+    expect(fileTools("emoji", "", "mac:/Users/ana", false, false, false, false)[0]).toMatchObject({ kind: "mkdir", label: "  ", isNone: true })
     // A folder's row is laid out as a file's: its open mark and name, filled up to the same four tools.
     const folder = { path: "C:/x/docs", name: "docs", depth: 1, kind: "dir" as const, isOpen: false, isHere: false }
-    expect(fileNameLabel(folder, 36)).toBe("  ▸ docs".padEnd(36 - FILE_TOOLS_WIDTH))    // The tool just pressed is green, with no fill; the others keep their colors.
+    expect(fileNameLabel(folder, 40)).toBe("  ▸ docs".padEnd(40 - FILE_TOOLS_WIDTH))    // The tool just pressed is green, with no fill; the others keep their colors.
     const flashed = fileTools("emoji", `path:${row.path}`, row.path)
-    expect(flashed.map((tool) => tool.color)).toEqual(["#74c0fc", "#51cf66", "#b197fc", "#ff8787", "#495057", "#495057"])
-    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#74c0fc", "#63e6be", "#b197fc", "#ff8787", "#495057", "#495057"])
+    expect(flashed.map((tool) => tool.color)).toEqual(["#ffd43b", "#74c0fc", "#51cf66", "#b197fc", "#ff8787", "#495057", "#495057"])
+    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#ffd43b", "#74c0fc", "#63e6be", "#b197fc", "#ff8787", "#495057", "#495057"])
     expect(Object.keys(flashed[0]!)).not.toContain("bg")
     expect([collapseLabel("emoji"), collapseLabel("nerd")]).toEqual([" ⊟ ", "  "])
   })
@@ -232,6 +236,7 @@ const noTools = {
   ask: async () => "cancel",
   paste: async () => false,
   rename: async () => false,
+  mkdir: async () => false,
   trash: async () => false,
   exists: async () => false,
   toast: () => {},
@@ -242,7 +247,7 @@ const noTools = {
 function fakeIO(tree: typeof TREE = TREE) {
   const opened: string[] = []
   const viewed: string[] = []
-  const files = { copied: [] as string[], texts: [] as string[], renamed: [] as string[], trashed: [] as string[], pasted: [] as string[] }
+  const files = { copied: [] as string[], texts: [] as string[], renamed: [] as string[], trashed: [] as string[], pasted: [] as string[], made: [] as string[] }
   const dialog = { answer: "cancel", asked: [] as string[] }
   const toasts: string[] = []
   const held: boolean[] = []
@@ -287,6 +292,7 @@ function fakeIO(tree: typeof TREE = TREE) {
     hold: (isHeld) => void held.push(isHeld),
     paste: async (verb, native, target) => (files.pasted.push(`${verb} ${native} -> ${target}`), true),
     rename: async (native, name, target) => (files.renamed.push(`${native} -> ${name} (${target})`), true),
+    mkdir: async (target) => (files.made.push(target), true),
     trash: async (native) => (files.trashed.push(native), true),
     exists: async (native) => existing.has(native),
     toast: (message) => void toasts.push(message),
@@ -690,6 +696,39 @@ describe("each file's tools", () => {
     fake.io.trash = async () => false
     await explorer.trash("C:/Users/test/proyectos/app.exe")
     expect(fake.toasts.at(-1)).toBe("no pude mandar app.exe a la papelera.")
+  })
+
+  test("📁 asks the new folder's name: cancel makes nothing; a name makes it where the row is, and that folder is read again, open", async () => {
+    const tree = { ...TREE }
+    const fake = fakeIO(tree)
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:\\Users\\test\\proyectos")
+    await explorer.newFolder("C:/Windows")
+    expect(fake.dialog.asked).toEqual(["mkdir C:\\Windows dir"])
+    expect(fake.files.made).toEqual([])
+    // "Año 2025", as the dialog says it.
+    fake.dialog.answer = "mkdir QcOxbyAyMDI1"
+    await explorer.newFolder("C:/Windows")
+    expect(fake.files.made).toEqual(["C:\\Windows\\Año 2025"])
+    expect(fake.toasts.at(-1)).toBe("se creó la carpeta Año 2025 en Windows.")
+    expect(explorer.state().open).toContain("c:/windows")
+    // On a file's row it goes into the folder the file is in.
+    await explorer.newFolder(NOTAS)
+    expect(fake.dialog.asked.at(-1)).toBe("mkdir C:\\Users\\test\\proyectos dir")
+    expect(fake.files.made.at(-1)).toBe("C:\\Users\\test\\proyectos\\Año 2025")
+    // Nothing is written over; a name the system takes no folder by is refused.
+    fake.existing.add("C:\\Users\\test\\proyectos\\facturas")
+    fake.dialog.answer = "mkdir ZmFjdHVyYXM="
+    await explorer.newFolder("C:/Users/test/proyectos")
+    expect(fake.files.made.length).toBe(2)
+    expect(fake.toasts.at(-1)).toBe("ya hay un facturas en esa carpeta.")
+    fake.dialog.answer = "name a:b"
+    await explorer.newFolder("C:/Users/test/proyectos")
+    expect(fake.files.made.length).toBe(2)
+    expect(fake.toasts.at(-1)).toContain("no creé la carpeta")
+    // Another machine's rows have no 📁: a press there does nothing.
+    await explorer.newFolder("mac:/Users/ana")
+    expect(fake.dialog.asked.at(-1)).toBe("mkdir C:\\Users\\test\\proyectos dir")
   })
 
   test("⊟ collapses every disk: the session's open down to its folder, the others to their root; the disk shown stays", async () => {

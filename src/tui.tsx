@@ -28,7 +28,7 @@ import {
   type FooterControl,
   type SpeechState,
 } from "./footer"
-import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, pasteCommand, renameCommand, trashCommand } from "./file-tools"
+import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, mkdirCommand, pasteCommand, renameCommand, trashCommand } from "./file-tools"
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
 import { createViewerReader, mediaSaid, popupCheckCommand, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
@@ -1485,6 +1485,10 @@ export default Plugin.define({
         const command = renameCommand(process.platform, native, name, target)
         return (await run(command.argv, command.env)).stdout.trim() === "renamed"
       },
+      mkdir: async (target) => {
+        const command = mkdirCommand(process.platform, target)
+        return (await run(command.argv, command.env)).stdout.trim() === "made"
+      },
       trash: async (native) => {
         const command = trashCommand(process.platform, native)
         return command !== undefined && (await run(command.argv, command.env)).stdout.trim() === "deleted"
@@ -2115,6 +2119,7 @@ export default Plugin.define({
         else if (kind === "path") void explorer.copyPath(path)
         else if (kind === "rename") void explorer.rename(path)
         else if (kind === "paste") void explorer.paste(path)
+        else if (kind === "mkdir") void explorer.newFolder(path)
         else if (kind === "work") {
           explorer.flash(`work:${path}`)
           void workIn(path)
