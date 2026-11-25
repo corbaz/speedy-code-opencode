@@ -49,7 +49,7 @@ import {
   type MenuState,
   type SetupCheck,
 } from "./menus"
-import { Narration, historyName, plain } from "./narration"
+import { Narration, SPEED, historyName, plain } from "./narration"
 import { createPolisher } from "./polish"
 import {
   DEFAULT_SETTINGS,
@@ -68,7 +68,7 @@ import {
   type SpeedySettings,
 } from "./settings"
 import { SOCIALS, accountLabel, accountUrl, accountsOf, networkOf, nextAccount, withoutEmptyAccounts } from "./socials"
-import { iconText } from "./icons"
+import { fontFolders, iconText, isNerdFontFile, startIcons } from "./icons"
 import { sessionRowsOf } from "./sessions"
 import { agentRowsOf } from "./agents"
 import { FONT_FAMILIES } from "./settings"
@@ -238,8 +238,9 @@ export default Plugin.define({
     }
 
     // What the Claude Code plugin keeps is brought in once: the voices, the microphone and the networks.
+    let importing: Promise<void> = Promise.resolve()
     if (!settings.imported) {
-      void (async () => {
+      importing = (async () => {
         let claude: unknown
         try {
           const dir = join(homedir(), ".claude", "plugins", "store")
@@ -253,6 +254,23 @@ export default Plugin.define({
         })
       })()
     }
+
+    // Nerd Fonts glyphs whenever a Nerd Font is installed, for this user or for all; emojis only where none is.
+    void importing.then(async () => {
+      let hasFont = false
+      for (const folder of fontFolders(process.platform, homedir(), process.env.LOCALAPPDATA)) {
+        if ((await readdir(folder).catch(() => [] as string[])).some(isNerdFontFile)) {
+          hasFont = true
+          break
+        }
+      }
+      const icons = startIcons(settings.icons, hasFont)
+      if (icons !== settings.icons) {
+        await update((draft) => {
+          draft.icons = icons
+        })
+      }
+    })
 
     const toast = (message: string, variant: "info" | "success" | "error" | "warning" = "info") =>
       context.ui.toast.show({ message: `speedy-code: ${message}`, variant })
@@ -438,8 +456,14 @@ export default Plugin.define({
       const voice = voiceForCode(settings.picks.active)
       const lang = settings.picks.active || "es"
       const wantsPopup = inPopup && (await hasPopup())
+      // A selection's row in the history is the one marked playing in the popup, as anywhere else.
+      const isSelection = isSelectionRead
+      const shownFrom = (file: string) => (isSelection ? file : "")
       // Said again where there is the popup: the file it was kept in plays there.
-      if (wantsPopup && kept.answer === answer && kept.lang === lang && (await playInViewer(kept.file))) return
+      if (wantsPopup && kept.answer === answer && kept.lang === lang && (await playInViewer(kept.file, shownFrom(kept.file)))) {
+        isSelectionRead = false
+        return
+      }
       const mine = ++narrating
       // The same answer in the same language keeps the file it was kept in: it is not kept again.
       if (kept.answer !== answer || kept.lang !== lang) kept = { answer, lang, file: "" }
@@ -461,7 +485,7 @@ export default Plugin.define({
       await stopClips()
       const isOnlyMade = await narration.narrate({ text, voice, isOnlyMade: wantsPopup })
       // Made: it plays in the popup at once, unless another narration was asked meanwhile.
-      if (isOnlyMade && mine === narrating) await playInViewer(kept.file)
+      if (isOnlyMade && mine === narrating) await playInViewer(kept.file, shownFrom(kept.file))
     }
 
     /** The prompt's text field, when it has the focus. */
@@ -1129,7 +1153,8 @@ export default Plugin.define({
         draft.clipNow = SELECTION_CLIP
       })
       isSelectionRead = true
-      void narrate(text).then(refreshClips)
+      // Made first, whole, then played in the viewer's popup with its bar and speeds, as an answer is.
+      void narrate(text, true).then(refreshClips)
       // The row is marked after the stops above cleared it.
       setMenus((draft) => {
         draft.clipNow = SELECTION_CLIP
@@ -1276,7 +1301,11 @@ export default Plugin.define({
       // Another file shown ends a narration sounding in the popup, with its popup.
       if (!control) popup.end()
       closeViewer()
-      const { argv, env } = viewerCommand(process.platform, script, path, PLUGIN_ROOT, pythonPath())
+      // The narrator's voice, for a narration's Resumen read aloud there (Escuchar), at the speed narrations take.
+      const { argv, env } = viewerCommand(process.platform, script, path, PLUGIN_ROOT, pythonPath(), {
+        voice: voiceForCode(settings.picks.active),
+        speed: SPEED,
+      })
       try {
         const child = spawn(argv[0] as string, argv.slice(1), {
           // With `control`, the popup's sound obeys that file's `pause` and `play`.

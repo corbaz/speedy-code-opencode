@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import { cells, footerControls } from "../src/footer"
-import { NERD_COLORS, NERD_ICONS, iconText, nerdText } from "../src/icons"
+import { NERD_COLORS, NERD_ICONS, fontFolders, iconText, isNerdFontFile, nerdText, startIcons } from "../src/icons"
 
 describe("the Nerd Fonts icons", () => {
   test("every glyph is one character of the basic private use area", () => {
@@ -65,5 +65,27 @@ describe("the footer with each icon set", () => {
     const on = footerControls({ ...base, listening: "on", icons: "nerd" }).find((control) => control.name === "mic")
     expect(on?.text).toBe("   ")
     expect(on?.color).toBe("#ff6b6b")
+  })
+})
+
+describe("the icons a session starts with", () => {
+  test("Nerd Fonts glyphs whenever a Nerd Font is installed, whatever was chosen before; else as chosen", () => {
+    expect(startIcons("emoji", true)).toBe("nerd")
+    expect(startIcons(undefined, true)).toBe("nerd")
+    expect(startIcons(undefined, false)).toBe("emoji")
+    expect(startIcons("emoji", false)).toBe("emoji")
+    // A terminal whose own font is a Nerd Font, with none installed apart.
+    expect(startIcons("nerd", false)).toBe("nerd")
+  })
+
+  test("a Nerd Font is looked for in the user's fonts and in the system's", () => {
+    expect(fontFolders("win32", "C:/Users/me", "C:/Users/me/AppData/Local")).toEqual([
+      "C:/Users/me/AppData/Local/Microsoft/Windows/Fonts",
+      "C:/Windows/Fonts",
+    ])
+    expect(fontFolders("darwin", "/Users/me")).toEqual(["/Users/me/Library/Fonts", "/Library/Fonts"])
+    expect(isNerdFontFile("SymbolsNerdFontMono-Regular.ttf")).toBe(true)
+    expect(isNerdFontFile("JetBrainsMonoNerdFont-Bold.ttf")).toBe(true)
+    expect(isNerdFontFile("consola.ttf")).toBe(false)
   })
 })

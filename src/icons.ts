@@ -81,3 +81,31 @@ export const NERD_COLORS: Readonly<Record<string, string>> = {
   reload: "#4dabf7",
   settings: "#ced4da",
 }
+
+/**
+ * The folders fonts are installed in, for this user and for all: where a Nerd Font is looked for.
+ */
+export function fontFolders(platform: string, home: string, localAppData = ""): string[] {
+  if (platform === "win32") {
+    const local = localAppData || `${home}/AppData/Local`
+    return [`${local}/Microsoft/Windows/Fonts`, "C:/Windows/Fonts"]
+  }
+  if (platform === "darwin") return [`${home}/Library/Fonts`, "/Library/Fonts"]
+  return [`${home}/.local/share/fonts`, "/usr/share/fonts"]
+}
+
+/**
+ * Whether a font file is a Nerd Font: the icons alone the setup installs (SymbolsNerdFontMono) or a text
+ * family with them (JetBrainsMonoNerdFont, MesloLGSNerdFont...).
+ */
+export function isNerdFontFile(name: string): boolean {
+  return /NerdFont/i.test(name)
+}
+
+/**
+ * The icons a session starts with: Nerd Fonts glyphs when a Nerd Font is installed, else as last chosen
+ * (glyphs too, for a terminal whose own font is a Nerd Font).
+ */
+export function startIcons(saved: unknown, hasFont: boolean): IconSet {
+  return hasFont || saved === "nerd" ? "nerd" : "emoji"
+}

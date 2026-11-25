@@ -16,7 +16,9 @@ export type ViewerScript = "view.ps1" | "view_file.ps1"
 /**
  * The command that shows `path`, and the environment it runs with. The path goes in by the environment
  * on Windows, never in a command: view.ps1 reads SPEEDY_IMAGE, view_file.ps1 SPEEDY_FILE, and reads a
- * PDF's text and lays out minified code with the engine's Python, SPEEDY_PYTHON.
+ * PDF's text and lays out minified code with the engine's Python, SPEEDY_PYTHON. With `narrator`, a
+ * narration's Resumen there reads its points aloud (Escuchar) with that voice, SPEEDY_VOICE, at that speed,
+ * SPEEDY_SPEED.
  */
 export function viewerCommand(
   platform: string,
@@ -24,7 +26,9 @@ export function viewerCommand(
   path: string,
   root: string,
   python: string,
+  narrator?: { voice: string; speed: number },
 ): { argv: string[]; env: Record<string, string> } {
+  const voice: Record<string, string> = narrator?.voice ? { SPEEDY_VOICE: narrator.voice, SPEEDY_SPEED: String(narrator.speed) } : {}
   if (platform === "win32") {
     const native = path.replace(/\//g, "\\")
     return {
@@ -37,7 +41,7 @@ export function viewerCommand(
         "-File",
         `${root.replace(/\\/g, "/")}/engine/${script}`,
       ],
-      env: { SPEEDY_FILE: native, SPEEDY_IMAGE: native, SPEEDY_PYTHON: python },
+      env: { SPEEDY_FILE: native, SPEEDY_IMAGE: native, SPEEDY_PYTHON: python, ...voice },
     }
   }
   // macOS: view.py and view_file.py draw the popups view.ps1 and view_file.ps1 draw on Windows. Where the
@@ -52,7 +56,7 @@ export function viewerCommand(
       "wait $viewer",
     ].join("\n")
     const popup = `${root}/engine/${script === "view.ps1" ? "view.py" : "view_file.py"}`
-    return { argv: ["/bin/sh", "-c", show], env: { SPEEDY_FILE: path, SPEEDY_IMAGE: path, SPEEDY_PYTHON: python, SPEEDY_POPUP: popup } }
+    return { argv: ["/bin/sh", "-c", show], env: { SPEEDY_FILE: path, SPEEDY_IMAGE: path, SPEEDY_PYTHON: python, SPEEDY_POPUP: popup, ...voice } }
   }
   return { argv: ["xdg-open", path], env: {} }
 }

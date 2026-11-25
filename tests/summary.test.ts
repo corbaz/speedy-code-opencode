@@ -38,4 +38,16 @@ describe("the player's Resumen: polish.py --summary", () => {
       rmSync(folder, { recursive: true, force: true })
     }
   })
+
+  test("Escuchar: polish.py --speech gives the points as sentences a voice reads, and their MP3 in the history", () => {
+    const points = "- Ya está el ícono `📁` para crear [carpetas](notas.md)\n- Se probó en **Windows**: 148/148\n\n- ¿Lo subo?"
+    const asked = Bun.spawnSync([python ?? "python", "-X", "utf8", join(engine, "polish.py"), "--speech", "/audio"], {
+      env: { ...process.env, SPEEDY_SUMMARY: points },
+    })
+    const said = JSON.parse(asked.stdout.toString("utf8"))
+    // No list marks, code marks, bold nor links; each point a sentence.
+    expect(said.text).toBe("Ya está el ícono 📁 para crear carpetas. Se probó en Windows: 148/148. ¿Lo subo?")
+    // Named as the mod names a narration: its start, then when it was made.
+    expect(said.file.replace(/\\/g, "/")).toMatch(/^\/audio\/Resumen-Ya-está-el-ícono-📁-para-crear-ca-\d\d-\d\d-\d\d_\d\d-\d\d-\d\d\.mp3$/)
+  })
 })

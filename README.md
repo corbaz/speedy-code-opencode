@@ -58,7 +58,7 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   (`GH`, `GH2`); one footer control opens them all.
 - The reply of the session on screen is read aloud when the narrator is on,
   through the original engine, with pause and resume. On Windows a narration kept (a row of the audio
-  menu, or ⏵ once the reply was read) plays in the viewer's popup, with its bar to seek back and forth. With the narrator on, an answer's narration is made whole first and then plays in that popup by itself, as soon as it is ready; the popup of a sound or a video has a switch for the speed, x0.5 x0.75 x1 x1.25 x1.5 x2; a narration's popup has **Resumen** after x2: Groq (the system's `GROQ_API_KEY`) sums the narrated text up as a list of points, shown in a popup of its own over the player, drawn as a Markdown preview, with Copiar (the clipboard and the prompt), the move mark and the close mark; pressed again, it shows the same points at once.
+  menu, or ⏵ once the reply was read) plays in the viewer's popup, with its bar to seek back and forth. With the narrator on, an answer's narration is made whole first and then plays in that popup by itself, as soon as it is ready; the popup of a sound or a video has a switch for the speed, x0.5 x0.75 x1 x1.25 x1.5 x2; a narration's popup has **Resumen** after x2: Groq (the system's `GROQ_API_KEY`) sums the narrated text up as a list of points, shown in a popup of its own over the player, drawn as a Markdown preview, with **Escuchar**, Copiar (the clipboard and the prompt), the move mark and the close mark; pressed again, it shows the same points at once. **Escuchar** reads those points aloud with the narrator's voice: they are made into one more narration, kept in the 📎 history, and play in the player in the narration's place; pressed again, it plays them again at once.
   The popup and the footer follow each other: ⏸ on the footer or on the row pauses the popup, and a pause
   pressed in the popup shows on both. Every narration is kept under
   `~/.config/opencode/speedy-code/audio` from the moment it starts, whole even when it is stopped halfway,
@@ -66,6 +66,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   never sent to be translated.
 - **leer selección** in the audio menu reads the newer of the text selected with the mouse and the
   clipboard's, as they are when it is pressed, so a text copied by any means while the menu is open is read.
+  Where there is the viewer's popup it is made whole first and plays there, with its bar, its speeds and
+  Resumen, as an answer does.
   What it reads is in the history at once, and that row is the one playing (⏸ while it sounds, ⏵ paused);
   the selection's own row stays ready for the next text. Clearing the history blanks it too, and passes over
   the text the clipboard and the selection held then.
@@ -75,7 +77,8 @@ Palette commands mirror the main ones: `speedy-code: configuración`, `voces`,
   anywhere. What it hears is written into the prompt.
 - The pen corrects what is written in the prompt.
 - Two icon sets for the footer, the menus and the status line: emojis, which every terminal has, and Nerd Fonts glyphs, one color each and all
-  the same width. ⚙️ → **Barra de estado** → **Usar Nerd Fonts** switches; the row shows five glyphs
+  the same width. A session starts with the glyphs whenever a Nerd Font is installed (for the user or for
+  all); with none, as last chosen. ⚙️ → **Barra de estado** → **Usar Nerd Fonts** switches; the row shows five glyphs
   to tell whether the terminal draws them. The setup installs Symbols Nerd Font Mono in the user's
   fonts; a terminal whose font is not a Nerd Font, and that does not fall back to the fonts
   installed, needs a Nerd Font picked in its settings.

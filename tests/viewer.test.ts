@@ -23,6 +23,10 @@ describe("viewerCommand", () => {
     const image = viewerCommand("win32", "view.ps1", "C:\\images\\a.png", "C:/plugin", "python")
     expect(image.argv.at(-1)).toBe("C:/plugin/engine/view.ps1")
     expect(image.env.SPEEDY_IMAGE).toBe("C:\\images\\a.png")
+    // With the narrator's voice, a narration's Resumen can read its points aloud there, at its speed.
+    const narrator = { voice: "es-AR-ElenaNeural", speed: 1.3 }
+    expect(viewerCommand("win32", "view_file.ps1", "C:/a.mp3", "C:/plugin", "python", narrator).env).toMatchObject({ SPEEDY_VOICE: "es-AR-ElenaNeural", SPEEDY_SPEED: "1.3" })
+    expect(viewerCommand("darwin", "view_file.ps1", "/a.mp3", "/plugin", "python", narrator).env).toMatchObject({ SPEEDY_VOICE: "es-AR-ElenaNeural", SPEEDY_SPEED: "1.3" })
   })
 
   test("macOS shows a file in the engine's popups, and in Quick Look where they do not come up", () => {
