@@ -461,7 +461,7 @@ export function fileNameLabel(row: TreeRow, width: number): string {
  * A file's tools as its row draws them: each its glyph or emoji and its color, the one just pressed green.
  * 📥 is lit only while 📋 has taken a file or a folder to paste (`hasClip`). On a disk's root (`isDisk`) 📋, ✏
  * and 🗑 are grey. 📍 is on a folder of this machine alone (`isWorkable`); elsewhere its two cells are empty,
- * `isNone`, and a press there does nothing. 📁 is on this machine's rows alone (`isMine`), empty elsewhere.
+ * `isNone`, and a press there does nothing.
  */
 export function fileTools(
   icons: IconSet,
@@ -470,10 +470,9 @@ export function fileTools(
   hasClip = false,
   isDisk = false,
   isWorkable = false,
-  isMine = true,
 ): Array<{ kind: FileToolKind; label: string; gap: number; color: string; isNone: boolean }> {
   return FILE_TOOLS.map(([kind, emoji, glyph, color], index) => {
-    if ((kind === "work" && !isWorkable) || (kind === "mkdir" && !isMine)) return { kind, label: "  ", gap: 2, color: PASTE_IDLE_COLOR, isNone: true }
+    if (kind === "work" && !isWorkable) return { kind, label: "  ", gap: 2, color: PASTE_IDLE_COLOR, isNone: true }
     const isIdle = (kind === "paste" && !hasClip) || (isDisk && DISK_IDLE_TOOLS.includes(kind))
     // An emoji, or a glyph with the cell it spills over: two cells, the tool's own.
     const icon = icons === "nerd" ? `${glyph}\u00a0` : kind === "paste" && isIdle ? PASTE_IDLE_MARK : emoji
@@ -860,7 +859,6 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async newFolder(path) {
       forget()
-      if (remoteOf(path)) return
       flash(`mkdir:${path}`)
       const folder = (await io.isDir(path).catch(() => false)) ? slashed(path) : folderOf(slashed(path))
       const name = newNameOf(await io.ask("mkdir", nativeOf(folder, platform), "dir")).trim()

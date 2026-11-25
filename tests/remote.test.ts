@@ -98,6 +98,31 @@ describe("another machine's disk, reached by ssh", () => {
     expect([remoteAnswer(""), remoteAnswer("no json")]).toEqual([undefined, undefined])
   })
 
+  test("📁 makes a folder there by remote.py (`mkdir`): the dialog shows the folder as the explorer writes it; a name taken is said", async () => {
+    const w = world()
+    await w.explorer.open("C:/")
+    await w.explorer.pickDrive("mac:/")
+    w.answer.says = "mkdir Rm90b3M="
+    w.across.says = "made"
+    await w.explorer.newFolder("mac:/Users")
+    expect(w.dialogs.at(-1)).toBe("mkdir")
+    expect(w.ran.at(-1)).toBe("mkdir HOST=mac PATH=/Users/Fotos")
+    expect(w.toasts.at(-1)).toBe("se creó la carpeta Fotos en Users.")
+    // On a file's row, in the folder it is in.
+    await w.explorer.newFolder("mac:/nota.md")
+    expect(w.ran.at(-1)).toBe("mkdir HOST=mac PATH=/Fotos")
+    // A name there already is not made again; what remote.py could not make is said.
+    const made = w.ran.length
+    w.answer.says = "mkdir bm90YS5tZA=="
+    await w.explorer.newFolder("mac:/")
+    expect(w.ran.length).toBe(made)
+    expect(w.toasts.at(-1)).toBe("ya hay un nota.md en esa carpeta.")
+    w.answer.says = "mkdir Rm90b3M="
+    w.across.says = "error"
+    await w.explorer.newFolder("mac:/Users")
+    expect(w.toasts.at(-1)).toBe("no pude crear la carpeta Fotos.")
+  })
+
   test("its disk stands after this machine's, and its folders are read there", async () => {
     const w = world()
     await w.explorer.open("C:/")

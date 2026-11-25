@@ -193,8 +193,8 @@ describe("explorer helpers", () => {
     expect(fileTools("nerd", "", "C:/", true, true, true).map((tool) => tool.color)).toEqual(["#ffd43b", "#495057", "#63e6be", "#495057", "#495057", "#ffa94d", "#51cf66"])
     // The seven tools, and two empty cells after them that part the last one from the scroll bar.
     expect(FILE_TOOLS_WIDTH).toBe(1 + 2 + 6 * 4 + 2)
-    // 📁 makes a folder on this machine alone: on another machine's rows its two cells are empty.
-    expect(fileTools("emoji", "", "mac:/Users/ana", false, false, false, false)[0]).toMatchObject({ kind: "mkdir", label: "  ", isNone: true })
+    // 📁 makes a folder on another machine too: its rows have it.
+    expect(fileTools("emoji", "", "mac:/Users/ana")[0]).toMatchObject({ kind: "mkdir", label: "📁", isNone: false })
     // A folder's row is laid out as a file's: its open mark and name, filled up to the same four tools.
     const folder = { path: "C:/x/docs", name: "docs", depth: 1, kind: "dir" as const, isOpen: false, isHere: false }
     expect(fileNameLabel(folder, 40)).toBe("  ▸ docs".padEnd(40 - FILE_TOOLS_WIDTH))    // The tool just pressed is green, with no fill; the others keep their colors.
@@ -726,9 +726,6 @@ describe("each file's tools", () => {
     await explorer.newFolder("C:/Users/test/proyectos")
     expect(fake.files.made.length).toBe(2)
     expect(fake.toasts.at(-1)).toContain("no creé la carpeta")
-    // Another machine's rows have no 📁: a press there does nothing.
-    await explorer.newFolder("mac:/Users/ana")
-    expect(fake.dialog.asked.at(-1)).toBe("mkdir C:\\Users\\test\\proyectos dir")
   })
 
   test("⊟ collapses every disk: the session's open down to its folder, the others to their root; the disk shown stays", async () => {

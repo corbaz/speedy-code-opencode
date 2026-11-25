@@ -11,7 +11,7 @@ import { remoteOf, type ExplorerIO, type FsEntry } from "./explorer"
 import type { FileCommand } from "./file-tools"
 
 /** What remote.py is asked: the machines there are, a folder's entries, what a path is, a file's copy here, a search. */
-export type RemoteMode = "hosts" | "mounts" | "list" | "stat" | "fetch" | "find" | "home" | "pause" | "pull" | "push" | "paste"
+export type RemoteMode = "hosts" | "mounts" | "list" | "stat" | "fetch" | "find" | "home" | "pause" | "pull" | "push" | "paste" | "mkdir"
 
 /** remote.py run for one asking; the machine, the path and the pattern go in by the environment. */
 export function remoteCommand(mode: RemoteMode, pluginRoot: string, python: string, env: Record<string, string> = {}): FileCommand {
@@ -36,9 +36,9 @@ export interface RemoteRunner {
   ask(mode: "hosts" | "mounts" | "list" | "stat" | "fetch" | "home", host: string, path: string): Promise<unknown>
   /**
    * remote.py run for what goes by the environment alone: a search held or let go (`pause`), a file or a folder
-   * from the machine here (`pull`), from here to it (`push`), or within it (`paste`).
+   * from the machine here (`pull`), from here to it (`push`), or within it (`paste`), a folder made there (`mkdir`).
    */
-  run(mode: "pause" | "pull" | "push" | "paste", env: Record<string, string>): Promise<unknown>
+  run(mode: "pause" | "pull" | "push" | "paste" | "mkdir", env: Record<string, string>): Promise<unknown>
   /** A search of the machine's disk; `token` is what it is held by. */
   find(host: string, pattern: string, most: number, token: string, onLine: (line: string) => void, onEnd: () => void): () => void
 }
@@ -82,6 +82,13 @@ export function withRemotes(io: ExplorerIO, runner: RemoteRunner, platform: stri
       ).catch(() => undefined)
       const said = field(answer, "said")
       return said === "kept" ? "kept" : said === "done"
+    },
+    async mkdir(nativeTarget) {
+      const remote = remoteOf(nativeTarget)
+      if (!remote) return io.mkdir(nativeTarget)
+      // 📁 there: remote.py makes it by ssh, writing over nothing.
+      const answer = await runner.run("mkdir", { SPEEDY_HOST: remote.host, SPEEDY_PATH: remote.path }).catch(() => undefined)
+      return field(answer, "said") === "made"
     },
     hold(isHeld) {
       if (!searching) return io.hold?.(isHeld)

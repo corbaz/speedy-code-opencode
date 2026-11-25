@@ -178,9 +178,8 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           </text>
         </box>
         <box flexDirection="row" flexShrink={0} width={FILE_TOOLS_WIDTH}>
-          {/* 📍 is on a folder of this machine alone: the session works on no file, nor on another machine. 📁
-              makes a folder on this machine alone. */}
-          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip), isFolder && row.depth === 0, isFolder && !remoteOf(row.path), !remoteOf(row.path))}>
+          {/* 📍 is on a folder of this machine alone: the session works on no file, nor on another machine. */}
+          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip), isFolder && row.depth === 0, isFolder && !remoteOf(row.path))}>
             {(tool) => (
               <>
                 {/* A plain gap before each icon takes no press: one a little off an icon does nothing. */}
