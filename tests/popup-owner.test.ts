@@ -12,7 +12,17 @@ describe("the popups belong to the terminal they were opened from", () => {
       expect(text).toContain("Set-PopupOwner $form")
       expect(text).toContain("$area = Get-PopupArea")
       expect(text).not.toContain("$form.TopMost = $true")
+      // The terminal's name at the left of the top line.
+      expect(text).toContain("Add-TerminalLabel")
     }
+    // With no terminal found the Mac pages carry no name; with one, at the left of the top line.
+    const said = Bun.spawnSync([
+      python ?? "python",
+      "-c",
+      "import sys; sys.path.insert(0, sys.argv[1]); import popup; print('<div id=\"terminal-name\"' in popup.page('dialog.html'), popup.terminal_side()); popup.terminal_name = lambda: 'iTerm2 <x>'; print(popup.page('dialog.html').count('<div id=\"terminal-name\" class=\"on-line\">iTerm2 &lt;x&gt;</div>'))",
+      engine,
+    ])
+    expect(said.stdout.toString().trim().split(/\r?\n/)).toEqual(["False 0", "1"])
     // owner.ps1 reads the window of the mod's console, and lets go of that console at once.
     const owner = await Bun.file(join(engine, "owner.ps1")).text()
     expect(owner).toContain("AttachConsole($id)")
