@@ -30,6 +30,7 @@ import {
   fileNameLabel,
   fileTools,
   gotoHint,
+  legendLines,
   rowAction,
   rowLabel,
   treeRows,
@@ -286,6 +287,28 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           onPress={() => api.pauseFilter()}
         />
       </box>
+      {/* The legend: each tool of the rows, its icon in its color and what it does in a word. */}
+      <For each={legendLines(room(), api.icons())}>
+        {(line) => (
+          <box flexDirection="row" flexShrink={0}>
+            <For each={line}>
+              {(item, index) => (
+                <>
+                  <text wrapMode="none" selectable={false} flexShrink={0}>
+                    {index() > 0 ? "  " : ""}
+                  </text>
+                  <text wrapMode="none" selectable={false} flexShrink={0} fg={item.color} attributes={BOLD}>
+                    {item.icon}
+                  </text>
+                  <text wrapMode="none" selectable={false} flexShrink={0} attributes={DIM}>
+                    {item.word}
+                  </text>
+                </>
+              )}
+            </For>
+          </box>
+        )}
+      </For>
       <text
         wrapMode="none"
         selectable={false}

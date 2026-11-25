@@ -29,6 +29,7 @@ import {
   windowTop,
   type ExplorerIO,
   type FsEntry,
+  legendLines,
 } from "../src/explorer"
 import { cells, folderCommand } from "../src/footer"
 import { promptInsertion } from "../src/viewer"
@@ -852,5 +853,18 @@ describe("the explorer's filter", () => {
     expect(explorer.state().filter?.isBusy).toBe(false)
     explorer.filter("  ")
     expect(explorer.state().filter).toBeUndefined()
+  })
+})
+
+describe("the legend under the explorer's filter", () => {
+  test("each tool's icon in its color and what it does in a word, in the rows' order, on as many lines as the width asks", () => {
+    const words = (width: number) => legendLines(width, "emoji").map((line) => line.map((item) => `${item.icon}${item.word}`).join("  "))
+    expect(words(200)).toEqual(["📁 carpeta  📋 copiar  🔗 ruta  ✏  renombrar  🗑 borrar  📥 pegar  📍 trabajar"])
+    expect(words(48)).toEqual(["📁 carpeta  📋 copiar  🔗 ruta  ✏  renombrar", "🗑 borrar  📥 pegar  📍 trabajar"])
+    // No line is wider than the width, but for one tool alone.
+    for (const line of words(20)) expect(cells(line) <= 20 || !line.includes("  ")).toBe(true)
+    // Its colors are the rows' own; with Nerd Fonts, the glyphs on two cells.
+    expect(legendLines(200, "emoji")[0]?.map((item) => item.color)).toEqual(["#ffd43b", "#74c0fc", "#63e6be", "#b197fc", "#ff8787", "#ffa94d", "#51cf66"])
+    for (const item of legendLines(200, "nerd")[0] ?? []) expect(cells(item.icon)).toBe(2)
   })
 })

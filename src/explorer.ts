@@ -427,6 +427,39 @@ export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, s
   ["work", "📍", "\uf041", "#51cf66"],
 ]
 
+/** What each tool does, in a word, for the legend under the explorer's filter. */
+export const TOOL_LEGEND: Readonly<Record<FileToolKind, string>> = {
+  mkdir: "carpeta",
+  copy: "copiar",
+  path: "ruta",
+  rename: "renombrar",
+  trash: "borrar",
+  paste: "pegar",
+  work: "trabajar",
+}
+
+/**
+ * The legend's lines in `width` cells, the tools in the rows' order: each its icon on two cells, in its color,
+ * a space and its word, with two cells between one and the next.
+ */
+export function legendLines(width: number, icons: IconSet): Array<Array<{ kind: FileToolKind; icon: string; word: string; color: string }>> {
+  const lines: Array<Array<{ kind: FileToolKind; icon: string; word: string; color: string }>> = [[]]
+  let used = 0
+  for (const [kind, emoji, glyph, color] of FILE_TOOLS) {
+    const raw = icons === "nerd" ? `${glyph}\u00a0` : emoji
+    const item = { kind, icon: raw + " ".repeat(Math.max(0, 2 - cells(raw))), word: ` ${TOOL_LEGEND[kind]}`, color }
+    const size = 3 + cells(TOOL_LEGEND[kind])
+    if (used > 0 && used + 2 + size > width) {
+      lines.push([item])
+      used = size
+    } else {
+      lines[lines.length - 1]?.push(item)
+      used = used > 0 ? used + 2 + size : size
+    }
+  }
+  return lines
+}
+
 /** 📥 while 📋 took nothing: grey, and with emoji a plain mark, as an emoji keeps its own colors. */
 export const PASTE_IDLE_MARK = "↧"
 export const PASTE_IDLE_COLOR = "#495057"
