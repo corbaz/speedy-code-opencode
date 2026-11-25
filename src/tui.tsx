@@ -756,6 +756,8 @@ export default Plugin.define({
       }
       try {
         await (context.client.session as unknown as { move: (input: { sessionID: string; directory: string }) => Promise<void> }).move({ sessionID: route.sessionID, directory: folder })
+        // The explorer goes with it.
+        await showExplorer(folder)
       } catch (error) {
         toast(`no pude pasar a ${folder}: ${error instanceof Error ? error.message : String(error)}`, "error")
       }
@@ -1542,9 +1544,20 @@ export default Plugin.define({
         setHomeExplorer(false)
         return
       }
-      const folder = context.location?.directory ?? process.cwd()
+      await showExplorer()
+    }
+
+    /**
+     * Opens the explorer on `folder` (the session's, when none is given), read afresh down to it, its filter
+     * off; open already, it is drawn again for that folder. On the home screen the mod draws it at the right.
+     */
+    const showExplorer = async (folder = sessionFolder()): Promise<void> => {
+      explorer.clearFilter()
       await explorer.open(folder)
-      if (!context.ui.panel.open(EXPLORER_PANEL)) setHomeExplorer(true)
+      const route = context.ui.router.current() as { type?: string; sessionID?: string } | undefined
+      const panel = context.ui.panel.current()
+      const isOpen = panel?.name === EXPLORER_PANEL && route?.type === "session" && panel.sessionID === route.sessionID
+      setHomeExplorer(!(isOpen || context.ui.panel.open(EXPLORER_PANEL)))
     }
     const runControl = async (id: string): Promise<void> => {
       if (id.startsWith("social:")) return openSocial(id.slice("social:".length))
@@ -2156,6 +2169,18 @@ export default Plugin.define({
       if (!homeExplorer() || route?.type === "home") return
       setHomeExplorer(false)
       context.ui.panel.open(EXPLORER_PANEL)
+    })
+    // The explorer is open from the start, and again on each session shown (a new one, another one, one
+    // moved), on that session's folder.
+    let explorerFor = ""
+    createEffect(() => {
+      const route = context.ui.router.current() as { type?: string; sessionID?: string } | undefined
+      const folder = sessionFolder()
+      const key = `${route?.type ?? ""}:${route?.sessionID ?? ""}:${folder}`
+      if (key === explorerFor) return
+      explorerFor = key
+      // After the screen it goes to is drawn: its side panel is there to open then.
+      setTimeout(() => void showExplorer(folder).catch(() => {}), 0)
     })
     const disposeHomeExplorer = context.ui.slot({
       append: "app",
