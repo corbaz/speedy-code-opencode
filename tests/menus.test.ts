@@ -28,7 +28,7 @@ describe("menu state", () => {
   })
 
   test("the installer steps are the ones the installer reports", () => {
-    expect(SETUP_STEPS.map(([name]) => name)).toEqual(["uv", "python", "packages", "model", "mics", "voices", "sidebar", "font", "fonts", "groq"])
+    expect(SETUP_STEPS.map(([name]) => name)).toEqual(["uv", "python", "packages", "model", "mics", "voices", "sidebar", "font", "fonts", "ffmpeg", "git", "bun", "remotes", "access", "groq"])
   })
 })
 

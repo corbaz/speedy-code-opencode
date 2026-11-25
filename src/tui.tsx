@@ -878,6 +878,17 @@ export default Plugin.define({
           ? { state: "ok", detail: fonts.slice(3) }
           : { state: "fail", detail: fonts.startsWith("fail ") ? fonts.slice(5) : "sin revisar" },
       )
+      // What the plugin uses beside its own Python, as extras.py finds it. The other machines are tried by the
+      // setup alone: that goes over the network.
+      for (const name of ["ffmpeg", "git", "bun", "access"]) {
+        const said = (await run([python, join(PLUGIN_ROOT, "setup", "extras.py"), name])).stdout.trim()
+        setCheck(
+          name,
+          said.startsWith("ok ")
+            ? { state: "ok", detail: said.slice(3) }
+            : { state: "fail", detail: said.startsWith("fail ") ? said.slice(5) : "sin revisar" },
+        )
+      }
       setCheck(
         "groq",
         process.env.GROQ_API_KEY ? { state: "ok", detail: "presente" } : { state: "fail", detail: "falta GROQ_API_KEY" },

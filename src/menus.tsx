@@ -101,6 +101,11 @@ export const SETUP_STEPS: ReadonlyArray<readonly [string, string]> = [
   ["sidebar", "Barra lateral de OpenCode, oculta"],
   ["font", "Fuente de iconos (Symbols Nerd Font)"],
   ["fonts", "Fuentes de texto (JetBrains Mono, Meslo)"],
+  ["ffmpeg", "ffmpeg (videos que el sistema no reproduce)"],
+  ["git", "git (la rama y la actualización)"],
+  ["bun", "bun (arma el plugin)"],
+  ["remotes", "Otras máquinas por ssh (opcional)"],
+  ["access", "Accesibilidad (macOS: pegar imágenes y ⏎)"],
   ["groq", "Clave de Groq (la pluma, opcional)"],
 ]
 
