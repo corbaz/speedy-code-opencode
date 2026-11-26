@@ -422,18 +422,18 @@ export type FileToolKind = "mkdir" | "copy" | "path" | "rename" | "trash" | "pas
 export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, string]> = [
   ["mkdir", "📁", "\uea80", "#ffd43b"],
   ["copy", "📋", "", "#74c0fc"],
+  ["paste", "📥", "\uf0ea", "#ffa94d"],
   ["path", "🔗", "", "#63e6be"],
   ["rename", "✏", "", "#b197fc"],
   ["trash", "🗑", "", "#ff8787"],
-  ["paste", "📥", "\uf0ea", "#ffa94d"],
   ["work", "📍", "\uf041", "#51cf66"],
 ]
 
 /**
- * What a tool of a row does, as the pointer on it says, dark on yellow beside it as the footer's controls do
- * (⚙ → Ver labels): for a file or a folder, and 📥 for what 📋 took. A tool grey on a disk's root says why.
+ * What a tool of a row does, as the pointer on it says on the line above the row, dark on the tool's own color
+ * (⚙ → Ver labels): for a file or a folder; 📥 pastes a folder alone. A tool grey on a disk's root says why.
  */
-export function toolTip(kind: FileToolKind, isFolder: boolean, clipKind?: "dir" | "file", isDisk = false): string {
+export function toolTip(kind: FileToolKind, isFolder: boolean, isDisk = false): string {
   const what = isFolder ? "carpeta" : "archivo"
   if (isDisk && DISK_IDLE_TOOLS.includes(kind)) return "no se hace con un disco"
   switch (kind) {
@@ -448,7 +448,7 @@ export function toolTip(kind: FileToolKind, isFolder: boolean, clipKind?: "dir" 
     case "trash":
       return `Borrar ${what}`
     case "paste":
-      return clipKind ? `Pegar ${clipKind === "dir" ? "carpeta" : "archivo"}` : "Pegar: copiá algo con 📋 antes"
+      return "Pegar carpeta"
     case "work":
       return "Cambiar espacio de trabajo"
   }
@@ -960,7 +960,8 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     async paste(path) {
       forget()
       const clip = state.clip
-      if (!clip) return io.toast("primero copiá un archivo o una carpeta con 📋.", true)
+      // 📥 pastes a folder alone: a file 📋 took stays on the clipboard, for the system's own paste.
+      if (!clip || state.clipKind !== "dir") return io.toast("primero copiá una carpeta con 📋.", true)
       const name = nameOf(clip)
       if (!(await io.exists(nativeOf(clip, platform)))) {
         set((now) => ({ ...now, clip: undefined, clipKind: undefined }))

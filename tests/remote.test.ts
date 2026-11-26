@@ -32,7 +32,8 @@ function world(hosts: string[] = ["mac"], home = "/") {
       if (path !== "C:/") throw new Error("EPERM")
       return [{ name: "notas.txt", kind: "file", isLink: false }]
     },
-    isDir: async (path) => path === "C:/",
+    // A folder of this machine, to take with 📋 and paste there with 📥.
+    isDir: async (path) => path === "C:/" || path === "C:/fotos",
     openFolder: () => {},
     view: (path) => void viewed.push(path),
     copyFile: async (native) => (copied.push(native), true),
@@ -43,7 +44,7 @@ function world(hosts: string[] = ["mac"], home = "/") {
     rename: async () => false,
     mkdir: async () => false,
     trash: async () => false,
-    exists: async (native) => native === "C:\\notas.txt",
+    exists: async (native) => native === "C:\\notas.txt" || native === "C:\\fotos",
     toast: (message) => void toasts.push(message),
     wait: async () => {},
     find: () => () => {},
@@ -156,15 +157,20 @@ describe("another machine's disk, reached by ssh", () => {
       await windows.explorer.pickDrive("windows:/")
       expect(windows.rows()).toEqual(["windows:/", "  Users", "  nota.md"])
       expect(windows.explorer.state().found).toBeUndefined()
-      // 📥 goes across machines, copied or moved as the dialog said. From here to the machine (`push`):
+      // 📥 goes across machines, copied or moved as the dialog said, a folder alone: a file taken is not pasted.
       await w.explorer.copyFile("C:/notas.txt")
+      await w.explorer.paste("mac:/Users")
+      expect(w.toasts.at(-1)).toBe("primero copiá una carpeta con 📋.")
+      expect(w.dialogs).toEqual([])
+      // From here to the machine (`push`):
+      await w.explorer.copyFile("C:/fotos")
       w.answer.says = "move"
       await w.explorer.paste("mac:/Users")
       expect(w.dialogs).toEqual(["paste"])
-      expect(w.ran).toEqual(["push HOST=mac FILE=C:\\notas.txt PATH=/Users/notas.txt VERB=move"])
-      expect(w.toasts.slice(-2)).toEqual(["moviendo notas.txt…", "notas.txt se movió a Users."])
+      expect(w.ran).toEqual(["push HOST=mac FILE=C:\\fotos PATH=/Users/fotos VERB=move"])
+      expect(w.toasts.slice(-2)).toEqual(["moviendo fotos…", "fotos se movió a Users."])
       expect(w.explorer.state().clip).toBeUndefined()
-      // From the machine here (`pull`): a file, and a folder, which 📋 takes without the clipboard.
+      // From the machine here (`pull`): a folder, which 📋 takes without the clipboard.
       await w.explorer.copyFile("mac:/Users")
       expect([w.explorer.state().clip, w.toasts.at(-1)]).toEqual(["mac:/Users", "la carpeta Users de mac está lista para pegar con 📥."])
       w.answer.says = "copy"
@@ -175,18 +181,18 @@ describe("another machine's disk, reached by ssh", () => {
       // Within the machine (`paste`), but not into itself.
       await w.explorer.paste("mac:/Users/ana")
       expect(w.toasts.at(-1)).toBe("Users no puede ir dentro de sí misma.")
-      await w.explorer.copyFile("mac:/nota.md")
-      await w.explorer.paste("mac:/Users/ana")
-      expect(w.ran.at(-1)).toBe("paste HOST=mac PATH=/nota.md TARGET=/Users/ana/nota.md VERB=copy")
-      // Copied, but not removed where it was: it says so, and the file stays taken. What failed says so too.
+      await w.explorer.copyFile("mac:/Users/ana")
+      await w.explorer.paste("mac:/")
+      expect(w.ran.at(-1)).toBe("paste HOST=mac PATH=/Users/ana TARGET=/ana VERB=copy")
+      // Copied, but not removed where it was: it says so, and the folder stays taken. What failed says so too.
       w.answer.says = "move"
       w.across.says = "kept"
       await w.explorer.paste("C:/")
-      expect(w.toasts.at(-1)).toBe("nota.md se copió a C:, pero no pude quitarlo de donde estaba.")
-      expect(w.explorer.state().clip).toBe("mac:/nota.md")
+      expect(w.toasts.at(-1)).toBe("ana se copió a C:, pero no pude quitarlo de donde estaba.")
+      expect(w.explorer.state().clip).toBe("mac:/Users/ana")
       w.across.says = "error"
       await w.explorer.paste("C:/")
-      expect(w.toasts.at(-1)).toBe("no pude mover nota.md.")
+      expect(w.toasts.at(-1)).toBe("no pude mover ana.")
       // Not from one machine to another one.
       await w.explorer.paste("otra:/tmp")
       expect(w.toasts.at(-1)).toBe("de mac a otra no se pega: traelo primero a esta máquina.")

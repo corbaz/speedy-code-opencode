@@ -163,7 +163,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const fileRow = (row: TreeRow) => {
     const isFolder = row.kind === "dir"
     // What a tool of this row does: for a folder or a file, 📥 for what 📋 took; grey on a disk's root, why.
-    const tipOf = (kind: FileToolKind) => toolTip(kind, isFolder, api.state().clipKind, isFolder && row.depth === 0)
+    const tipOf = (kind: FileToolKind) => toolTip(kind, isFolder, isFolder && row.depth === 0)
     const tint = isFolder ? (row.isHere ? FOLDER_COLOR : DIR_COLOR) : VIEWABLE_COLOR
     const fill = isFolder ? DIR_COLOR : VIEWABLE_COLOR
     // The path the field found keeps the fill until the pointer is on another row: the fill follows the pointer.
@@ -196,7 +196,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         </box>
         <box flexDirection="row" flexShrink={0} width={FILE_TOOLS_WIDTH}>
           {/* 📍 is on a folder of this machine alone: the session works on no file, nor on another machine. */}
-          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip), isFolder && row.depth === 0, isFolder && !remoteOf(row.path), isFolder)}>
+          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip) && api.state().clipKind === "dir", isFolder && row.depth === 0, isFolder && !remoteOf(row.path), isFolder)}>
             {(tool, index) => (
               <>
                 {/* A plain gap before each icon takes no press: one a little off an icon does nothing. */}

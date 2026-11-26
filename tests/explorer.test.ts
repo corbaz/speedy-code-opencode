@@ -178,31 +178,32 @@ describe("explorer helpers", () => {
       // 📁 makes a folder there: in a folder, inside it; on a file, in its folder.
       ["mkdir", "📁", 2, 1, "#ffd43b"],
       ["copy", "📋", 2, 2, "#74c0fc"],
+      // 📥, after 📋, is grey, a plain mark, until 📋 took a folder to paste; then it is lit.
+      ["paste", "↧", 2, 2, "#495057"],
       ["path", "🔗", 2, 2, "#63e6be"],
       ["rename", "✏", 2, 2, "#b197fc"],
       ["trash", "🗑", 2, 2, "#ff8787"],
-      // 📥 is grey, a plain mark, until 📋 took a file or a folder to paste; then it is lit.
-      ["paste", "↧", 2, 2, "#495057"],
       // 📍, the session goes to work there, is a folder's alone: a file has its two cells empty, pressed for nothing.
       ["work", "", 2, 2, "#495057"],
     ])
     expect(fileTools("emoji", "", row.path).at(-1)?.isNone).toBe(true)
     expect(fileTools("emoji", "", "C:/x/docs", false, false, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color, tool.isNone]).at(-1)).toEqual(["work", "📍", "#51cf66", false])
-    expect(fileTools("emoji", "", row.path, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color]).at(-2)).toEqual(["paste", "📥", "#ffa94d"])
-    expect(fileTools("nerd", "", "C:/x/docs", false, false, true).map((tool) => tool.label)).toEqual(["\uea80\u00a0", "\uf0c5\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf0ea\u00a0", "\uf041\u00a0"])
-    expect([fileTools("nerd", "", row.path).at(-2)?.color, fileTools("nerd", "", row.path, true).at(-2)?.color]).toEqual(["#495057", "#ffa94d"])
+    expect(fileTools("emoji", "", row.path, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color])[2]).toEqual(["paste", "📥", "#ffa94d"])
+    expect(fileTools("nerd", "", "C:/x/docs", false, false, true).map((tool) => tool.label)).toEqual(["\uea80\u00a0", "\uf0c5\u00a0", "\uf0ea\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf041\u00a0"])
+    expect([fileTools("nerd", "", row.path)[2]?.color, fileTools("nerd", "", row.path, true)[2]?.color]).toEqual(["#495057", "#ffa94d"])
     // On a disk's root 📋, ✏ and 🗑 are grey: a disk is not copied, renamed or trashed; 🔗 and 📥 are as on any row.
-    expect(fileTools("nerd", "", "C:/", true, true, true).map((tool) => tool.color)).toEqual(["#ffd43b", "#495057", "#63e6be", "#495057", "#495057", "#ffa94d", "#51cf66"])
+    expect(fileTools("nerd", "", "C:/", true, true, true).map((tool) => tool.color)).toEqual(["#ffd43b", "#495057", "#ffa94d", "#63e6be", "#495057", "#495057", "#51cf66"])
     // The seven tools, and two empty cells after them that part the last one from the scroll bar.
     expect(FILE_TOOLS_WIDTH).toBe(1 + 2 + 6 * 4 + 2)
     // 📁 makes a folder on another machine too: its rows have it.
     expect(fileTools("emoji", "", "mac:/Users/ana")[0]).toMatchObject({ kind: "mkdir", label: "📁", isNone: false })
     // A folder's row is laid out as a file's: its open mark and name, filled up to the same four tools.
     const folder = { path: "C:/x/docs", name: "docs", depth: 1, kind: "dir" as const, isOpen: false, isHere: false }
-    expect(fileNameLabel(folder, 40)).toBe("  ▸ docs".padEnd(40 - FILE_TOOLS_WIDTH))    // The tool just pressed is green, with no fill; the others keep their colors.
+    expect(fileNameLabel(folder, 40)).toBe("  ▸ docs".padEnd(40 - FILE_TOOLS_WIDTH))
+    // The tool just pressed is green, with no fill; the others keep their colors.
     const flashed = fileTools("emoji", `path:${row.path}`, row.path)
-    expect(flashed.map((tool) => tool.color)).toEqual(["#ffd43b", "#74c0fc", "#51cf66", "#b197fc", "#ff8787", "#495057", "#495057"])
-    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#ffd43b", "#74c0fc", "#63e6be", "#b197fc", "#ff8787", "#495057", "#495057"])
+    expect(flashed.map((tool) => tool.color)).toEqual(["#ffd43b", "#74c0fc", "#495057", "#51cf66", "#b197fc", "#ff8787", "#495057"])
+    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#ffd43b", "#74c0fc", "#495057", "#63e6be", "#b197fc", "#ff8787", "#495057"])
     expect(Object.keys(flashed[0]!)).not.toContain("bg")
     expect([collapseLabel("emoji"), collapseLabel("nerd")]).toEqual([" ⊟ ", "  "])
   })
@@ -587,61 +588,65 @@ describe("each file's tools", () => {
     expect(mac.files.renamed).toEqual(["/Users/me/a.md -> b.md (/Users/me/b.md)"])
   })
 
-  test("📥 copies or moves into a row's folder what 📋 took, once the dialog said which; it asks nothing with nothing taken, or where the file is already", async () => {
+  test("📥 copies or moves into a row's folder the folder 📋 took, once the dialog said which; a file taken, or nothing, asks nothing", async () => {
     const fake = fakeIO()
     const explorer = createExplorer(fake.io, "win32")
     await explorer.open("C:\\Users\\test\\proyectos")
-    // Nothing taken yet: it says what to do first.
+    const FOLDER = "C:/Users/test/proyectos/facturas"
+    const FOLDER_NATIVE = "C:\\Users\\test\\proyectos\\facturas"
+    // Nothing taken yet, or a file: it says what to do first. 📥 pastes folders alone.
     await explorer.paste("C:/Windows")
-    expect(fake.toasts.at(-1)).toBe("primero copiá un archivo o una carpeta con 📋.")
-    expect(fake.dialog.asked).toEqual([])
+    expect(fake.toasts.at(-1)).toBe("primero copiá una carpeta con 📋.")
     await explorer.copyFile(NOTAS)
-    expect(explorer.state().clip).toBe(NOTAS)
-    fake.existing.add(NATIVE)
-    // On a folder's row: Cancelar does nothing; Copiar copies it there, the folder opens, and the file stays taken.
+    expect([explorer.state().clip, explorer.state().clipKind]).toEqual([NOTAS, "file"])
     await explorer.paste("C:/Windows")
-    expect(fake.dialog.asked).toEqual([`paste ${NATIVE} into C:\\Windows`])
+    expect(fake.toasts.at(-1)).toBe("primero copiá una carpeta con 📋.")
+    expect(fake.dialog.asked).toEqual([])
+    await explorer.copyFile(FOLDER)
+    expect([explorer.state().clip, explorer.state().clipKind]).toEqual([FOLDER, "dir"])
+    fake.existing.add(FOLDER_NATIVE)
+    // On a folder's row: Cancelar does nothing; Copiar copies it there, the folder opens, and it stays taken.
+    await explorer.paste("C:/Windows")
+    expect(fake.dialog.asked).toEqual([`paste ${FOLDER_NATIVE} dir into C:\\Windows`])
     expect(fake.files.pasted).toEqual([])
     fake.dialog.answer = "copy"
     await explorer.paste("C:/Windows")
-    expect(fake.files.pasted).toEqual([`copy ${NATIVE} -> C:\\Windows\\notas.txt`])
-    expect(fake.toasts.at(-1)).toBe("notas.txt se copió a Windows.")
+    expect(fake.files.pasted).toEqual([`copy ${FOLDER_NATIVE} -> C:\\Windows\\facturas`])
+    expect(fake.toasts.at(-1)).toBe("facturas se copió a Windows.")
     expect(explorer.state().open).toContain("c:/windows")
-    expect(explorer.state().clip).toBe(NOTAS)
-    // On a file's row it goes into the folder the file is in: a disk's root here. On the root's own row too.
-    await explorer.paste("C:/pagefile.sys")
-    expect(fake.files.pasted.at(-1)).toBe(`copy ${NATIVE} -> C:\\notas.txt`)
+    expect(explorer.state().clip).toBe(FOLDER)
+    // On a disk's root's own row too.
     fake.files.pasted.length = 0
     await explorer.paste("C:/")
-    expect(fake.files.pasted).toEqual([`copy ${NATIVE} -> C:\\notas.txt`])
-    expect(fake.toasts.at(-1)).toBe("notas.txt se copió a C:.")
+    expect(fake.files.pasted).toEqual([`copy ${FOLDER_NATIVE} -> C:\\facturas`])
+    expect(fake.toasts.at(-1)).toBe("facturas se copió a C:.")
     // A disk itself is not copied, renamed or trashed: nothing is asked, and it says so.
     const before = fake.dialog.asked.length
     await explorer.trash("C:/")
     await explorer.rename("C:/")
     await explorer.copyFile("C:/")
     expect(fake.toasts.at(-1)).toBe("un disco no se copia, no se renombra ni se borra.")
-    expect([fake.dialog.asked.length, explorer.state().clip]).toEqual([before, NOTAS])
-    // Into the folder it is in already, or where a file of its name is, nothing is asked.
+    expect([fake.dialog.asked.length, explorer.state().clip]).toEqual([before, FOLDER])
+    // Into the folder it is in already, or where one of its name is, nothing is asked.
     const asked = fake.dialog.asked.length
-    await explorer.paste("C:/Users/test/proyectos/app.exe")
-    expect(fake.toasts.at(-1)).toBe("notas.txt ya está en esa carpeta.")
-    fake.existing.add("C:\\Users\\Public\\notas.txt")
+    await explorer.paste("C:/Users/test/proyectos")
+    expect(fake.toasts.at(-1)).toBe("facturas ya está en esa carpeta.")
+    fake.existing.add("C:\\Users\\Public\\facturas")
     await explorer.paste("C:/Users/Public")
-    expect(fake.toasts.at(-1)).toBe("ya hay un notas.txt en esa carpeta.")
+    expect(fake.toasts.at(-1)).toBe("ya hay un facturas en esa carpeta.")
     expect(fake.dialog.asked.length).toBe(asked)
-    // What could not be done is said, and the file stays taken.
+    // What could not be done is said, and the folder stays taken.
     fake.io.paste = async () => false
     await explorer.paste("C:/Windows")
-    expect(fake.toasts.at(-1)).toBe("no pude copiar notas.txt.")
-    expect(explorer.state().clip).toBe(NOTAS)
+    expect(fake.toasts.at(-1)).toBe("no pude copiar facturas.")
+    expect(explorer.state().clip).toBe(FOLDER)
     // Mover moves it: nothing is taken any more.
     fake.io.paste = async (verb, native, target) => (fake.files.pasted.push(`${verb} ${native} -> ${target}`), true)
     fake.dialog.answer = "move"
     await explorer.paste("C:/Windows")
-    expect(fake.files.pasted.at(-1)).toBe(`move ${NATIVE} -> C:\\Windows\\notas.txt`)
-    expect(fake.toasts.at(-1)).toBe("notas.txt se movió a Windows.")
-    expect(explorer.state().clip).toBeUndefined()
+    expect(fake.files.pasted.at(-1)).toBe(`move ${FOLDER_NATIVE} -> C:\\Windows\\facturas`)
+    expect(fake.toasts.at(-1)).toBe("facturas se movió a Windows.")
+    expect([explorer.state().clip, explorer.state().clipKind]).toEqual([undefined, undefined])
     // A folder taken does not go into itself, nor under itself; and one gone since it was taken is taken no more.
     await explorer.copyFile("C:/Users/test/proyectos")
     fake.existing.add("C:\\Users\\test\\proyectos")
@@ -868,8 +873,8 @@ describe("each tool's label, beside it while the pointer is on it", () => {
       "Cambiar espacio de trabajo",
     ])
     expect([toolTip("copy", false), toolTip("rename", false), toolTip("trash", false)]).toEqual(["Copiar archivo", "Renombrar archivo", "Borrar archivo"])
-    expect([toolTip("paste", true), toolTip("paste", true, "dir"), toolTip("paste", false, "file")]).toEqual(["Pegar: copiá algo con 📋 antes", "Pegar carpeta", "Pegar archivo"])
-    expect([toolTip("trash", true, undefined, true), toolTip("mkdir", true, undefined, true)]).toEqual(["no se hace con un disco", "Crear carpeta"])
+    expect(toolTip("paste", true)).toBe("Pegar carpeta")
+    expect([toolTip("trash", true, true), toolTip("mkdir", true, true)]).toEqual(["no se hace con un disco", "Crear carpeta"])
   })
 
   test("📋 remembers whether it took a folder or a file, and 📥 forgets it once it moved it", async () => {
@@ -886,7 +891,7 @@ describe("each tool's label, beside it while the pointer is on it", () => {
 describe("a file's row and the double click", () => {
   test("a file's row has no 📁 nor 📥, their cells empty; a folder's has them", () => {
     const file = fileTools("emoji", "", "C:/x/notas.txt", true, false, false, false)
-    expect(file.map((tool) => [tool.kind, tool.isNone])).toEqual([["mkdir", true], ["copy", false], ["path", false], ["rename", false], ["trash", false], ["paste", true], ["work", true]])
+    expect(file.map((tool) => [tool.kind, tool.isNone])).toEqual([["mkdir", true], ["copy", false], ["paste", true], ["path", false], ["rename", false], ["trash", false], ["work", true]])
     expect(file.map((tool) => cells(tool.label) + tool.gap)).toEqual([3, 4, 4, 4, 4, 4, 4])
     expect(fileTools("emoji", "", "C:/x", true, false, true, true).every((tool) => !tool.isNone)).toBe(true)
   })
