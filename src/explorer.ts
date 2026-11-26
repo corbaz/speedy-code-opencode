@@ -65,6 +65,8 @@ export interface ExplorerState {
   readonly cleared?: number
   /** The file or the folder 📋 took last, which 📥 copies or moves into another folder; absent: none, and 📥 is grey. */
   readonly clip?: string
+  /** Whether `clip` is a folder or a file, for 📥's label. */
+  readonly clipKind?: "dir" | "file"
   /** The key of the file the viewer was last opened on, marked yellow until another press. */
   readonly viewed?: string
 }
@@ -427,37 +429,29 @@ export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, s
   ["work", "📍", "\uf041", "#51cf66"],
 ]
 
-/** What each tool does, in a word, for the legend under the explorer's filter. */
-export const TOOL_LEGEND: Readonly<Record<FileToolKind, string>> = {
-  mkdir: "carpeta",
-  copy: "copiar",
-  path: "ruta",
-  rename: "renombrar",
-  trash: "borrar",
-  paste: "pegar",
-  work: "trabajar",
-}
-
 /**
- * The legend's lines in `width` cells, the tools in the rows' order: each its icon on two cells, in its color,
- * a space and its word, with two cells between one and the next.
+ * What a tool of a row does, as the pointer on it says, dark on yellow beside it as the footer's controls do
+ * (⚙ → Ver labels): for a file or a folder, and 📥 for what 📋 took. A tool grey on a disk's root says why.
  */
-export function legendLines(width: number, icons: IconSet): Array<Array<{ kind: FileToolKind; icon: string; word: string; color: string }>> {
-  const lines: Array<Array<{ kind: FileToolKind; icon: string; word: string; color: string }>> = [[]]
-  let used = 0
-  for (const [kind, emoji, glyph, color] of FILE_TOOLS) {
-    const raw = icons === "nerd" ? `${glyph}\u00a0` : emoji
-    const item = { kind, icon: raw + " ".repeat(Math.max(0, 2 - cells(raw))), word: ` ${TOOL_LEGEND[kind]}`, color }
-    const size = 3 + cells(TOOL_LEGEND[kind])
-    if (used > 0 && used + 2 + size > width) {
-      lines.push([item])
-      used = size
-    } else {
-      lines[lines.length - 1]?.push(item)
-      used = used > 0 ? used + 2 + size : size
-    }
+export function toolTip(kind: FileToolKind, isFolder: boolean, clipKind?: "dir" | "file", isDisk = false): string {
+  const what = isFolder ? "carpeta" : "archivo"
+  if (isDisk && DISK_IDLE_TOOLS.includes(kind)) return "no se hace con un disco"
+  switch (kind) {
+    case "mkdir":
+      return "Crear carpeta"
+    case "copy":
+      return `Copiar ${what}`
+    case "path":
+      return "Copiar path"
+    case "rename":
+      return `Renombrar ${what}`
+    case "trash":
+      return `Borrar ${what}`
+    case "paste":
+      return clipKind ? `Pegar ${clipKind === "dir" ? "carpeta" : "archivo"}` : "Pegar: copiá algo con 📋 antes"
+    case "work":
+      return "Cambiar espacio de trabajo"
   }
-  return lines
 }
 
 /** 📥 while 📋 took nothing: grey, and with emoji a plain mark, as an emoji keeps its own colors. */
@@ -801,7 +795,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       const chain = drive ? chainOf(here, drive) : []
       const chainRead = await Promise.all(chain.map(async (path) => [pathKey(path, caseless), await readFolder(io, path)] as const))
       // What 📋 took stays taken while the explorer is closed.
-      set((now) => ({ drives, drive, open: chainRead.map(([key]) => key), listed: Object.fromEntries(chainRead), here, caseless, top: -1, clip: now.clip }))
+      set((now) => ({ drives, drive, open: chainRead.map(([key]) => key), listed: Object.fromEntries(chainRead), here, caseless, top: -1, clip: now.clip, clipKind: now.clipKind }))
     },
     async toggleFolder(path) {
       forget()
@@ -865,13 +859,16 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       // A folder of another machine is not brought here to be taken: 📥 brings it where it is pasted.
       const remote = remoteOf(path)
       if (remote && (await io.isDir(path).catch(() => false))) {
-        set((now) => ({ ...now, clip: slashed(path) }))
+        set((now) => ({ ...now, clip: slashed(path), clipKind: "dir" }))
         return io.toast(`la carpeta ${nameOf(path) || remote.host} de ${remote.host} está lista para pegar con 📥.`)
       }
       const isCopied = await io.copyFile(native)
       // A file of another machine: its copy here went to the clipboard, and its path there goes into the prompt.
       // 📥 pastes what was taken last: a file or a folder of this machine, or a file of another one.
-      if (isCopied) set((now) => ({ ...now, clip: slashed(path) }))
+      if (isCopied) {
+        const clipKind = !remote && (await io.isDir(path).catch(() => false)) ? "dir" : "file"
+        set((now) => ({ ...now, clip: slashed(path), clipKind }))
+      }
       if (remote) {
         await io.insert(slashed(path), " ")
         if (isCopied) io.toast(`la ruta de ${nameOf(path)} en ${remote.host} está en el prompt y una copia suya en el portapapeles; pegala en una carpeta.`)
@@ -938,7 +935,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       if (!clip) return io.toast("primero copiá un archivo o una carpeta con 📋.", true)
       const name = nameOf(clip)
       if (!(await io.exists(nativeOf(clip, platform)))) {
-        set((now) => ({ ...now, clip: undefined }))
+        set((now) => ({ ...now, clip: undefined, clipKind: undefined }))
         return io.toast(`${name} ya no está donde se copió.`, true)
       }
       const isFolder = await io.isDir(clip).catch(() => false)
@@ -966,7 +963,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       // The folder it went into is read again, and opened to show it; moved, the one it left too.
       set((now) => {
         const next = { ...now, open: now.open.includes(key(folder)) ? now.open : [...now.open, key(folder)] }
-        return isMoved ? filterMoved({ ...next, clip: undefined }, clip, target) : next
+        return isMoved ? filterMoved({ ...next, clip: undefined, clipKind: undefined }, clip, target) : next
       })
       await reread(folder)
       if (isMoved) await reread(folderOf(clip))

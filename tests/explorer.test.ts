@@ -29,7 +29,7 @@ import {
   windowTop,
   type ExplorerIO,
   type FsEntry,
-  legendLines,
+  toolTip,
 } from "../src/explorer"
 import { cells, folderCommand } from "../src/footer"
 import { promptInsertion } from "../src/viewer"
@@ -856,15 +856,28 @@ describe("the explorer's filter", () => {
   })
 })
 
-describe("the legend under the explorer's filter", () => {
-  test("each tool's icon in its color and what it does in a word, in the rows' order, on as many lines as the width asks", () => {
-    const words = (width: number) => legendLines(width, "emoji").map((line) => line.map((item) => `${item.icon}${item.word}`).join("  "))
-    expect(words(200)).toEqual(["📁 carpeta  📋 copiar  🔗 ruta  ✏  renombrar  🗑 borrar  📥 pegar  📍 trabajar"])
-    expect(words(48)).toEqual(["📁 carpeta  📋 copiar  🔗 ruta  ✏  renombrar", "🗑 borrar  📥 pegar  📍 trabajar"])
-    // No line is wider than the width, but for one tool alone.
-    for (const line of words(20)) expect(cells(line) <= 20 || !line.includes("  ")).toBe(true)
-    // Its colors are the rows' own; with Nerd Fonts, the glyphs on two cells.
-    expect(legendLines(200, "emoji")[0]?.map((item) => item.color)).toEqual(["#ffd43b", "#74c0fc", "#63e6be", "#b197fc", "#ff8787", "#ffa94d", "#51cf66"])
-    for (const item of legendLines(200, "nerd")[0] ?? []) expect(cells(item.icon)).toBe(2)
+describe("each tool's label, beside it while the pointer is on it", () => {
+  test("what it does, for a file or a folder, 📥 for what 📋 took, and why a disk's grey ones do nothing", () => {
+    expect([toolTip("mkdir", true), toolTip("copy", true), toolTip("path", true), toolTip("rename", true), toolTip("trash", true), toolTip("work", true)]).toEqual([
+      "Crear carpeta",
+      "Copiar carpeta",
+      "Copiar path",
+      "Renombrar carpeta",
+      "Borrar carpeta",
+      "Cambiar espacio de trabajo",
+    ])
+    expect([toolTip("copy", false), toolTip("rename", false), toolTip("trash", false)]).toEqual(["Copiar archivo", "Renombrar archivo", "Borrar archivo"])
+    expect([toolTip("paste", true), toolTip("paste", true, "dir"), toolTip("paste", false, "file")]).toEqual(["Pegar: copiá algo con 📋 antes", "Pegar carpeta", "Pegar archivo"])
+    expect([toolTip("trash", true, undefined, true), toolTip("mkdir", true, undefined, true)]).toEqual(["no se hace con un disco", "Crear carpeta"])
+  })
+
+  test("📋 remembers whether it took a folder or a file, and 📥 forgets it once it moved it", async () => {
+    const { io } = fakeIO()
+    const explorer = createExplorer({ ...io, copyFile: async () => true }, "win32")
+    await explorer.open("C:/Users/test/proyectos")
+    await explorer.copyFile("C:/Users/test/proyectos/facturas")
+    expect(explorer.state().clipKind).toBe("dir")
+    await explorer.copyFile("C:/Users/test/proyectos/notas.txt")
+    expect(explorer.state().clipKind).toBe("file")
   })
 })

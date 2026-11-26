@@ -13,7 +13,7 @@
  * tools act on. The tools themselves never take a fill; a pressed one turns green for a second.
  */
 
-import { For, createEffect, createMemo, createSignal } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
 import type { ScrollBoxRenderable } from "@opentui/core"
 
 import {
@@ -30,7 +30,7 @@ import {
   fileNameLabel,
   fileTools,
   gotoHint,
-  legendLines,
+  toolTip,
   rowAction,
   rowLabel,
   treeRows,
@@ -39,7 +39,7 @@ import {
   type FileToolKind,
   type TreeRow,
 } from "./explorer"
-import { FOLDER_COLOR, fit } from "./footer"
+import { FOLDER_COLOR, cells, fit } from "./footer"
 import type { IconSet } from "./icons"
 import { Btn } from "./menus"
 
@@ -48,6 +48,9 @@ export const EXPLORER_PANEL = "speedy-code-explorer"
 
 const DIR_COLOR = "#74c0fc"
 const CLOSE_COLOR = "#ff6b6b"
+// A tool's label, as the footer's: dark on yellow.
+const TIP_TEXT = "#1a1a1a"
+const TIP_FILL = "#ffd43b"
 // The text attributes, as @opentui/core numbers them.
 const BOLD = 1
 const DIM = 2
@@ -61,6 +64,8 @@ export interface ExplorerPanelApi {
   readonly width: () => number
   /** Emoji or Nerd Fonts glyphs, as the settings say. */
   readonly icons: () => IconSet
+  /** ⚙ → Ver labels: what each tool does, beside it while the pointer is on it. */
+  readonly labels: () => boolean
   pickDrive(drive: string): void
   toggleFolder(path: string): void
   pressFile(path: string): void
@@ -107,6 +112,8 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const room = () => Math.max(8, api.width() - 3)
   // The file whose row is under the pointer, its tools included.
   const [hovered, setHovered] = createSignal("")
+  // The tool under the pointer, `<kind>:<path>`: its label shows beside it.
+  const [tipped, setTipped] = createSignal("")
   // The field for a path takes the keys only once pressed, and gives them back on Enter: the prompt keeps them.
   const [typing, setTyping] = createSignal<"" | "goto" | "filter">("")
   type Field = { value?: string; plainText?: string }
@@ -148,6 +155,8 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
    */
   const fileRow = (row: TreeRow) => {
     const isFolder = row.kind === "dir"
+    // What a tool of this row does: for a folder or a file, 📥 for what 📋 took; grey on a disk's root, why.
+    const tipOf = (kind: FileToolKind) => toolTip(kind, isFolder, api.state().clipKind, isFolder && row.depth === 0)
     const tint = isFolder ? (row.isHere ? FOLDER_COLOR : DIR_COLOR) : VIEWABLE_COLOR
     const fill = isFolder ? DIR_COLOR : VIEWABLE_COLOR
     // The path the field found keeps the fill until the pointer is on another row: the fill follows the pointer.
@@ -187,10 +196,23 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
                 <text wrapMode="none" selectable={false} flexShrink={0}>
                   {" ".repeat(tool.gap)}
                 </text>
-                <box flexShrink={0} onMouseUp={() => { if (!tool.isNone) api.tool(tool.kind, row.path) }}>
+                <box
+                  flexShrink={0}
+                  onMouseUp={() => { if (!tool.isNone) api.tool(tool.kind, row.path) }}
+                  onMouseOver={() => setTipped(`${tool.kind}:${row.path}`)}
+                  onMouseOut={() => setTipped((now) => (now === `${tool.kind}:${row.path}` ? "" : now))}
+                >
                   <text wrapMode="none" selectable={false} fg={tool.color} attributes={BOLD}>
                     {tool.label}
                   </text>
+                  {/* ⚙ → Ver labels: what the tool does, dark on yellow at its left, on its row, while the pointer is on it. */}
+                  <Show when={api.labels() && !tool.isNone && tipped() === `${tool.kind}:${row.path}`}>
+                    <box position="absolute" top={0} left={-cells(` ${tipOf(tool.kind)} `)} zIndex={60} width={cells(` ${tipOf(tool.kind)} `)} flexShrink={0}>
+                      <text wrapMode="none" selectable={false} fg={TIP_TEXT} bg={TIP_FILL} attributes={BOLD}>
+                        {` ${tipOf(tool.kind)} `}
+                      </text>
+                    </box>
+                  </Show>
                 </box>
               </>
             )}
@@ -287,28 +309,6 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           onPress={() => api.pauseFilter()}
         />
       </box>
-      {/* The legend: each tool of the rows, its icon in its color and what it does in a word. */}
-      <For each={legendLines(room(), api.icons())}>
-        {(line) => (
-          <box flexDirection="row" flexShrink={0}>
-            <For each={line}>
-              {(item, index) => (
-                <>
-                  <text wrapMode="none" selectable={false} flexShrink={0}>
-                    {index() > 0 ? "  " : ""}
-                  </text>
-                  <text wrapMode="none" selectable={false} flexShrink={0} fg={item.color} attributes={BOLD}>
-                    {item.icon}
-                  </text>
-                  <text wrapMode="none" selectable={false} flexShrink={0} attributes={DIM}>
-                    {item.word}
-                  </text>
-                </>
-              )}
-            </For>
-          </box>
-        )}
-      </For>
       <text
         wrapMode="none"
         selectable={false}

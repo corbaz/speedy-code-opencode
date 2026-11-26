@@ -2140,6 +2140,7 @@ export default Plugin.define({
       state: explorerState,
       width,
       icons: () => (settings.icons === "nerd" ? "nerd" : "emoji"),
+      labels: () => settings.labels,
       pickDrive: (drive) => void explorer.pickDrive(drive),
       toggleFolder: (path) => void explorer.toggleFolder(path),
       pressFile: (path) => explorer.pressFile(path),
