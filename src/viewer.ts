@@ -134,3 +134,15 @@ export function mediaSaid(chunk: string): Array<"playing" | "paused" | "ended"> 
     .map((line) => /^media (playing|paused|ended)$/.exec(line.trim())?.[1])
     .filter((said): said is "playing" | "paused" | "ended" => said !== undefined)
 }
+
+/**
+ * Whether the prompt's draft holds `text` already, as a word of its own: the explorer's 📋 and 🔗 put a file's
+ * mention or path there once, however many times they are pressed. A path inside a mention (`@path`) is not it.
+ */
+export function isInDraft(draft: string, text: string): boolean {
+  const isEdge = (char: string | undefined) => char === undefined || /\s/.test(char)
+  for (let at = draft.indexOf(text); at >= 0; at = draft.indexOf(text, at + 1)) {
+    if (isEdge(draft[at - 1]) && isEdge(draft[at + text.length])) return true
+  }
+  return false
+}

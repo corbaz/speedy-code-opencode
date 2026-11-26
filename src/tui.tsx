@@ -30,7 +30,7 @@ import {
 } from "./footer"
 import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, mkdirCommand, pasteCommand, renameCommand, trashCommand } from "./file-tools"
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
-import { createViewerReader, mediaSaid, popupCheckCommand, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
+import { createViewerReader, isInDraft, mediaSaid, popupCheckCommand, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
 import { remoteAnswer, remoteCommand, withRemotes } from "./remote"
 import { EXPLORER_PANEL, ExplorerPanel, type ExplorerPanelApi } from "./explorer-panel"
@@ -1501,7 +1501,10 @@ export default Plugin.define({
       },
       copyText: async (text) => (await writeClipboard(text)) || (context.renderer?.copyToClipboardOSC52?.(text) ?? false),
       // A file's mention never goes through the clipboard: it holds the file 📋 just put there.
-      insert: (text, separator) => insertInPrompt(text, separator, false),
+      // 📋 and 🔗 put a file's mention or path into the prompt once, however many times they are pressed.
+      insert: async (text, separator) => {
+        if (!isInDraft(promptField()?.plainText ?? "", text)) await insertInPrompt(text, separator, false)
+      },
       ask: async (mode, native, kind, into, offered, isCopyOnly) => {
         const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind, pythonPath(), into, offered, isCopyOnly)
         return command ? dialogAnswer((await run(command.argv, command.env)).stdout) : "cancel"

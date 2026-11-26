@@ -6,6 +6,7 @@ import {
   mediaSaid,
   fileMention,
   fromBase64Utf8,
+  isInDraft,
   popupPaste,
   promptInsertion,
   popupCheckCommand,
@@ -96,4 +97,16 @@ test("mediaSaid: what a popup says of its sound, among its dots and its other li
   expect(mediaSaid(".\r\n.\r\nmedia paused\r\n.\r\nmedia playing\r\ncopied aG9sYQ==\r\nmedia ended\r\n")).toEqual(["paused", "playing", "ended"])
   expect(mediaSaid(".\r\n.\r\n")).toEqual([])
   expect(mediaSaid("media playing now\r\n")).toEqual([])
+})
+
+describe("isInDraft", () => {
+  test("the explorer's 📋 and 🔗 write a mention or a path once: one there already, as a word of its own, is not written again", () => {
+    expect(isInDraft("mirá @C:/x.md y", "@C:/x.md")).toBe(true)
+    expect(isInDraft("C:/x.md", "C:/x.md")).toBe(true)
+    // A path inside its mention is not the path; a longer name is not the name.
+    expect(isInDraft("mirá @C:/x.md", "C:/x.md")).toBe(false)
+    expect(isInDraft("C:/x.mdy", "C:/x.md")).toBe(false)
+    expect(isInDraft('a @"C:/a b.md" ', '@"C:/a b.md"')).toBe(true)
+    expect(isInDraft("", "C:/x.md")).toBe(false)
+  })
 })
