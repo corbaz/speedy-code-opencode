@@ -1502,8 +1502,8 @@ export default Plugin.define({
       copyText: async (text) => (await writeClipboard(text)) || (context.renderer?.copyToClipboardOSC52?.(text) ?? false),
       // A file's mention never goes through the clipboard: it holds the file 📋 just put there.
       insert: (text, separator) => insertInPrompt(text, separator, false),
-      ask: async (mode, native, kind, into) => {
-        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind, pythonPath(), into)
+      ask: async (mode, native, kind, into, offered, isCopyOnly) => {
+        const command = dialogCommand(process.platform, mode, native, PLUGIN_ROOT, kind, pythonPath(), into, offered, isCopyOnly)
         return command ? dialogAnswer((await run(command.argv, command.env)).stdout) : "cancel"
       },
       paste: async (verb, native, target) => {

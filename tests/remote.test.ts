@@ -157,12 +157,14 @@ describe("another machine's disk, reached by ssh", () => {
       await windows.explorer.pickDrive("windows:/")
       expect(windows.rows()).toEqual(["windows:/", "  Users", "  nota.md"])
       expect(windows.explorer.state().found).toBeUndefined()
-      // 📥 goes across machines, copied or moved as the dialog said, a folder alone: a file taken is not pasted.
+      // 📥 goes across machines, copied or moved as the dialog said. From here to the machine (`push`): a file,
+      // and a folder.
       await w.explorer.copyFile("C:/notas.txt")
+      w.answer.says = "copy"
       await w.explorer.paste("mac:/Users")
-      expect(w.toasts.at(-1)).toBe("primero copiá una carpeta con 📋.")
-      expect(w.dialogs).toEqual([])
-      // From here to the machine (`push`):
+      expect(w.ran.at(-1)).toBe("push HOST=mac FILE=C:\\notas.txt PATH=/Users/notas.txt VERB=copy")
+      w.ran.length = 0
+      w.dialogs.length = 0
       await w.explorer.copyFile("C:/fotos")
       w.answer.says = "move"
       await w.explorer.paste("mac:/Users")

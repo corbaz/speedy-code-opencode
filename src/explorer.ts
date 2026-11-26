@@ -111,7 +111,11 @@ export interface ExplorerIO {
    * 📁's (`mkdir`) asks the name of a folder to make in the folder `native`: `mkdir <base64 name>` or
    * `name <name>`, or `cancel`.
    */
-  ask(mode: "rename" | "delete" | "paste" | "mkdir", native: string, kind?: "file" | "dir", into?: string): Promise<string>
+  /**
+   * A dialog: `into` is the folder a paste goes into; a rename with `into` asks the new name of what is pasted
+   * there, its fields at `offered`; a paste with `offered` shows that name, and `isCopyOnly` asks Copiar alone.
+   */
+  ask(mode: "rename" | "delete" | "paste" | "mkdir", native: string, kind?: "file" | "dir", into?: string, offered?: string, isCopyOnly?: boolean): Promise<string>
   /**
    * Copies or moves a file or a folder to `nativeTarget`, its own name included, writing over nothing; whether
    * it did. `kept`: it was copied, but what was to move could not be removed where it was.
@@ -431,9 +435,9 @@ export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, s
 
 /**
  * What a tool of a row does, as the pointer on it says on the line above the row, dark on the tool's own color
- * (⚙ → Ver labels): for a file or a folder; 📥 pastes a folder alone. A tool grey on a disk's root says why.
+ * (⚙ → Ver labels): for a file or a folder, and 📥 for what 📋 took. A tool grey on a disk's root says why.
  */
-export function toolTip(kind: FileToolKind, isFolder: boolean, isDisk = false): string {
+export function toolTip(kind: FileToolKind, isFolder: boolean, isDisk = false, clipKind?: "dir" | "file"): string {
   const what = isFolder ? "carpeta" : "archivo"
   if (isDisk && DISK_IDLE_TOOLS.includes(kind)) return "no se hace con un disco"
   switch (kind) {
@@ -448,7 +452,7 @@ export function toolTip(kind: FileToolKind, isFolder: boolean, isDisk = false): 
     case "trash":
       return `Borrar ${what}`
     case "paste":
-      return "Pegar carpeta"
+      return clipKind === "dir" ? "Pegar carpeta" : clipKind === "file" ? "Pegar archivo" : "Pegar"
     case "work":
       return "Cambiar espacio de trabajo"
   }
@@ -460,6 +464,20 @@ export function toolTip(kind: FileToolKind, isFolder: boolean, isDisk = false): 
  */
 export function tipLeft(index: number, width: number, toolsWidth = FILE_TOOLS_WIDTH - 2): number {
   return Math.min(1 - Math.floor(width / 2), toolsWidth - (1 + 4 * index) - width)
+}
+
+/**
+ * The first name free in a folder for what 📥 pastes there, where its own is taken: `informe (2).txt`,
+ * `informe (3).txt`...; a folder's, `fotos (2)`. `taken` holds the folder's names, in lower case.
+ */
+export function freeName(name: string, isFolder: boolean, taken: ReadonlySet<string>): string {
+  const dot = isFolder ? -1 : name.lastIndexOf(".")
+  const base = dot > 0 ? name.slice(0, dot) : name
+  const extension = dot > 0 ? name.slice(dot) : ""
+  for (let number = 2; ; number++) {
+    const one = `${base} (${number})${extension}`
+    if (!taken.has(one.toLowerCase())) return one
+  }
 }
 
 /** The longest wait between the two clicks of a double click, in milliseconds. */
@@ -973,9 +991,9 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     async paste(path) {
       forget()
       const clip = state.clip
-      // 📥 pastes a folder alone: a file 📋 took stays on the clipboard, for the system's own paste.
-      if (!clip || state.clipKind !== "dir") return io.toast("primero copiá una carpeta con 📋.", true)
-      const name = nameOf(clip)
+      if (!clip) return io.toast("primero copiá un archivo o una carpeta con 📋.", true)
+      const own = nameOf(clip)
+      let name = own
       if (!(await io.exists(nativeOf(clip, platform)))) {
         set((now) => ({ ...now, clip: undefined, clipKind: undefined }))
         return io.toast(`${name} ya no está donde se copió.`, true)
@@ -986,22 +1004,38 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       const from = remoteOf(clip)
       const to = remoteOf(folder)
       if (from && to && from.host !== to.host) return io.toast(`de ${from.host} a ${to.host} no se pega: traelo primero a esta máquina.`, true)
-      const target = joinPath(folder, name)
       const key = (one: string) => pathKey(one, state.caseless)
-      if (key(folderOf(clip)) === key(folder)) return io.toast(`${name} ya está en esa carpeta.`, true)
-      if (isFolder && isUnder(key(folder), key(clip))) return io.toast(`${name} no puede ir dentro de sí misma.`, true)
-      if (await io.exists(nativeOf(target, platform))) return io.toast(`ya hay un ${name} en esa carpeta.`, true)
-      const verb = await io.ask("paste", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform))
+      // Into the folder it is in, it is copied alone: moved there, it would only be renamed, as ✏ does.
+      const isSameFolder = key(folderOf(clip)) === key(folder)
+      if (isFolder && !isSameFolder && isUnder(key(folder), key(clip))) return io.toast(`${name} no puede ir dentro de sí misma.`, true)
+      // Where its name is taken (the folder it is in, or another with one of that name), a new name is asked
+      // first, a free one offered; then whether to copy or move it, under that name.
+      if (isSameFolder || (await io.exists(nativeOf(joinPath(folder, name), platform)))) {
+        const listed = await readFolder(io, folder)
+        const taken = new Set([name.toLowerCase(), ...(listed === "denied" ? [] : listed.entries.map((entry) => entry.name.toLowerCase()))])
+        const offered = freeName(name, isFolder, taken)
+        const wanted = newNameOf(await io.ask("rename", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform), offered)).trim()
+        if (!wanted) return
+        const why = badFileName(wanted)
+        if (why) return io.toast(`no pegué ${own}: ${why}.`, true)
+        if (wanted.toLowerCase() === own.toLowerCase() || (await io.exists(nativeOf(joinPath(folder, wanted), platform)))) {
+          return io.toast(`ya hay un ${wanted} en esa carpeta.`, true)
+        }
+        name = wanted
+      }
+      const target = joinPath(folder, name)
+      const verb = await io.ask("paste", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform), name === own ? "" : name, isSameFolder)
       if (verb !== "copy" && verb !== "move") return
       const isMove = verb === "move"
       // Across machines it takes a while: it says it started.
-      if (from || to) io.toast(`${isMove ? "moviendo" : "copiando"} ${name}…`)
+      if (from || to) io.toast(`${isMove ? "moviendo" : "copiando"} ${own}…`)
       const said = await io.paste(verb, nativeOf(clip, platform), nativeOf(target, platform))
-      if (!said) return io.toast(`no pude ${isMove ? "mover" : "copiar"} ${name}.`, true)
+      if (!said) return io.toast(`no pude ${isMove ? "mover" : "copiar"} ${own}.`, true)
       // Copied, but what was to move could not be removed where it was.
       const isMoved = isMove && said !== "kept"
-      if (said === "kept") io.toast(`${name} se copió a ${driveLabel(folder)}, pero no pude quitarlo de donde estaba.`, true)
-      else io.toast(`${name} se ${isMove ? "movió" : "copió"} a ${driveLabel(folder)}.`)
+      const as = name === own ? "" : ` como ${name}`
+      if (said === "kept") io.toast(`${own} se copió a ${driveLabel(folder)}${as}, pero no pude quitarlo de donde estaba.`, true)
+      else io.toast(`${own} se ${isMove ? "movió" : "copió"} a ${driveLabel(folder)}${as}.`)
       // The folder it went into is read again, and opened to show it; moved, the one it left too.
       set((now) => {
         const next = { ...now, open: now.open.includes(key(folder)) ? now.open : [...now.open, key(folder)] }

@@ -57,9 +57,16 @@ export function dialogCommand(
   kind: "file" | "dir" = "file",
   python = "",
   into = "",
+  offered = "",
+  isCopyOnly = false,
 ): FileCommand | undefined {
-  // The folder a paste goes into, for the dialog to name.
-  const where: Record<string, string> = mode === "paste" ? { SPEEDY_TARGET: into } : {}
+  // The folder a paste goes into, for the dialog to name; a rename with it asks the new name of what is pasted
+  // there, its fields at `offered`. A paste with `offered` shows that name, and `isCopyOnly` asks Copiar alone.
+  const where: Record<string, string> = {
+    ...(mode === "paste" || (mode === "rename" && into) ? { SPEEDY_TARGET: into } : {}),
+    ...(offered ? { SPEEDY_NAME: offered } : {}),
+    ...(isCopyOnly ? { SPEEDY_ONLY: "copy" } : {}),
+  }
   if (platform === "win32") {
     return {
       argv: [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", `${root.replace(/\\/g, "/")}/engine/dialog.ps1`],
@@ -68,7 +75,7 @@ export function dialogCommand(
     }
   }
   if (platform !== "darwin") return undefined
-  const name = native.split("/").pop() ?? native
+  const name = offered || (native.split("/").pop() ?? native)
   const script =
     mode === "paste"
       ? [

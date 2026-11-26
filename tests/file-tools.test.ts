@@ -32,6 +32,11 @@ describe("the commands behind each file's tools", () => {
     // A folder: the dialog asks one name, and says the folder goes with what it holds.
     expect(dialogCommand("win32", "rename", NATIVE, "C:/plugin", "dir")?.env.SPEEDY_KIND).toBe("dir")
     expect(dialogCommand("win32", "rename", NATIVE, "C:/plugin")?.env.SPEEDY_KIND).toBe("file")
+    // The new name of what 📥 pastes where its own is taken: a rename into that folder, its fields at a free
+    // name; then the paste under that name, Copiar alone into the folder it is in.
+    expect(dialogCommand("win32", "rename", NATIVE, "C:/plugin", "file", "", "C:/x", "a (2).md")?.env).toMatchObject({ SPEEDY_MODE: "rename", SPEEDY_TARGET: "C:/x", SPEEDY_NAME: "a (2).md" })
+    expect(dialogCommand("win32", "paste", NATIVE, "C:/plugin", "file", "", "C:/x", "b.md", true)?.env).toMatchObject({ SPEEDY_MODE: "paste", SPEEDY_TARGET: "C:/x", SPEEDY_NAME: "b.md", SPEEDY_ONLY: "copy" })
+    expect(dialogCommand("win32", "rename", NATIVE, "C:/plugin")?.env.SPEEDY_TARGET).toBeUndefined()
     // macOS: the engine's popup first; the AppleScript dialog after it, for when the popup says nothing.
     const rename = dialogCommand("darwin", "rename", "/Users/me/a.md", "/plugin", "dir", "/venv/bin/python")!
     expect(rename.argv.slice(0, 2)).toEqual(["/bin/sh", "-c"])

@@ -31,6 +31,7 @@ import {
   type FsEntry,
   toolTip,
   createDoubleClick,
+  freeName,
 } from "../src/explorer"
 import { cells, folderCommand } from "../src/footer"
 import { promptInsertion } from "../src/viewer"
@@ -251,7 +252,8 @@ function fakeIO(tree: typeof TREE = TREE) {
   const opened: string[] = []
   const viewed: string[] = []
   const files = { copied: [] as string[], texts: [] as string[], renamed: [] as string[], trashed: [] as string[], pasted: [] as string[], made: [] as string[] }
-  const dialog = { answer: "cancel", asked: [] as string[] }
+  // What each dialog was asked, the names offered, and the answers: those of `queue` one after the other, then `answer`.
+  const dialog = { answer: "cancel", asked: [] as string[], offered: [] as string[], queue: [] as string[] }
   const toasts: string[] = []
   const held: boolean[] = []
   let shown: (isShown: boolean) => void = () => {}
@@ -291,7 +293,11 @@ function fakeIO(tree: typeof TREE = TREE) {
     insert: async (text, separator) => {
       prompt.text += promptInsertion(prompt.text, text, separator)
     },
-    ask: async (mode, native, kind, into) => (dialog.asked.push(`${mode} ${native}${kind === "dir" ? " dir" : ""}${into ? ` into ${into}` : ""}`), dialog.answer),
+    ask: async (mode, native, kind, into, offered, isCopyOnly) => {
+      dialog.asked.push(`${mode} ${native}${kind === "dir" ? " dir" : ""}${into ? ` into ${into}` : ""}${isCopyOnly ? " only copy" : ""}`)
+      dialog.offered.push(offered ?? "")
+      return dialog.queue.shift() ?? dialog.answer
+    },
     hold: (isHeld) => void held.push(isHeld),
     paste: async (verb, native, target) => (files.pasted.push(`${verb} ${native} -> ${target}`), true),
     rename: async (native, name, target) => (files.renamed.push(`${native} -> ${name} (${target})`), true),
@@ -588,56 +594,82 @@ describe("each file's tools", () => {
     expect(mac.files.renamed).toEqual(["/Users/me/a.md -> b.md (/Users/me/b.md)"])
   })
 
-  test("📥 copies or moves into a row's folder the folder 📋 took, once the dialog said which; a file taken, or nothing, asks nothing", async () => {
+  test("📥 copies or moves into a folder what 📋 took, a file or a folder; where its name is taken, a new one is asked first", async () => {
     const fake = fakeIO()
     const explorer = createExplorer(fake.io, "win32")
-    await explorer.open("C:\\Users\\test\\proyectos")
+    await explorer.open("C:/Users/test/proyectos")
     const FOLDER = "C:/Users/test/proyectos/facturas"
     const FOLDER_NATIVE = "C:\\Users\\test\\proyectos\\facturas"
-    // Nothing taken yet, or a file: it says what to do first. 📥 pastes folders alone.
+    // Nothing taken yet: it says what to do first.
     await explorer.paste("C:/Windows")
-    expect(fake.toasts.at(-1)).toBe("primero copiá una carpeta con 📋.")
+    expect(fake.toasts.at(-1)).toBe("primero copiá un archivo o una carpeta con 📋.")
+    expect(fake.dialog.asked).toEqual([])
+    // A file taken goes into another folder: Cancelar does nothing; Copiar copies it, the folder opens, and it stays taken.
     await explorer.copyFile(NOTAS)
     expect([explorer.state().clip, explorer.state().clipKind]).toEqual([NOTAS, "file"])
+    fake.existing.add(NATIVE)
     await explorer.paste("C:/Windows")
-    expect(fake.toasts.at(-1)).toBe("primero copiá una carpeta con 📋.")
-    expect(fake.dialog.asked).toEqual([])
-    await explorer.copyFile(FOLDER)
-    expect([explorer.state().clip, explorer.state().clipKind]).toEqual([FOLDER, "dir"])
-    fake.existing.add(FOLDER_NATIVE)
-    // On a folder's row: Cancelar does nothing; Copiar copies it there, the folder opens, and it stays taken.
-    await explorer.paste("C:/Windows")
-    expect(fake.dialog.asked).toEqual([`paste ${FOLDER_NATIVE} dir into C:\\Windows`])
+    expect(fake.dialog.asked).toEqual([`paste ${NATIVE} into C:\\Windows`])
     expect(fake.files.pasted).toEqual([])
     fake.dialog.answer = "copy"
     await explorer.paste("C:/Windows")
-    expect(fake.files.pasted).toEqual([`copy ${FOLDER_NATIVE} -> C:\\Windows\\facturas`])
-    expect(fake.toasts.at(-1)).toBe("facturas se copió a Windows.")
+    expect(fake.files.pasted).toEqual([`copy ${NATIVE} -> C:\\Windows\\notas.txt`])
+    expect(fake.toasts.at(-1)).toBe("notas.txt se copió a Windows.")
     expect(explorer.state().open).toContain("c:/windows")
-    expect(explorer.state().clip).toBe(FOLDER)
-    // On a disk's root's own row too.
+    expect(explorer.state().clip).toBe(NOTAS)
+    // Into the folder it is in, its name is taken: a new one is asked first, a free one offered (name and
+    // extension), then Copiar alone, under that name: moved there it would only be renamed.
+    fake.dialog.asked.length = 0
+    fake.dialog.offered.length = 0
     fake.files.pasted.length = 0
+    fake.dialog.queue.push("rename bm90YXMgdmllamFzLm1k", "copy")
+    await explorer.paste("C:/Users/test/proyectos")
+    expect(fake.dialog.asked).toEqual([`rename ${NATIVE} into C:\\Users\\test\\proyectos`, `paste ${NATIVE} into C:\\Users\\test\\proyectos only copy`])
+    expect(fake.dialog.offered).toEqual(["notas (2).txt", "notas viejas.md"])
+    expect(fake.files.pasted).toEqual([`copy ${NATIVE} -> C:\\Users\\test\\proyectos\\notas viejas.md`])
+    expect(fake.toasts.at(-1)).toBe("notas.txt se copió a proyectos como notas viejas.md.")
+    // Where one of its name is, in another folder: the same, and there Mover is offered too.
+    fake.existing.add("C:\\Users\\Public\\notas.txt")
+    fake.dialog.asked.length = 0
+    fake.dialog.queue.push("rename bm90YXMgMi50eHQ=", "move")
+    await explorer.paste("C:/Users/Public")
+    expect(fake.dialog.asked).toEqual([`rename ${NATIVE} into C:\\Users\\Public`, `paste ${NATIVE} into C:\\Users\\Public`])
+    expect(fake.files.pasted.at(-1)).toBe(`move ${NATIVE} -> C:\\Users\\Public\\notas 2.txt`)
+    expect(fake.toasts.at(-1)).toBe("notas.txt se movió a Public como notas 2.txt.")
+    // A new name taken too, or cancelled, pastes nothing.
+    await explorer.copyFile(NOTAS)
+    const before = fake.files.pasted.length
+    fake.dialog.queue.push("rename bm90YXMudHh0")
+    await explorer.paste("C:/Users/test/proyectos")
+    expect(fake.toasts.at(-1)).toBe("ya hay un notas.txt en esa carpeta.")
+    fake.dialog.queue.push("cancel")
+    await explorer.paste("C:/Users/test/proyectos")
+    expect(fake.files.pasted.length).toBe(before)
+    // A folder works the same: one name field, a free one offered.
+    await explorer.copyFile(FOLDER)
+    expect([explorer.state().clip, explorer.state().clipKind]).toEqual([FOLDER, "dir"])
+    fake.existing.add(FOLDER_NATIVE)
+    fake.dialog.asked.length = 0
+    fake.dialog.offered.length = 0
+    fake.dialog.queue.push("rename ZmFjdHVyYXMgMjAyNQ==", "copy")
+    await explorer.paste("C:/Users/test/proyectos")
+    expect(fake.dialog.asked).toEqual([`rename ${FOLDER_NATIVE} dir into C:\\Users\\test\\proyectos`, `paste ${FOLDER_NATIVE} dir into C:\\Users\\test\\proyectos only copy`])
+    expect(fake.dialog.offered).toEqual(["facturas (2)", "facturas 2025"])
+    expect(fake.files.pasted.at(-1)).toBe(`copy ${FOLDER_NATIVE} -> C:\\Users\\test\\proyectos\\facturas 2025`)
+    // On a disk's root's own row too.
+    fake.dialog.answer = "copy"
     await explorer.paste("C:/")
-    expect(fake.files.pasted).toEqual([`copy ${FOLDER_NATIVE} -> C:\\facturas`])
+    expect(fake.files.pasted.at(-1)).toBe(`copy ${FOLDER_NATIVE} -> C:\\facturas`)
     expect(fake.toasts.at(-1)).toBe("facturas se copió a C:.")
-    // A disk itself is not copied, renamed or trashed: nothing is asked, and it says so.
-    const before = fake.dialog.asked.length
+    // A disk itself is not copied, renamed or trashed: nothing is asked, and it says so; that lets go of what 📋 took.
+    const asked = fake.dialog.asked.length
     await explorer.trash("C:/")
     await explorer.rename("C:/")
     await explorer.copyFile("C:/")
     expect(fake.toasts.at(-1)).toBe("un disco no se copia, no se renombra ni se borra.")
-    // Another tool pressed lets go of what 📋 took: it is taken again.
-    expect([fake.dialog.asked.length, explorer.state().clip]).toEqual([before, undefined])
-    await explorer.copyFile(FOLDER)
-    // Into the folder it is in already, or where one of its name is, nothing is asked.
-    const asked = fake.dialog.asked.length
-    await explorer.paste("C:/Users/test/proyectos")
-    expect(fake.toasts.at(-1)).toBe("facturas ya está en esa carpeta.")
-    fake.existing.add("C:\\Users\\Public\\facturas")
-    await explorer.paste("C:/Users/Public")
-    expect(fake.toasts.at(-1)).toBe("ya hay un facturas en esa carpeta.")
-    expect(fake.dialog.asked.length).toBe(asked)
+    expect([fake.dialog.asked.length, explorer.state().clip]).toEqual([asked, undefined])
     // What could not be done is said, and the folder stays taken.
+    await explorer.copyFile(FOLDER)
     fake.io.paste = async () => false
     await explorer.paste("C:/Windows")
     expect(fake.toasts.at(-1)).toBe("no pude copiar facturas.")
@@ -649,7 +681,7 @@ describe("each file's tools", () => {
     expect(fake.files.pasted.at(-1)).toBe(`move ${FOLDER_NATIVE} -> C:\\Windows\\facturas`)
     expect(fake.toasts.at(-1)).toBe("facturas se movió a Windows.")
     expect([explorer.state().clip, explorer.state().clipKind]).toEqual([undefined, undefined])
-    // A folder taken does not go into itself, nor under itself; and one gone since it was taken is taken no more.
+    // A folder taken does not go into a folder under itself; and one gone since it was taken is taken no more.
     await explorer.copyFile("C:/Users/test/proyectos")
     fake.existing.add("C:\\Users\\test\\proyectos")
     await explorer.paste("C:/Users/test/proyectos/facturas")
@@ -658,6 +690,13 @@ describe("each file's tools", () => {
     await explorer.paste("C:/Windows")
     expect(fake.toasts.at(-1)).toBe("proyectos ya no está donde se copió.")
     expect(explorer.state().clip).toBeUndefined()
+  })
+
+  test("the first name free for what is pasted where its own is taken", () => {
+    expect(freeName("notas.txt", false, new Set(["notas.txt"]))).toBe("notas (2).txt")
+    expect(freeName("notas.txt", false, new Set(["notas.txt", "notas (2).txt"]))).toBe("notas (3).txt")
+    expect(freeName(".gitignore", false, new Set([".gitignore"]))).toBe(".gitignore (2)")
+    expect(freeName("v1.2", true, new Set(["v1.2"]))).toBe("v1.2 (2)")
   })
 
   test("a file pressed is green until its popup is up, then stays marked until another press", async () => {
@@ -875,7 +914,7 @@ describe("each tool's label, beside it while the pointer is on it", () => {
       "Cambiar espacio de trabajo",
     ])
     expect([toolTip("copy", false), toolTip("rename", false), toolTip("trash", false)]).toEqual(["Copiar archivo", "Renombrar archivo", "Borrar archivo"])
-    expect(toolTip("paste", true)).toBe("Pegar carpeta")
+    expect([toolTip("paste", true), toolTip("paste", true, false, "dir"), toolTip("paste", true, false, "file")]).toEqual(["Pegar", "Pegar carpeta", "Pegar archivo"])
     expect([toolTip("trash", true, true), toolTip("mkdir", true, true)]).toEqual(["no se hace con un disco", "Crear carpeta"])
   })
 
@@ -934,7 +973,7 @@ describe("📋 and 📥, one right after the other", () => {
     await taken()
     await explorer.copyPath("C:/Users/test/proyectos/notas.txt")
     await explorer.paste("C:/Windows")
-    expect(fake.toasts.at(-1)).toBe("primero copiá una carpeta con 📋.")
+    expect(fake.toasts.at(-1)).toBe("primero copiá un archivo o una carpeta con 📋.")
   })
 })
 
