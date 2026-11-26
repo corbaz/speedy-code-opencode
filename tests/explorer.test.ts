@@ -626,7 +626,9 @@ describe("each file's tools", () => {
     await explorer.rename("C:/")
     await explorer.copyFile("C:/")
     expect(fake.toasts.at(-1)).toBe("un disco no se copia, no se renombra ni se borra.")
-    expect([fake.dialog.asked.length, explorer.state().clip]).toEqual([before, FOLDER])
+    // Another tool pressed lets go of what 📋 took: it is taken again.
+    expect([fake.dialog.asked.length, explorer.state().clip]).toEqual([before, undefined])
+    await explorer.copyFile(FOLDER)
     // Into the folder it is in already, or where one of its name is, nothing is asked.
     const asked = fake.dialog.asked.length
     await explorer.paste("C:/Users/test/proyectos")
@@ -909,3 +911,30 @@ describe("a file's row and the double click", () => {
     expect(click("copy:C:/a", 1300)).toBe(true)
   })
 })
+
+describe("📋 and 📥, one right after the other", () => {
+  test("a folder 📋 took is let go of by any other tool, or by the footer, and 📥 is grey again", async () => {
+    const fake = fakeIO()
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:/Users/test/proyectos")
+    const FOLDER = "C:/Users/test/proyectos/facturas"
+    const taken = async () => {
+      await explorer.copyFile(FOLDER)
+      expect(explorer.state().clipKind).toBe("dir")
+    }
+    await taken()
+    await explorer.copyPath("C:/Users/test/proyectos/notas.txt")
+    expect(explorer.state().clip).toBeUndefined()
+    for (const other of [() => explorer.rename("C:/Users/test/proyectos/notas.txt"), () => explorer.trash("C:/Users/test/proyectos/notas.txt"), () => explorer.newFolder("C:/Windows"), async () => explorer.collapse(), async () => explorer.dropClip()]) {
+      await taken()
+      await other()
+      expect([explorer.state().clip, explorer.state().clipKind]).toEqual([undefined, undefined])
+    }
+    // 📥 right after it pastes, then says what to do once it was let go of.
+    await taken()
+    await explorer.copyPath("C:/Users/test/proyectos/notas.txt")
+    await explorer.paste("C:/Windows")
+    expect(fake.toasts.at(-1)).toBe("primero copiá una carpeta con 📋.")
+  })
+})
+

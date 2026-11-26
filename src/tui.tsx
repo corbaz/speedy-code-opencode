@@ -1593,6 +1593,8 @@ export default Plugin.define({
       setHomeExplorer(!(isOpen || context.ui.panel.open(EXPLORER_PANEL)))
     }
     const runControl = async (id: string): Promise<void> => {
+      // 📋 and 📥 of the explorer go one right after the other: a control of the footer lets go of what 📋 took.
+      explorer.dropClip()
       if (id.startsWith("social:")) return openSocial(id.slice("social:".length))
       switch (id) {
         case "copy":
@@ -2151,6 +2153,7 @@ export default Plugin.define({
         else if (kind === "paste") void explorer.paste(path)
         else if (kind === "mkdir") void explorer.newFolder(path)
         else if (kind === "work") {
+          explorer.dropClip()
           explorer.flash(`work:${path}`)
           void workIn(path)
         } else void explorer.trash(path)

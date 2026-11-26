@@ -694,6 +694,11 @@ export interface Explorer {
    */
   collapse(): void
   /**
+   * 📋 and 📥 go one right after the other: any other tool, or a control of the footer, lets go of what 📋 took,
+   * and 📥 is grey again. The explorer's own tools do it by themselves; the rest calls this.
+   */
+  dropClip(): void
+  /**
    * A path pasted in the field under the disks: the tree opens down to it, on its disk, and puts it in the
    * middle, marked; for a file its folder opens and the file is the row marked. A path not absolute is taken
    * from the session's folder.
@@ -768,6 +773,10 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
   // Any press in the explorer takes the mark off the path the field found: the yellow fill follows the pointer again.
   const forget = () => {
     if (state.found !== undefined || state.viewed !== undefined) set((now) => ({ ...now, found: undefined, viewed: undefined }))
+  }
+  // 📋 and 📥 go one right after the other: anything else pressed lets go of what 📋 took.
+  const dropClip = () => {
+    if (state.clip !== undefined) set((now) => ({ ...now, clip: undefined, clipKind: undefined }))
   }
   // A folder of the tree read again, after a file in it was renamed or sent to the trash.
   const reread = async (path: string) => {
@@ -911,6 +920,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async copyPath(path) {
       forget()
+      dropClip()
       flash(`path:${path}`)
       // A path of another machine is copied as that machine writes it.
       const there = remoteOf(path)
@@ -923,6 +933,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async rename(path) {
       forget()
+      dropClip()
       if (notOnDisk(path)) return
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
       const name = newNameOf(await io.ask("rename", nativeOf(path, platform), kind))
@@ -930,6 +941,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async newFolder(path) {
       forget()
+      dropClip()
       flash(`mkdir:${path}`)
       const folder = (await io.isDir(path).catch(() => false)) ? slashed(path) : folderOf(slashed(path))
       const name = newNameOf(await io.ask("mkdir", nativeOf(folder, platform), "dir")).trim()
@@ -947,6 +959,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     },
     async trash(path) {
       forget()
+      dropClip()
       if (notOnDisk(path)) return
       const native = nativeOf(path, platform)
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
@@ -1000,7 +1013,9 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     flash(key) {
       flash(key)
     },
+    dropClip,
     collapse() {
+      dropClip()
       flash("collapse:")
       set((now) => {
         const home = driveOf(now.here, now.drives, now.caseless)
