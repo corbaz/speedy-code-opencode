@@ -462,6 +462,22 @@ export function tipLeft(index: number, width: number, toolsWidth = FILE_TOOLS_WI
   return Math.min(1 - Math.floor(width / 2), toolsWidth - (1 + 4 * index) - width)
 }
 
+/** The longest wait between the two clicks of a double click, in milliseconds. */
+export const DOUBLE_CLICK_MS = 500
+
+/**
+ * A double click's watch: `click(key, now)` says whether a click on `key` makes a double click with the one
+ * before it; a double click starts over. The explorer's tools act on one.
+ */
+export function createDoubleClick(): (key: string, now: number) => boolean {
+  let last = { key: "", at: 0 }
+  return (key, now) => {
+    const isDouble = last.key === key && now - last.at <= DOUBLE_CLICK_MS
+    last = isDouble ? { key: "", at: 0 } : { key, at: now }
+    return isDouble
+  }
+}
+
 /** 📥 while 📋 took nothing: grey, and with emoji a plain mark, as an emoji keeps its own colors. */
 export const PASTE_IDLE_MARK = "↧"
 export const PASTE_IDLE_COLOR = "#495057"
@@ -505,9 +521,13 @@ export function fileTools(
   hasClip = false,
   isDisk = false,
   isWorkable = false,
+  isFolder = true,
 ): Array<{ kind: FileToolKind; label: string; gap: number; color: string; isNone: boolean }> {
   return FILE_TOOLS.map(([kind, emoji, glyph, color], index) => {
-    if (kind === "work" && !isWorkable) return { kind, label: "  ", gap: 2, color: PASTE_IDLE_COLOR, isNone: true }
+    // 📍 on a folder of this machine alone; 📁 and 📥 on a folder alone: a file's row has their cells empty.
+    if ((kind === "work" && !isWorkable) || (!isFolder && (kind === "mkdir" || kind === "paste"))) {
+      return { kind, label: "  ", gap: index === 0 ? 1 : 2, color: PASTE_IDLE_COLOR, isNone: true }
+    }
     const isIdle = (kind === "paste" && !hasClip) || (isDisk && DISK_IDLE_TOOLS.includes(kind))
     // An emoji, or a glyph with the cell it spills over: two cells, the tool's own.
     const icon = icons === "nerd" ? `${glyph}\u00a0` : kind === "paste" && isIdle ? PASTE_IDLE_MARK : emoji

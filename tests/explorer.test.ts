@@ -30,6 +30,7 @@ import {
   type ExplorerIO,
   type FsEntry,
   toolTip,
+  createDoubleClick,
 } from "../src/explorer"
 import { cells, folderCommand } from "../src/footer"
 import { promptInsertion } from "../src/viewer"
@@ -879,5 +880,27 @@ describe("each tool's label, beside it while the pointer is on it", () => {
     expect(explorer.state().clipKind).toBe("dir")
     await explorer.copyFile("C:/Users/test/proyectos/notas.txt")
     expect(explorer.state().clipKind).toBe("file")
+  })
+})
+
+describe("a file's row and the double click", () => {
+  test("a file's row has no 📁 nor 📥, their cells empty; a folder's has them", () => {
+    const file = fileTools("emoji", "", "C:/x/notas.txt", true, false, false, false)
+    expect(file.map((tool) => [tool.kind, tool.isNone])).toEqual([["mkdir", true], ["copy", false], ["path", false], ["rename", false], ["trash", false], ["paste", true], ["work", true]])
+    expect(file.map((tool) => cells(tool.label) + tool.gap)).toEqual([3, 4, 4, 4, 4, 4, 4])
+    expect(fileTools("emoji", "", "C:/x", true, false, true, true).every((tool) => !tool.isNone)).toBe(true)
+  })
+
+  test("a tool acts on a double click: two clicks on it within half a second; one, or two apart, does nothing", () => {
+    const click = createDoubleClick()
+    expect(click("copy:C:/a", 0)).toBe(false)
+    expect(click("copy:C:/a", 300)).toBe(true)
+    // A double click starts over: a third click is a first one.
+    expect(click("copy:C:/a", 350)).toBe(false)
+    expect(click("copy:C:/a", 1000)).toBe(false)
+    // Another tool in between is a first click of its own.
+    expect(click("path:C:/a", 1100)).toBe(false)
+    expect(click("copy:C:/a", 1200)).toBe(false)
+    expect(click("copy:C:/a", 1300)).toBe(true)
   })
 })

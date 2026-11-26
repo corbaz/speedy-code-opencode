@@ -30,6 +30,7 @@ import {
   driveLabel,
   fileNameLabel,
   fileTools,
+  createDoubleClick,
   gotoHint,
   tipLeft,
   toolTip,
@@ -115,6 +116,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const room = () => Math.max(8, api.width() - 3)
   // The file whose row is under the pointer, its tools included.
   const [hovered, setHovered] = createSignal("")
+  const doubleClick = createDoubleClick()
   // The tool under the pointer, `<kind>:<path>`: its label shows on the line above its row.
   const [tipped, setTipped] = createSignal("")
   // Whether a row is the tree's first line shown: its labels go below it, where the tree still draws them.
@@ -194,7 +196,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         </box>
         <box flexDirection="row" flexShrink={0} width={FILE_TOOLS_WIDTH}>
           {/* 📍 is on a folder of this machine alone: the session works on no file, nor on another machine. */}
-          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip), isFolder && row.depth === 0, isFolder && !remoteOf(row.path))}>
+          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip), isFolder && row.depth === 0, isFolder && !remoteOf(row.path), isFolder)}>
             {(tool, index) => (
               <>
                 {/* A plain gap before each icon takes no press: one a little off an icon does nothing. */}
@@ -203,7 +205,8 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
                 </text>
                 <box
                   flexShrink={0}
-                  onMouseUp={() => { if (!tool.isNone) api.tool(tool.kind, row.path) }}
+                  // A tool acts on a double click: a single one, as the pointer passes, does nothing.
+                  onMouseUp={() => { if (!tool.isNone && doubleClick(`${tool.kind}:${row.path}`, Date.now())) api.tool(tool.kind, row.path) }}
                   onMouseOver={() => setTipped(`${tool.kind}:${row.path}`)}
                   onMouseOut={() => setTipped((now) => (now === `${tool.kind}:${row.path}` ? "" : now))}
                 >
