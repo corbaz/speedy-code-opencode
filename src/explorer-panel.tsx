@@ -31,6 +31,7 @@ import {
   fileNameLabel,
   fileTools,
   gotoHint,
+  tipLeft,
   toolTip,
   rowAction,
   rowLabel,
@@ -53,8 +54,6 @@ const CLOSE_COLOR = "#ff6b6b"
 const TIP_TEXT = "#1a1a1a"
 // The tool's own color, its label's fill.
 const toolColor = (kind: FileToolKind) => FILE_TOOLS.find(([one]) => one === kind)?.[3] ?? "#ffd43b"
-// The cells between the ribbon's start and the tree rows' (the rows' own margin), for a label over its tool.
-const TOOLS_LEAD = 0
 // The text attributes, as @opentui/core numbers them.
 const BOLD = 1
 const DIM = 2
@@ -116,15 +115,10 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const room = () => Math.max(8, api.width() - 3)
   // The file whose row is under the pointer, its tools included.
   const [hovered, setHovered] = createSignal("")
-  // The tool under the pointer (`<kind>:<path>`), its label, its color and its place among the row's tools: the
-  // label shows in the ribbon above the tree, over that tool's column.
-  const [tipped, setTipped] = createSignal<{ key: string; text: string; color: string; index: number } | undefined>(undefined)
-  // Where a label starts in the ribbon: centered over its tool's icon, within the ribbon.
-  const tipLeft = (tip: { text: string; index: number }) => {
-    const width = cells(` ${tip.text} `)
-    const icon = room() - FILE_TOOLS_WIDTH + TOOLS_LEAD + 1 + 4 * tip.index
-    return Math.max(0, Math.min(room() - width, icon + 1 - Math.floor(width / 2)))
-  }
+  // The tool under the pointer, `<kind>:<path>`: its label shows on the line above its row.
+  const [tipped, setTipped] = createSignal("")
+  // Whether a row is the tree's first line shown: its labels go below it, where the tree still draws them.
+  const isFirstShown = (path: string) => rows().findIndex((one) => one.path === path) <= Math.round(tree?.scrollTop ?? 0)
   // The field for a path takes the keys only once pressed, and gives them back on Enter: the prompt keeps them.
   const [typing, setTyping] = createSignal<"" | "goto" | "filter">("")
   type Field = { value?: string; plainText?: string }
@@ -210,14 +204,28 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
                 <box
                   flexShrink={0}
                   onMouseUp={() => { if (!tool.isNone) api.tool(tool.kind, row.path) }}
-                  onMouseOver={() => {
-                    if (!tool.isNone) setTipped({ key: `${tool.kind}:${row.path}`, text: tipOf(tool.kind), color: toolColor(tool.kind), index: index() })
-                  }}
-                  onMouseOut={() => setTipped((now) => (now?.key === `${tool.kind}:${row.path}` ? undefined : now))}
+                  onMouseOver={() => setTipped(`${tool.kind}:${row.path}`)}
+                  onMouseOut={() => setTipped((now) => (now === `${tool.kind}:${row.path}` ? "" : now))}
                 >
                   <text wrapMode="none" selectable={false} fg={tool.color} attributes={BOLD}>
                     {tool.label}
                   </text>
+                  {/* ⚙ → Ver labels: what the tool does on the line above its row (below the first line shown),
+                      over the tool, dark on the tool's own color: no icon of the row is covered. */}
+                  <Show when={api.labels() && !tool.isNone && tipped() === `${tool.kind}:${row.path}`}>
+                    <box
+                      position="absolute"
+                      top={isFirstShown(row.path) ? 1 : -1}
+                      left={tipLeft(index(), cells(` ${tipOf(tool.kind)} `), FILE_TOOLS_WIDTH - 2)}
+                      zIndex={60}
+                      width={cells(` ${tipOf(tool.kind)} `)}
+                      flexShrink={0}
+                    >
+                      <text wrapMode="none" selectable={false} fg={TIP_TEXT} bg={toolColor(tool.kind)} attributes={BOLD}>
+                        {` ${tipOf(tool.kind)} `}
+                      </text>
+                    </box>
+                  </Show>
                 </box>
               </>
             )}
@@ -314,28 +322,15 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           onPress={() => api.pauseFilter()}
         />
       </box>
-      {/* The ribbon above the tree: the rule, and over it the label of the tool under the pointer (⚙ → Ver
-          labels), in the tool's color, above its column, never over the row the pointer is on. */}
-      <box flexShrink={0}>
-        <text
-          wrapMode="none"
-          selectable={false}
-          fg={api.state().filter ? VIEWABLE_COLOR : undefined}
-          attributes={api.state().filter ? 0 : DIM}
-          flexShrink={0}
-        >
-          {ruleLabel(api.state(), room())}
-        </text>
-        <Show when={api.labels() ? tipped() : undefined}>
-          {(tip) => (
-            <box position="absolute" top={0} left={tipLeft(tip())} zIndex={60} flexShrink={0}>
-              <text wrapMode="none" selectable={false} fg={TIP_TEXT} bg={tip().color} attributes={BOLD}>
-                {` ${tip().text} `}
-              </text>
-            </box>
-          )}
-        </Show>
-      </box>
+      <text
+        wrapMode="none"
+        selectable={false}
+        fg={api.state().filter ? VIEWABLE_COLOR : undefined}
+        attributes={api.state().filter ? 0 : DIM}
+        flexShrink={0}
+      >
+        {ruleLabel(api.state(), room())}
+      </text>
       <scrollbox ref={(box: ScrollBoxRenderable) => (tree = box)} flexGrow={1} minHeight={0} scrollY>
         <For each={rows()}>
           {(row) => {

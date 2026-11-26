@@ -454,6 +454,14 @@ export function toolTip(kind: FileToolKind, isFolder: boolean, clipKind?: "dir" 
   }
 }
 
+/**
+ * Where a tool's label starts, against the tool's own two cells: centered over it, but within the row's tools,
+ * so the last tool's does not run past the explorer's edge. `index` is the tool's place among the seven.
+ */
+export function tipLeft(index: number, width: number, toolsWidth = FILE_TOOLS_WIDTH - 2): number {
+  return Math.min(1 - Math.floor(width / 2), toolsWidth - (1 + 4 * index) - width)
+}
+
 /** 📥 while 📋 took nothing: grey, and with emoji a plain mark, as an emoji keeps its own colors. */
 export const PASTE_IDLE_MARK = "↧"
 export const PASTE_IDLE_COLOR = "#495057"
