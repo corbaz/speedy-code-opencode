@@ -68,8 +68,13 @@ export interface ExplorerState {
   readonly found?: string
   /** The filter, while one is on: the tree is its own. */
   readonly filter?: ExplorerFilter
-  /** Counts the times the filter was cleared: each one empties its field. */
+  /** Counts the times the field was emptied, by the filter's × or by a path gone to. */
   readonly cleared?: number
+  /**
+   * The file or the folder last selected in the tree, or gone to by the field: the path's row under the disks
+   * shows it; absent, it shows the session's folder.
+   */
+  readonly picked?: string
   /** The file or the folder 📋 took last, which 📥 copies or moves into another folder; absent: none, and 📥 is grey. */
   readonly clip?: string
   /** Whether `clip` is a folder or a file, for 📥's label. */
@@ -171,14 +176,17 @@ export const FILTER_MOST = 50000
 /** The most rows a filter's tree shows: the search goes on past them, and the rule counts every file found. */
 export const FILTER_ROWS_MOST = 300
 
-/** What the filter's field says while empty. */
-export const FILTER_HINT = "filtro: *.pdf, a*.docx"
+/** What the explorer's one field says while empty: it takes a filter's pattern, or a path to go to. */
+export const FIELD_HINT = "filtrar *.pdf o pegar una ruta"
 
-/** The filter's ×, beside its field. */
-export const UNFILTER_LABEL = " × limpiar "
+/** The filter's ×, at its field's right while a filter is on: an icon alone, named `limpiar filtro` under the pointer. */
+export const UNFILTER_LABEL = " × "
 
-/** Beside it: holds a search that runs; held, it is the one that lets it go on from where it was. */
-export const pauseLabel = (filter: ExplorerFilter | undefined) => (filter?.isPaused ? " ▸ seguir " : " ‖ pausar ")
+/** Before it: holds a search that runs; held, it is the one that lets it go on from where it was. */
+export const pauseLabel = (filter: ExplorerFilter | undefined) => (filter?.isPaused ? " ▸ " : " ‖ ")
+
+/** Its name, under the pointer. */
+export const pauseTip = (filter: ExplorerFilter | undefined) => (filter?.isPaused ? "seguir" : "pausar")
 
 /** How long a file pressed stays green when its popup never says it is up. */
 export const OPENING_MOST_MS = 20000
@@ -626,9 +634,120 @@ export function isRowFlashed(flashed: string, path: string): boolean {
   return flashed === `view:${path}` || FILE_TOOLS.some(([kind]) => flashed === `${kind}:${path}`)
 }
 
-/** What the explorer's field says while empty: a path as the system writes one. */
-export function gotoHint(platform: string): string {
-  return `pegá una ruta y Enter: ${platform === "win32" ? "D:\\carpeta\\archivo" : "/Users/carpeta/archivo"}`
+/**
+ * Whether what was typed in the explorer's field is a path to go to, not a filter's pattern: it has a folder
+ * separator, or it is a disk (`D:`, `mac:`). A pattern matches names, which hold neither.
+ */
+export function isPathText(text: string): boolean {
+  return pastedPath(text).includes("/")
+}
+
+/**
+ * The path shown under the disks: the row selected (or the path gone to), or else the session's folder, where it
+ * is on the disk shown; else the disk.
+ */
+export function crumbPath(state: ExplorerState): string {
+  const disk = pathKey(state.drive, state.caseless)
+  return [state.picked, state.here].find((one) => one !== undefined && one !== "" && isUnder(pathKey(one, state.caseless), disk)) ?? state.drive
+}
+
+/** A piece of the path's row: its text, its cells and the cell it starts at; `path`, on a folder alone. */
+export interface Crumb {
+  readonly text: string
+  readonly width: number
+  readonly at: number
+  readonly path?: string
+}
+
+/**
+ * The path's row, under the disks: each folder from the disk down to `path`, ` › ` between them, after one
+ * empty cell. Where they do not fit `width`: the disk, `…` for the folders left out, and the last ones that
+ * fit; where not even the last one does, it is cut.
+ */
+export function crumbsOf(path: string, drive: string, width: number): Crumb[] {
+  const chain = chainOf(path, drive)
+  const names = chain.map((one, index) => (index === 0 ? driveLabel(drive) : one.slice(one.lastIndexOf("/") + 1)))
+  const between = " › "
+  const lead = 1 + cells(names[0] ?? "")
+  // How many of the last folders are shown, the disk aside; the others are left out.
+  const taken = (tail: number) => {
+    const left = names.length - 1 - tail
+    return lead + (left > 0 ? cells(between) + 1 : 0) + names.slice(names.length - tail).reduce((sum, name) => sum + cells(between) + cells(name), 0)
+  }
+  let tail = names.length - 1
+  while (tail > 1 && taken(tail) > width) tail--
+  const left = names.length - 1 - tail
+  const parts: Crumb[] = []
+  let at = 0
+  const add = (text: string, crumb?: string) => {
+    parts.push({ text, width: cells(text), at, ...(crumb === undefined ? {} : { path: crumb }) })
+    at += cells(text)
+  }
+  add(" ")
+  add(names[0] ?? "", chain[0] ?? drive)
+  if (left > 0) {
+    add(between)
+    add("…")
+  }
+  for (let index = names.length - tail; index < names.length; index++) {
+    add(between)
+    // The last one alone, too long for what is left of the row: cut.
+    const name = names[index] ?? ""
+    add(tail === 1 && taken(1) > width ? cutCells(name, Math.max(1, width - at)) : name, chain[index] ?? drive)
+  }
+  return parts
+}
+
+/**
+ * What of a file's name a filter's pattern matched, for its row to mark: each run of the pattern's own letters,
+ * as `[start, end]` in the name, not what `*` and `?` stood for. A pattern with neither is a part of the name:
+ * where it first is. Whatever the case. Nothing where the name does not match.
+ */
+export function matchSpans(pattern: string, name: string): Array<[number, number]> {
+  const text = pattern.trim()
+  if (!text) return []
+  if (!text.includes("*") && !text.includes("?")) {
+    const at = name.toLowerCase().indexOf(text.toLowerCase())
+    return at < 0 ? [] : [[at, at + text.length]]
+  }
+  // Each piece of the pattern is a group, one after the other from the name's start to its end: where each
+  // one starts is the sum of those before it.
+  const pieces = text.split(/([*?])/).filter(Boolean)
+  const letters = (piece: string) => piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const found = new RegExp(`^${pieces.map((piece) => (piece === "*" ? "(.*?)" : piece === "?" ? "(.)" : `(${letters(piece)})`)).join("")}$`, "iu").exec(name)
+  if (!found) return []
+  const spans: Array<[number, number]> = []
+  let at = 0
+  pieces.forEach((piece, index) => {
+    const length = (found[index + 1] ?? "").length
+    if (piece !== "*" && piece !== "?" && length > 0) spans.push([at, at + length])
+    at += length
+  })
+  return spans
+}
+
+/**
+ * A file's or a folder's row in pieces, for a filter to mark what its pattern matched of a file's name: the
+ * matched ones `isMatch`, drawn white and bold. With no filter, or on a folder, the row is one piece. Nothing is
+ * marked past where a long name is cut.
+ */
+export function namePieces(row: TreeRow, width: number, pattern?: string): Array<{ text: string; isMatch: boolean }> {
+  const label = fileNameLabel(row, width)
+  if (!pattern || row.kind !== "file") return [{ text: label, isMatch: false }]
+  const nameAt = row.depth * 2 + 2
+  const cut = label.trimEnd()
+  const shown = cut.length < nameAt + row.name.trimEnd().length ? cut.length - 1 : label.length
+  const pieces: Array<{ text: string; isMatch: boolean }> = []
+  let from = 0
+  for (const [start, end] of matchSpans(pattern, row.name)) {
+    const [a, b] = [start + nameAt, Math.min(end + nameAt, shown)]
+    if (a >= b) continue
+    if (a > from) pieces.push({ text: label.slice(from, a), isMatch: false })
+    pieces.push({ text: label.slice(a, b), isMatch: true })
+    from = b
+  }
+  if (from < label.length) pieces.push({ text: label.slice(from), isMatch: false })
+  return pieces
 }
 
 /** ⊟ beside the disks, as the icon set draws it. */
@@ -798,6 +917,10 @@ export interface Explorer {
   clearFilter(): void
   /** ‖ pausar: a search that runs waits where it is, the tree keeping the files found; pressed again, it goes on. */
   pauseFilter(): void
+  /** The one field's Enter: a path (isPathText) is gone to, anything else filters the disk shown. */
+  submit(text: string): Promise<void>
+  /** A row selected in the tree, or let go of (`undefined`): the path's row shows it, or the session's folder. */
+  pick(path: string | undefined): void
 }
 
 /** The explorer's state and what its presses do; `onChange` hears every new state. */
@@ -1177,7 +1300,9 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       set((now) => ({
         ...now,
         filter: undefined,
-        cleared: now.filter ? (now.cleared ?? 0) + 1 : now.cleared,
+        // The field empties: it is the filter's too.
+        cleared: (now.cleared ?? 0) + 1,
+        picked: path,
         drive,
         open: [...now.open.filter((one) => !opened.includes(one)), ...opened],
         listed: { ...now.listed, ...listed },
@@ -1192,6 +1317,13 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       else clearFilter()
     },
     clearFilter,
+    async submit(text) {
+      if (isPathText(text)) await explorer.goTo(text)
+      else explorer.filter(text)
+    },
+    pick(path) {
+      if (state.picked !== path) set((now) => ({ ...now, picked: path }))
+    },
     pauseFilter() {
       const filter = state.filter
       if (!filter || !(filter.isBusy || filter.isPaused)) return

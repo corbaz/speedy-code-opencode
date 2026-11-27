@@ -5,7 +5,13 @@ import {
   badFileName,
   chainOf,
   collapseLabel,
-  gotoHint,
+  crumbPath,
+  crumbsOf,
+  isPathText,
+  matchSpans,
+  namePieces,
+  pauseTip,
+  FIELD_HINT,
   cutCells,
   fileNameLabel,
   isHeld,
@@ -738,13 +744,14 @@ describe("each file's tools", () => {
     expect([explorer.state().filter, fake.held]).toEqual([undefined, []])
     explorer.filter("*.pdf")
     fake.searches[0]!.say({ paths: ["C:/a.pdf"], seen: 10 })
-    expect([pauseLabel(explorer.state().filter), ruleLabel(explorer.state(), 40).includes("buscando…")]).toEqual([" ‖ pausar ", true])
+    expect([pauseLabel(explorer.state().filter), ruleLabel(explorer.state(), 40).includes("buscando…")]).toEqual([" ‖ ", true])
+    expect(pauseTip(explorer.state().filter)).toBe("pausar")
     explorer.pauseFilter()
     // It is held, not ended: the search is still there.
     expect([fake.held, fake.searches[0]!.isStopped]).toEqual([[true], false])
     expect(explorer.state().filter).toMatchObject({ paths: ["C:/a.pdf"], isBusy: false, isPaused: true })
     expect(ruleLabel(explorer.state(), 40)).toContain(" *.pdf: 1 archivo, en pausa ")
-    expect(pauseLabel(explorer.state().filter)).toBe(" ▸ seguir ")
+    expect([pauseLabel(explorer.state().filter), pauseTip(explorer.state().filter)]).toEqual([" ▸ ", "seguir"])
     // Held, it only says it is still there: it stays held.
     fake.searches[0]!.say({ paths: [], seen: 10 })
     expect(explorer.state().filter).toMatchObject({ isBusy: false, isPaused: true })
@@ -839,9 +846,75 @@ describe("each file's tools", () => {
   })
 })
 
-test("gotoHint: the explorer's field shows a path as the system writes one", () => {
-  expect(gotoHint("win32")).toBe("pegá una ruta y Enter: D:\\carpeta\\archivo")
-  expect(gotoHint("darwin")).toBe("pegá una ruta y Enter: /Users/carpeta/archivo")
+describe("the explorer's header: one field, the path's row, what a filter matched", () => {
+  test("isPathText: the one field tells a path, which is gone to, from a filter's pattern", () => {
+    expect(FIELD_HINT).toBe("filtrar *.pdf o pegar una ruta")
+    // A path has a separator, or is a disk. Anything else is a pattern.
+    expect(["D:\\Excel\\rand.xlsx", ' "C:/Users/ana" ', "src/app.ts", "D:", "mac:", "mac:/Users/ana", "@C:\\x.md", "/Users/ana"].map(isPathText)).toEqual([true, true, true, true, true, true, true, true])
+    expect(["*.pdf", "a*.docx", "notas", "notas.txt", "", "  "].map(isPathText)).toEqual([false, false, false, false, false, false])
+  })
+
+  test("crumbsOf: each folder from the disk down, fitted to the row's width", () => {
+    const all = crumbsOf("C:/Users/ana/docs", "C:/", 40)
+    expect(all.map((part) => part.text).join("")).toBe(" C: › Users › ana › docs")
+    expect(all.filter((part) => part.path).map((part) => [part.path, part.at, part.width])).toEqual([["C:/", 1, 2], ["C:/Users", 6, 5], ["C:/Users/ana", 14, 3], ["C:/Users/ana/docs", 20, 4]])
+    // Too long for its row: the disk, …, and the last folders that fit.
+    expect(crumbsOf("C:/Users/ana/docs/informes/2025", "C:/", 30).map((part) => part.text).join("")).toBe(" C: › … › informes › 2025")
+    expect(crumbsOf("C:/Users/ana/docs/informes/2025", "C:/", 30).filter((part) => part.path).map((part) => part.path)).toEqual(["C:/", "C:/Users/ana/docs/informes", "C:/Users/ana/docs/informes/2025"])
+    // Not even the last one fits: it is cut.
+    expect(crumbsOf("C:/Users/un_nombre_muy_largo_de_carpeta", "C:/", 20).map((part) => part.text).join("")).toBe(" C: › … › un_nombre…")
+    expect(crumbsOf("C:/un_nombre_muy_largo_de_carpeta", "C:/", 16).map((part) => part.text).join("")).toBe(" C: › un_nombre…")
+    // A disk's root is the disk alone; another machine's path starts at its disk; a Mac's at /.
+    expect(crumbsOf("D:/", "D:/", 40).map((part) => part.text).join("")).toBe(" D:")
+    expect(crumbsOf("mac:/Users/ana", "mac:/", 40).map((part) => part.text).join("")).toBe(" mac › Users › ana")
+    expect(crumbsOf("/Users/ana", "/", 40).filter((part) => part.path).map((part) => part.path)).toEqual(["/", "/Users", "/Users/ana"])
+  })
+
+  test("matchSpans and namePieces: what of a name a filter's pattern matched, for its row to mark", () => {
+    // The pattern's own letters, not what `*` and `?` stood for; whatever the case.
+    expect(matchSpans("*.pdf", "informe.pdf")).toEqual([[7, 11]])
+    expect(matchSpans("*.PDF", "Guía.pdf")).toEqual([[4, 8]])
+    expect(matchSpans("a*.docx", "acta final.docx")).toEqual([[0, 1], [10, 15]])
+    expect(matchSpans("a?c", "abc")).toEqual([[0, 1], [2, 3]])
+    // A pattern with neither is a part of the name: where it first is.
+    expect(matchSpans("nota", "mis notas y notas.txt")).toEqual([[4, 8]])
+    expect(matchSpans(" (v2).txt ", "informe (v2).txt")).toEqual([[8, 16]])
+    expect([matchSpans("*.pdf", "informe.txt"), matchSpans("", "informe.txt"), matchSpans("*", "informe.txt")]).toEqual([[], [], []])
+    // A file's row in pieces, the matched ones marked; with no filter, or on a folder, the row is one piece.
+    const file = { path: "C:/x/informe.pdf", name: "informe.pdf", depth: 1, kind: "file" as const, isOpen: false, isHere: false }
+    expect(namePieces(file, 20, "*.pdf")).toEqual([{ text: "    informe", isMatch: false }, { text: ".pdf", isMatch: true }, { text: "     ", isMatch: false }])
+    expect(namePieces(file, 20)).toEqual([{ text: "    informe.pdf     ", isMatch: false }])
+    expect(namePieces({ ...file, kind: "dir" as const, name: "pdf" }, 12, "*pdf")).toEqual([{ text: "  ▸ pdf     ", isMatch: false }])
+    // Nothing is marked past where a long name is cut.
+    expect(namePieces(file, 12, "*.pdf")).toEqual([{ text: "    informe…", isMatch: false }])
+  })
+
+  test("the field's Enter goes to a path or filters; the row selected, or the path gone to, is the path shown", async () => {
+    const fake = fakeIO()
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:/Users/test/proyectos")
+    expect(explorer.state().picked).toBeUndefined()
+    explorer.pick("C:/Users/test")
+    expect(explorer.state().picked).toBe("C:/Users/test")
+    explorer.pick(undefined)
+    expect(explorer.state().picked).toBeUndefined()
+    // The path shown: the row selected, else the session's folder; on another disk, that disk.
+    expect(crumbPath(explorer.state())).toBe("C:/Users/test/proyectos")
+    expect(crumbPath({ ...explorer.state(), picked: "C:/Windows" })).toBe("C:/Windows")
+    expect(crumbPath({ ...explorer.state(), drive: "D:/", picked: "C:/Windows" })).toBe("D:/")
+    // A path: gone to, marked, the path shown, and the field emptied though no filter was on.
+    fake.existing.add("C:\\Users\\test\\proyectos\\notas.txt")
+    const cleared = explorer.state().cleared ?? 0
+    await explorer.submit(" C:\\Users\\test\\proyectos\\notas.txt ")
+    expect(explorer.state().picked).toBe("C:/Users/test/proyectos/notas.txt")
+    expect(explorer.state().found).toBeDefined()
+    expect(explorer.state().cleared).toBe(cleared + 1)
+    expect(explorer.state().filter).toBeUndefined()
+    // A pattern: the disk shown is searched.
+    await explorer.submit("*.txt")
+    expect(explorer.state().filter?.pattern).toBe("*.txt")
+    expect(fake.searches.at(-1)?.ask.pattern).toBe("*.txt")
+  })
 })
 
 describe("the explorer's filter", () => {

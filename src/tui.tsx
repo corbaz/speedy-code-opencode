@@ -2152,6 +2152,7 @@ export default Plugin.define({
       state: explorerState,
       width,
       icons: () => (settings.icons === "nerd" ? "nerd" : "emoji"),
+      labels: () => settings.labels,
       pickDrive: (drive) => void explorer.pickDrive(drive),
       toggleFolder: (path) => void explorer.toggleFolder(path),
       pressFile: (path) => explorer.pressFile(path),
@@ -2173,10 +2174,12 @@ export default Plugin.define({
         // The keys go back to the prompt, once the field has let them go.
         setTimeout(() => promptField()?.focus?.(), 50)
       },
-      filter: (text) => {
-        explorer.filter(text)
+      submit: (text) => {
+        void explorer.submit(text)
+        // The keys go back to the prompt, once the field has let them go.
         setTimeout(() => promptField()?.focus?.(), 50)
       },
+      pick: (path) => explorer.pick(path),
       clearFilter: () => {
         explorer.clearFilter()
         setTimeout(() => promptField()?.focus?.(), 50)

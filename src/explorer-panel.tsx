@@ -25,24 +25,26 @@ import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 
 import {
   FLASH_COLOR,
-  FILTER_HINT,
+  FIELD_HINT,
   MENU_EDGE,
   ROW_MORE,
   TOOL_IDLE_COLOR,
   UNFILTER_LABEL,
   pauseLabel,
+  pauseTip,
+  crumbPath,
+  crumbsOf,
+  namePieces,
   pathKey,
   remoteOf,
   ruleLabel,
   collapseLabel,
   driveLabel,
-  fileNameLabel,
   isHeld,
   isRowFlashed,
   menuPlace,
   toolMenu,
   createDoubleClick,
-  gotoHint,
   rowAction,
   rowLabel,
   treeRows,
@@ -60,6 +62,15 @@ export const EXPLORER_PANEL = "speedy-code-explorer"
 
 const DIR_COLOR = "#74c0fc"
 const CLOSE_COLOR = "#ff6b6b"
+// A header control that only waits, and ↗.
+const IDLE_COLOR = "#868e96"
+// The path's row: a folder of it, and what stands between two.
+const CRUMB_COLOR = "#adb5bd"
+const BETWEEN_COLOR = "#495057"
+// A header control's name, while the pointer is on it: dark on yellow, as the footer's.
+const TIP_FILL = "#ffd43b"
+// What a filter's pattern matched of a name.
+const MATCH_COLOR = "#ffffff"
 // A menu's frame, and what it stands on: the rows under it do not show through.
 const MENU_FRAME = "#868e96"
 const MENU_FILL = "#141414"
@@ -79,6 +90,8 @@ export interface ExplorerPanelApi {
   readonly width: () => number
   /** Emoji or Nerd Fonts glyphs, as the settings say. */
   readonly icons: () => IconSet
+  /** ⚙ → Ver labels: a header control's name shows while the pointer is on it. */
+  readonly labels: () => boolean
   pickDrive(drive: string): void
   toggleFolder(path: string): void
   pressFile(path: string): void
@@ -86,10 +99,12 @@ export interface ExplorerPanelApi {
   tool(kind: FileToolKind, path: string): void
   /** ⊟: every disk collapses; the session's stays open down to its folder. */
   collapse(): void
-  /** A path pasted in the field, Enter: the tree opens down to it and marks it. */
+  /** A folder of the path's row pressed: the tree opens down to it and marks it. */
   goTo(text: string): void
-  /** A pattern typed in the filter's field, Enter: the tree holds only the disk's files that match. */
-  filter(text: string): void
+  /** The one field's Enter: a path is gone to, anything else filters the disk shown. */
+  submit(text: string): void
+  /** A row selected, or let go of: the path's row shows it, or the session's folder. */
+  pick(path: string | undefined): void
   /** The filter's ×: the whole tree is back. */
   clearFilter(): void
   /** ‖ pausar: a search that still runs stops, and the tree keeps what it found. */
@@ -159,19 +174,55 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
     const at = rows().findIndex((one) => one.path === row.path) - Math.round(tree?.scrollTop ?? 0)
     const place = menuPlace({ at, x, height, width: Math.min(treeWidth(), tools.width + MENU_EDGE), room: Math.max(1, tree?.viewport.height ?? at + 1 + height), treeWidth: treeWidth() })
     setSelected(row.path)
+    api.pick(row.path)
     setPointed("")
     setMenu({ path: row.path, top: place.top - at, left: place.left })
   }
-  // The field for a path takes the keys only once pressed, and gives them back on Enter: the prompt keeps them.
-  const [typing, setTyping] = createSignal<"" | "goto" | "filter">("")
+  // The field takes the keys only once pressed, and gives them back on Enter: the prompt keeps them.
+  const [typing, setTyping] = createSignal(false)
   type Field = { value?: string; plainText?: string }
   let field: Field | undefined
-  let filterField: Field | undefined
   const typed = (one: Field | undefined) => one?.value ?? one?.plainText ?? ""
-  // The filter cleared, by its × or by a path gone to: its field empties.
-  createEffect(() => {
-    if ((api.state().cleared ?? 0) > 0 && filterField) filterField.value = ""
+  // The filter cleared by its ×, or a path gone to: the field empties. A pattern typed stays while its filter is on.
+  const cleared = createMemo(() => api.state().cleared ?? 0)
+  createEffect((before: number) => {
+    const now = cleared()
+    if (now !== before && field) field.value = ""
+    return now
+  }, cleared())
+  // The path's row: each folder from the disk down to the row selected, or to the session's folder. The same
+  // pieces are the ones drawn before, so the pointer on one stays on it while the explorer's state moves.
+  const crumbs = createMemo(() => (api.state().drive ? crumbsOf(crumbPath(api.state()), api.state().drive, room()) : []), undefined, {
+    equals: (before, now) => JSON.stringify(before) === JSON.stringify(now),
   })
+  const lastCrumb = () => crumbs().filter((part) => part.path !== undefined).at(-1)?.path
+  // The folder of the path under the pointer.
+  const [crumb, setCrumb] = createSignal("")
+  // The header control under the pointer: with ⚙ → Ver labels its name shows by it.
+  const [tipped, setTipped] = createSignal("")
+  /**
+   * A control of the header: its icon alone. With ⚙ → Ver labels, its name while the pointer is on it: a row
+   * under it (`tipTop` 1, the disks' row) or over it (-1, the field's), ending where the control ends, so a
+   * name covers no other control.
+   */
+  const icon = (
+    id: string,
+    look: { label: () => string; color: () => string | undefined; isBold?: () => boolean; tip: () => string; tipTop: number },
+    press: () => void,
+  ) => (
+    <box flexShrink={0} onMouseUp={press} onMouseOver={() => setTipped(id)} onMouseOut={() => setTipped((now) => (now === id ? "" : now))}>
+      <text wrapMode="none" selectable={false} fg={look.color()} attributes={look.isBold?.() === false ? 0 : BOLD}>
+        {look.label()}
+      </text>
+      <Show when={api.labels() && tipped() === id}>
+        <box position="absolute" top={look.tipTop} left={cells(look.label()) - cells(` ${look.tip()} `)} zIndex={70} width={cells(` ${look.tip()} `)} flexShrink={0}>
+          <text wrapMode="none" selectable={false} fg={HOVER_TEXT} bg={TIP_FILL} attributes={BOLD}>
+            {` ${look.tip()} `}
+          </text>
+        </box>
+      </Show>
+    </box>
+  )
   let tree: ScrollBoxRenderable | undefined
 
   // A disk shown, the explorer opened or the tree collapsed: the tree goes to its top, or puts the
@@ -211,6 +262,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
     if (asksMenu) return openMenu(row, x)
     if (selected() === row.path && x >= treeWidth() - cells(ROW_MORE)) return openMenu(row, treeWidth())
     setSelected(row.path)
+    api.pick(row.path)
     if (row.kind === "dir" && x >= row.depth * 2 && x < row.depth * 2 + 2) return api.toggleFolder(row.path)
     if (doubleClick(`row:${row.path}`, Date.now())) openRow(row)
   }
@@ -279,6 +331,11 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
     // The row whose tool was pressed, or whose file is on its way to the viewer, is green: the press was taken.
     const isPressed = () => isRowFlashed(api.state().flashed ?? "", row.path)
     const back = () => (isPressed() ? FLASH_COLOR : isFilled() ? (isFound() && !isSelected() ? VIEWABLE_COLOR : fill) : undefined)
+    // The name, in pieces while a filter is on: what its pattern matched is white and bold. The same pieces are
+    // the ones drawn before, so a search that only adds files leaves the rows already there as they are.
+    const pieces = createMemo(() => namePieces(row, treeWidth(), api.state().filter?.pattern), undefined, {
+      equals: (before, now) => before.length === now.length && before.every((piece, index) => piece.text === now[index]?.text && piece.isMatch === now[index]?.isMatch),
+    })
     return (
       <box
         flexDirection="row"
@@ -289,15 +346,20 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         onMouseOut={() => setHovered((now) => (now === row.path ? "" : now))}
         onMouseDown={(event: MouseEvent) => pressRow(row, event)}
       >
-        <text
-          wrapMode="none"
-          selectable={false}
-          fg={back() ? HOVER_TEXT : tint}
-          bg={back()}
-          attributes={isSelected() || (isFolder && row.isHere) ? BOLD : 0}
-        >
-          {fileNameLabel(row, treeWidth())}
-        </text>
+        <For each={pieces()}>
+          {(piece) => (
+            <text
+              wrapMode="none"
+              selectable={false}
+              flexShrink={0}
+              fg={back() ? HOVER_TEXT : piece.isMatch ? MATCH_COLOR : tint}
+              bg={back()}
+              attributes={piece.isMatch || (isFolder && row.isHere) || (isSelected() && pieces().length === 1) ? BOLD : 0}
+            >
+              {piece.text}
+            </text>
+          )}
+        </For>
         {/* ⋯ at the end of the row selected opens its menu: the one mark that says the tools are there. */}
         <Show when={isSelected()}>
           <box position="absolute" top={0} left={treeWidth() - cells(ROW_MORE)} zIndex={1} flexShrink={0}>
@@ -313,8 +375,11 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
 
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1} onMouseDown={() => setMenu(undefined)}>
-      {/* The header's presses do nothing while a popup of the explorer is up; ↗ and × are not the explorer's own moves. */}
-      <box flexDirection="row" flexWrap="wrap" flexShrink={0}>
+      {/* The disks, as tabs: the one shown filled. At the row's end, icons alone: ⊟ collapses every disk, ↗ opens
+          the session's folder in the system's file manager, × closes the panel. The row is drawn after the
+          path's under it, so a control's name stands over the path. The header's presses do nothing while a
+          popup of the explorer is up; ↗ and × are not the explorer's own moves. */}
+      <box flexDirection="row" flexWrap="wrap" flexShrink={0} zIndex={10}>
         <For each={api.state().drives}>
           {(drive) => {
             const isShown = () => drive === api.state().drive
@@ -323,8 +388,9 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
                 <text
                   wrapMode="none"
                   selectable={false}
-                  fg={isShown() ? FOLDER_COLOR : undefined}
-                  attributes={isShown() ? BOLD | UNDERLINE : DIM}
+                  fg={isShown() ? HOVER_TEXT : undefined}
+                  bg={isShown() ? FOLDER_COLOR : undefined}
+                  attributes={isShown() ? BOLD : DIM}
                 >
                   {` ${driveLabel(drive)} `}
                 </text>
@@ -332,72 +398,93 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
             )
           }}
         </For>
-        <box flexShrink={0} onMouseUp={unlessFrozen(() => api.collapse())}>
-          <text
-            wrapMode="none"
-            selectable={false}
-            fg={api.state().flashed === "collapse:" ? FLASH_COLOR : DIR_COLOR}
-            attributes={BOLD}
-          >
-            {collapseLabel(api.icons())}
-          </text>
-        </box>
         <box flexGrow={1} />
-        <Btn label=" ↗ abrir en el sistema " dim onPress={() => api.openSystem()} />
+        {icon("collapse", { label: () => collapseLabel(api.icons()), color: () => (api.state().flashed === "collapse:" ? FLASH_COLOR : DIR_COLOR), tip: () => "colapsar", tipTop: 1 }, unlessFrozen(() => api.collapse()))}
+        {icon("system", { label: () => " ↗ ", color: () => IDLE_COLOR, tip: () => "abrir en el sistema", tipTop: 1 }, () => api.openSystem())}
         <Btn label=" × " color={CLOSE_COLOR} bold onPress={() => api.close()} />
       </box>
-      <box flexShrink={0} onMouseUp={unlessFrozen(() => setTyping("goto"))}>
-        <input
-          id="speedy-explorer-goto"
-          ref={(one: unknown) => {
-            field = one as typeof field
-          }}
-          focused={typing() === "goto"}
-          placeholder={gotoHint(process.platform)}
-          placeholderColor="#868e96"
-          textColor={VIEWABLE_COLOR}
-          focusedTextColor={VIEWABLE_COLOR}
-          cursorColor={VIEWABLE_COLOR}
-          onSubmit={() => {
-            setTyping("")
-            api.goTo(typed(field))
-          }}
-        />
-      </box>
+      {/* The path: each folder from the disk down to the row selected, or to the session's; one pressed is gone to. */}
       <box flexDirection="row" flexShrink={0}>
-        <box flexGrow={1} flexShrink={1} onMouseUp={unlessFrozen(() => setTyping("filter"))}>
+        <For each={crumbs()}>
+          {(part) => {
+            const path = part.path
+            if (path === undefined) {
+              return (
+                <text wrapMode="none" selectable={false} fg={BETWEEN_COLOR} flexShrink={0}>
+                  {part.text}
+                </text>
+              )
+            }
+            const isPointed = () => !isFrozen() && crumb() === path
+            return (
+              <box
+                flexShrink={0}
+                onMouseDown={(event: MouseEvent) => {
+                  event.stopPropagation()
+                  setMenu(undefined)
+                  if (!isFrozen() && event.button === LEFT) api.goTo(path)
+                }}
+                onMouseOver={() => setCrumb(path)}
+                onMouseOut={() => setCrumb((now) => (now === path ? "" : now))}
+              >
+                <text
+                  wrapMode="none"
+                  selectable={false}
+                  fg={isPointed() ? DIR_COLOR : lastCrumb() === path ? FOLDER_COLOR : CRUMB_COLOR}
+                  attributes={(lastCrumb() === path ? BOLD : 0) | (isPointed() ? UNDERLINE : 0)}
+                >
+                  {part.text}
+                </text>
+              </box>
+            )
+          }}
+        </For>
+      </box>
+      {/* The one field: a pattern, Enter, and the tree holds only the disk's files that match; a path, and the
+          tree opens down to it. With a filter on, ‖ holds its search and × brings the whole tree back. */}
+      <box flexDirection="row" flexShrink={0}>
+        <text wrapMode="none" selectable={false} attributes={DIM} flexShrink={0}>
+          {api.icons() === "nerd" ? "  " : " 🔎"}
+        </text>
+        <box flexGrow={1} flexShrink={1} onMouseUp={unlessFrozen(() => setTyping(true))}>
           <input
-            id="speedy-explorer-filter"
+            id="speedy-explorer-field"
             ref={(one: unknown) => {
-              filterField = one as Field
+              field = one as Field
             }}
-            focused={typing() === "filter"}
-            placeholder={FILTER_HINT}
+            focused={typing()}
+            placeholder={FIELD_HINT}
             placeholderColor="#868e96"
             textColor={VIEWABLE_COLOR}
             focusedTextColor={VIEWABLE_COLOR}
             cursorColor={VIEWABLE_COLOR}
             onSubmit={() => {
-              setTyping("")
-              api.filter(typed(filterField))
+              setTyping(false)
+              api.submit(typed(field))
             }}
           />
         </box>
-        <Btn
-          label={UNFILTER_LABEL}
-          color={api.state().filter ? CLOSE_COLOR : "#868e96"}
-          bold={api.state().filter !== undefined}
-          onPress={unlessFrozen(() => {
-            setTyping("")
-            api.clearFilter()
-          })}
-        />
-        <Btn
-          label={pauseLabel(api.state().filter)}
-          color={api.state().filter?.isPaused ? FLASH_COLOR : api.state().filter?.isBusy ? VIEWABLE_COLOR : "#868e96"}
-          bold={api.state().filter?.isBusy === true || api.state().filter?.isPaused === true}
-          onPress={unlessFrozen(() => api.pauseFilter())}
-        />
+        <Show when={api.state().filter !== undefined}>
+          {icon(
+            "pause",
+            {
+              label: () => pauseLabel(api.state().filter),
+              color: () => (api.state().filter?.isPaused ? FLASH_COLOR : api.state().filter?.isBusy ? VIEWABLE_COLOR : IDLE_COLOR),
+              isBold: () => api.state().filter?.isBusy === true || api.state().filter?.isPaused === true,
+              tip: () => pauseTip(api.state().filter),
+              tipTop: -1,
+            },
+            unlessFrozen(() => api.pauseFilter()),
+          )}
+          {icon(
+            "unfilter",
+            { label: () => UNFILTER_LABEL, color: () => CLOSE_COLOR, tip: () => "limpiar filtro", tipTop: -1 },
+            unlessFrozen(() => {
+              setTyping(false)
+              api.clearFilter()
+            }),
+          )}
+        </Show>
       </box>
       <text
         wrapMode="none"
@@ -419,8 +506,9 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         onMouseDown={(event: MouseEvent) => {
           event.stopPropagation()
           if (isFrozen()) return
-          if (menu()) setMenu(undefined)
-          else setSelected("")
+          if (menu()) return void setMenu(undefined)
+          setSelected("")
+          api.pick(undefined)
         }}
         onMouseScroll={() => setMenu(undefined)}
       >
