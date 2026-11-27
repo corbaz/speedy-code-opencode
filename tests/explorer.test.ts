@@ -32,6 +32,7 @@ import {
   toolTip,
   createDoubleClick,
   freeName,
+  filterMatches,
 } from "../src/explorer"
 import { cells, folderCommand } from "../src/footer"
 import { promptInsertion } from "../src/viewer"
@@ -974,6 +975,28 @@ describe("📋 and 📥, one right after the other", () => {
     await explorer.copyPath("C:/Users/test/proyectos/notas.txt")
     await explorer.paste("C:/Windows")
     expect(fake.toasts.at(-1)).toBe("primero copiá un archivo o una carpeta con 📋.")
+  })
+})
+
+describe("📥 while a filter is on", () => {
+  const NOTAS_NATIVE = ["C:", "Users", "test", "proyectos", "notas.txt"].join(String.fromCharCode(92))
+  test("what is pasted shows in the filter's tree when its name matches the pattern; what does not match does not", async () => {
+    const fake = fakeIO()
+    const explorer = createExplorer(fake.io, "win32")
+    await explorer.open("C:/Users/test/proyectos")
+    explorer.filter("*.txt")
+    fake.searches[0]!.say({ paths: ["C:/Users/test/proyectos/notas.txt"], seen: 10, done: true, cut: false })
+    await explorer.copyFile("C:/Users/test/proyectos/notas.txt")
+    fake.existing.add(NOTAS_NATIVE)
+    fake.dialog.answer = "copy"
+    await explorer.paste("C:/Windows")
+    expect(explorer.state().filter?.paths).toEqual(["C:/Users/test/proyectos/notas.txt", "C:/Windows/notas.txt"])
+    // One that does not match the pattern stays out of it.
+    await explorer.copyFile("C:/Users/test/proyectos/app.exe")
+    fake.existing.add(NOTAS_NATIVE.replace("notas.txt", "app.exe"))
+    await explorer.paste("C:/Windows")
+    expect(explorer.state().filter?.paths).toEqual(["C:/Users/test/proyectos/notas.txt", "C:/Windows/notas.txt"])
+    expect([filterMatches("*.dll", "SyncFusion.XlsIO.Base (2).DLL"), filterMatches("sync", "SyncFusion.dll"), filterMatches("a?c.txt", "abc.txt"), filterMatches("*.pdf", "a.pdf.txt")]).toEqual([true, true, true, false])
   })
 })
 

@@ -480,6 +480,44 @@ export function freeName(name: string, isFolder: boolean, taken: ReadonlySet<str
   }
 }
 
+/**
+ * Whether a file's name matches the filter's pattern, as find_files.py matches it: `*` any text, `?` any one
+ * character, whatever the case; a pattern with neither is a part of the name.
+ */
+export function filterMatches(pattern: string, name: string): boolean {
+  const text = pattern.trim()
+  const glob = (text.includes("*") || text.includes("?") ? text : `*${text}*`).toLowerCase()
+  const word = name.toLowerCase()
+  let at = 0
+  let from = 0
+  let star = -1
+  let mark = 0
+  while (from < word.length) {
+    if (at < glob.length && (glob[at] === "?" || glob[at] === word[from])) {
+      at++
+      from++
+    } else if (at < glob.length && glob[at] === "*") {
+      star = at++
+      mark = from
+    } else if (star >= 0) {
+      at = star + 1
+      from = ++mark
+    } else {
+      return false
+    }
+  }
+  while (glob[at] === "*") at++
+  return at === glob.length
+}
+
+/** The explorer after a file was pasted to `path`: with a filter on, it shows in the filter's tree when its name matches. */
+export function filterAdded(state: ExplorerState, path: string): ExplorerState {
+  if (!state.filter || !filterMatches(state.filter.pattern, path.split("/").pop() ?? path)) return state
+  const key = pathKey(path, state.caseless)
+  if (state.filter.paths.some(one => pathKey(one, state.caseless) === key)) return state
+  return { ...state, filter: { ...state.filter, paths: [...state.filter.paths, path] } }
+}
+
 /** The longest wait between the two clicks of a double click, in milliseconds. */
 export const DOUBLE_CLICK_MS = 500
 
@@ -1039,7 +1077,9 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       // The folder it went into is read again, and opened to show it; moved, the one it left too.
       set((now) => {
         const next = { ...now, open: now.open.includes(key(folder)) ? now.open : [...now.open, key(folder)] }
-        return isMoved ? filterMoved({ ...next, clip: undefined, clipKind: undefined }, clip, target) : next
+        const placed = isMoved ? filterMoved({ ...next, clip: undefined, clipKind: undefined }, clip, target) : next
+        // With a filter on, a file pasted shows in its tree when its name matches.
+        return isFolder ? placed : filterAdded(placed, target)
       })
       await reread(folder)
       if (isMoved) await reread(folderOf(clip))
