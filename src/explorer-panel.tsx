@@ -32,6 +32,7 @@ import {
   UNFILTER_LABEL,
   pauseLabel,
   pauseTip,
+  systemTip,
   crumbPath,
   crumbsOf,
   namePieces,
@@ -375,10 +376,15 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
 
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1} onMouseDown={() => setMenu(undefined)}>
-      {/* The disks, as tabs: the one shown filled. At the row's end, icons alone: ⊟ collapses every disk, ↗ opens
-          the session's folder in the system's file manager, × closes the panel. The row is drawn after the
-          path's under it, so a control's name stands over the path. The header's presses do nothing while a
-          popup of the explorer is up; ↗ and × are not the explorer's own moves. */}
+      {/* × closes the panel, on a row of its own at the right, apart from the explorer's own controls. */}
+      <box flexDirection="row" flexShrink={0}>
+        <box flexGrow={1} />
+        <Btn label=" × " color={CLOSE_COLOR} bold onPress={() => api.close()} />
+      </box>
+      {/* The disks, as tabs: the one shown filled. At the row's end, two icons alone, a cell apart: ⊟ collapses
+          every disk, ↗ opens in the system's file manager the folder the path's row shows. The row is drawn
+          after the path's under it, so a control's name stands over the path. The header's presses do nothing
+          while a popup of the explorer is up; ↗ and × are not the explorer's own moves. */}
       <box flexDirection="row" flexWrap="wrap" flexShrink={0} zIndex={10}>
         <For each={api.state().drives}>
           {(drive) => {
@@ -400,8 +406,10 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         </For>
         <box flexGrow={1} />
         {icon("collapse", { label: () => collapseLabel(api.icons()), color: () => (api.state().flashed === "collapse:" ? FLASH_COLOR : DIR_COLOR), tip: () => "colapsar", tipTop: 1 }, unlessFrozen(() => api.collapse()))}
-        {icon("system", { label: () => " ↗ ", color: () => IDLE_COLOR, tip: () => "abrir en el sistema", tipTop: 1 }, () => api.openSystem())}
-        <Btn label=" × " color={CLOSE_COLOR} bold onPress={() => api.close()} />
+        <text wrapMode="none" selectable={false} flexShrink={0}>
+          {" "}
+        </text>
+        {icon("system", { label: () => " ↗ ", color: () => IDLE_COLOR, tip: () => systemTip(process.platform), tipTop: 1 }, () => api.openSystem())}
       </box>
       {/* The path: each folder from the disk down to the row selected, or to the session's; one pressed is gone to. */}
       <box flexDirection="row" flexShrink={0}>

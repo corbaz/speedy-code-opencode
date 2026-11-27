@@ -2185,7 +2185,7 @@ export default Plugin.define({
         setTimeout(() => promptField()?.focus?.(), 50)
       },
       pauseFilter: () => explorer.pauseFilter(),
-      openSystem: () => explorer.openSystem(),
+      openSystem: () => void explorer.openSystem(),
       close: () => {
         explorer.clearFilter()
         close()

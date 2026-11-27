@@ -185,6 +185,9 @@ export const UNFILTER_LABEL = " × "
 /** Before it: holds a search that runs; held, it is the one that lets it go on from where it was. */
 export const pauseLabel = (filter: ExplorerFilter | undefined) => (filter?.isPaused ? " ▸ " : " ‖ ")
 
+/** ↗'s name, under the pointer: the system's file manager, by its own name. */
+export const systemTip = (platform: string) => (platform === "win32" ? "Abrir con Explorer" : "Abrir con Finder")
+
 /** Its name, under the pointer. */
 export const pauseTip = (filter: ExplorerFilter | undefined) => (filter?.isPaused ? "seguir" : "pausar")
 
@@ -867,8 +870,11 @@ export interface Explorer {
    * root, where its disks are.
    */
   pickDrive(drive: string): Promise<void>
-  /** `↗ abrir en el sistema`: the session's folder in the system's file manager. */
-  openSystem(): void
+  /**
+   * ↗: the system's file manager opens where the person stands in the explorer, the folder the path's row shows
+   * (crumbPath); a file selected, the folder it is in. A folder of another machine is not opened from here.
+   */
+  openSystem(): Promise<void>
   /** A file pressed: the viewer shows it, when it is one the viewer shows. */
   pressFile(path: string): void
   /** 📋: the file to the clipboard as a file, and attached to the prompt as `@path`. */
@@ -1091,8 +1097,12 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       // Unless another disk was pressed meanwhile.
       if (where && where !== "/" && state.drive === drive) await explorer.goTo(`${drive.slice(0, -1)}${where}`)
     },
-    openSystem() {
-      io.openFolder(folder)
+    async openSystem() {
+      const shown = crumbPath(state)
+      if (!shown) return io.openFolder(folder)
+      if (remoteOf(shown)) return io.toast(`${shown} está en otra máquina: ${platform === "win32" ? "Explorer" : "Finder"} no la abre desde acá.`, true)
+      const isFolder = pathKey(shown, state.caseless) === pathKey(state.drive, state.caseless) || (await io.isDir(shown).catch(() => false))
+      io.openFolder(nativeOf(isFolder ? shown : folderOf(shown), platform))
     },
     pressFile(path) {
       forget()

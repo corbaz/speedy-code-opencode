@@ -11,6 +11,7 @@ import {
   matchSpans,
   namePieces,
   pauseTip,
+  systemTip,
   FIELD_HINT,
   cutCells,
   fileNameLabel,
@@ -451,12 +452,30 @@ describe("the explorer the footer's folder opens", () => {
     expect(marked()).toEqual([])
   })
 
-  test("↗ abrir en el sistema still opens the session's folder in the system's file manager, as the footer's folder did", async () => {
-    const { io, opened } = fakeIO()
+  test("↗, named by the system's own file manager, opens in it the folder the path's row shows; with no row selected, the session's", async () => {
+    expect([systemTip("win32"), systemTip("darwin")]).toEqual(["Abrir con Explorer", "Abrir con Finder"])
+    const { io, opened, toasts } = fakeIO()
     const explorer = createExplorer(io, "win32")
     await explorer.open("C:\\Users\\test\\proyectos")
-    explorer.openSystem()
+    await explorer.openSystem()
     expect(opened).toEqual(["C:\\Users\\test\\proyectos"])
+    // A folder selected: that folder. A file selected: the folder it is in.
+    explorer.pick("C:/Users/test/proyectos/facturas")
+    await explorer.openSystem()
+    expect(opened.at(-1)).toBe("C:\\Users\\test\\proyectos\\facturas")
+    explorer.pick("C:/Users/test/proyectos/notas.txt")
+    await explorer.openSystem()
+    expect(opened.at(-1)).toBe("C:\\Users\\test\\proyectos")
+    // A disk's root is its own folder.
+    explorer.pick("C:/")
+    await explorer.openSystem()
+    expect(opened.at(-1)).toBe("C:\\")
+    // Let go of: the session's folder again.
+    explorer.pick(undefined)
+    await explorer.openSystem()
+    expect(opened.at(-1)).toBe("C:\\Users\\test\\proyectos")
+    expect(opened.length).toBe(5)
+    expect(toasts).toEqual([])
     // The folder reaches open_folder.ps1 as the footer's click sent it.
     expect(folderCommand("win32", opened[0]!, "C:/plugin").env).toEqual({ SPEEDY_FOLDER: "C:\\Users\\test\\proyectos" })
   })
