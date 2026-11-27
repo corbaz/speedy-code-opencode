@@ -8,6 +8,7 @@ import {
   gotoHint,
   cutCells,
   fileNameLabel,
+  isHeld,
   isRowFlashed,
   menuPlace,
   toolMenu,
@@ -964,6 +965,46 @@ describe("a row's menu and the double click", () => {
     expect(click("path:C:/a", 1100)).toBe(false)
     expect(click("copy:C:/a", 1200)).toBe(false)
     expect(click("copy:C:/a", 1300)).toBe(true)
+  })
+})
+
+describe("the explorer holds still while a popup of its own is up", () => {
+  const FILE = "C:/Users/test/proyectos/notas.txt"
+  const turn = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  test("a dialog holds it until it is answered", async () => {
+    const fake = fakeIO()
+    let answer: (said: string) => void = () => {}
+    const explorer = createExplorer({ ...fake.io, ask: () => new Promise<string>((resolve) => (answer = resolve)) }, "win32")
+    await explorer.open("C:/Users/test/proyectos")
+    expect(isHeld(explorer.state())).toBe(false)
+    const renaming = explorer.rename(FILE)
+    await turn()
+    expect(isHeld(explorer.state())).toBe(true)
+    answer("cancel")
+    await renaming
+    expect(isHeld(explorer.state())).toBe(false)
+    // A dialog that fails lets go as well.
+    const failing = createExplorer({ ...fake.io, ask: () => Promise.reject(new Error("no dialog")) }, "win32")
+    await failing.open("C:/Users/test/proyectos")
+    await failing.trash(FILE).catch(() => undefined)
+    expect(isHeld(failing.state())).toBe(false)
+  })
+
+  test("the viewer holds it from the press until its popup is closed, where it says when; elsewhere it holds nothing", async () => {
+    const fake = fakeIO()
+    let close: () => void = () => {}
+    const explorer = createExplorer({ ...fake.io, view: () => new Promise<void>((resolve) => (close = resolve)) }, "win32")
+    await explorer.open("C:/Users/test/proyectos")
+    explorer.pressFile(FILE)
+    expect(isHeld(explorer.state())).toBe(true)
+    close()
+    await turn()
+    expect(isHeld(explorer.state())).toBe(false)
+    const plain = createExplorer(fake.io, "win32")
+    await plain.open("C:/Users/test/proyectos")
+    plain.pressFile(FILE)
+    expect(isHeld(plain.state())).toBe(false)
   })
 })
 

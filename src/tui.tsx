@@ -1290,7 +1290,10 @@ export default Plugin.define({
      * Shows a file in a popup in the middle of the screen, as the original does: `view.ps1` a pasted
      * image in its own proportions, `view_file.ps1` a file the explorer lists. One at a time.
      */
-    const viewFile = (path: string, script: ViewerScript, failure: string, control = "", onShown?: (isShown: boolean) => void) => {
+    const viewFile = (path: string, script: ViewerScript, failure: string, control = "", onShown?: (isShown: boolean) => void): Promise<void> => {
+      // What it gives back settles once the popup is closed, or never came up.
+      let closed: () => void = () => {}
+      const whenClosed = new Promise<void>((resolve) => (closed = resolve))
       // The popup says `shown` once it is up; ended before that, it never was.
       let isTold = false
       const tell = (isShown: boolean) => {
@@ -1337,17 +1340,21 @@ export default Plugin.define({
         })
         child.on("error", () => {
           tell(false)
+          closed()
           toast(failure, "error")
         })
         child.on("exit", () => {
           tell(false)
+          closed()
           if (viewer === child) viewer = undefined
           if (control && popup.control === control) popup.end()
         })
         viewer = child
       } catch {
+        closed()
         toast(failure, "error")
       }
+      return whenClosed
     }
 
     /** Shows an image in a popup in the middle of the screen, in its own proportions, as the original does. */

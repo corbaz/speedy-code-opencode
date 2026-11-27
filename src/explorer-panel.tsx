@@ -14,6 +14,10 @@
  * under the row or over it: its tools one under the other, each with what it does at its right, 📥 grey until
  * 📋 took a file or a folder, 📍 on a folder of this machine alone. A press on a tool does it; a press anywhere
  * else, or the tree moved, closes the menu. The row whose tool was pressed is green for a second.
+ *
+ * While a popup of the explorer is up, a dialog's or the viewer's, the explorer holds still: no row fills under
+ * the pointer, none is selected or opened, no menu opens, and the header and the wheel move nothing. The one
+ * row filled is the one the popup is about.
  */
 
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
@@ -33,6 +37,7 @@ import {
   collapseLabel,
   driveLabel,
   fileNameLabel,
+  isHeld,
   isRowFlashed,
   menuPlace,
   toolMenu,
@@ -120,8 +125,15 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const room = () => Math.max(8, api.width() - 3)
   // A row's name takes the room less the empty cell that parts it from the scroll bar.
   const treeWidth = () => room() - 1
-  // The file or the folder whose row is under the pointer.
-  const [hovered, setHovered] = createSignal("")
+  // A popup of the explorer is up: the explorer holds still.
+  const isFrozen = () => isHeld(api.state())
+  // What a press on the header does, unless the explorer holds still.
+  const unlessFrozen = (run: () => void) => () => {
+    if (!isFrozen()) run()
+  }
+  // The file or the folder whose row is under the pointer: followed always, shown only while nothing holds the explorer.
+  const [pointedRow, setHovered] = createSignal("")
+  const hovered = () => (isFrozen() ? "" : pointedRow())
   // The one selected, by a click: its row keeps its fill, with ⋯ at its end.
   const [selected, setSelected] = createSignal("")
   const doubleClick = createDoubleClick()
@@ -129,6 +141,10 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const [menu, setMenu] = createSignal<{ path: string; top: number; left: number } | undefined>()
   // The tool of the menu under the pointer.
   const [pointed, setPointed] = createSignal("")
+  // A popup up closes the menu it was asked from.
+  createEffect(() => {
+    if (isFrozen()) setMenu(undefined)
+  })
   // A row's menu: a file's, a folder's or a disk's root's; 📍 on this machine alone.
   const menuOf = (row: TreeRow) =>
     toolMenu(
@@ -188,6 +204,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const pressRow = (row: TreeRow, event: MouseEvent) => {
     if (event.button !== LEFT && event.button !== RIGHT) return
     event.stopPropagation()
+    if (isFrozen()) return
     const x = event.x - (tree?.x ?? 0)
     const asksMenu = event.button === RIGHT || event.modifiers.ctrl
     if (menu() && !asksMenu) return void setMenu(undefined)
@@ -296,12 +313,13 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
 
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1} onMouseDown={() => setMenu(undefined)}>
+      {/* The header's presses do nothing while a popup of the explorer is up; ↗ and × are not the explorer's own moves. */}
       <box flexDirection="row" flexWrap="wrap" flexShrink={0}>
         <For each={api.state().drives}>
           {(drive) => {
             const isShown = () => drive === api.state().drive
             return (
-              <box flexShrink={0} onMouseUp={() => api.pickDrive(drive)}>
+              <box flexShrink={0} onMouseUp={unlessFrozen(() => api.pickDrive(drive))}>
                 <text
                   wrapMode="none"
                   selectable={false}
@@ -314,7 +332,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
             )
           }}
         </For>
-        <box flexShrink={0} onMouseUp={() => api.collapse()}>
+        <box flexShrink={0} onMouseUp={unlessFrozen(() => api.collapse())}>
           <text
             wrapMode="none"
             selectable={false}
@@ -328,7 +346,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         <Btn label=" ↗ abrir en el sistema " dim onPress={() => api.openSystem()} />
         <Btn label=" × " color={CLOSE_COLOR} bold onPress={() => api.close()} />
       </box>
-      <box flexShrink={0} onMouseUp={() => setTyping("goto")}>
+      <box flexShrink={0} onMouseUp={unlessFrozen(() => setTyping("goto"))}>
         <input
           id="speedy-explorer-goto"
           ref={(one: unknown) => {
@@ -347,7 +365,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         />
       </box>
       <box flexDirection="row" flexShrink={0}>
-        <box flexGrow={1} flexShrink={1} onMouseUp={() => setTyping("filter")}>
+        <box flexGrow={1} flexShrink={1} onMouseUp={unlessFrozen(() => setTyping("filter"))}>
           <input
             id="speedy-explorer-filter"
             ref={(one: unknown) => {
@@ -369,16 +387,16 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
           label={UNFILTER_LABEL}
           color={api.state().filter ? CLOSE_COLOR : "#868e96"}
           bold={api.state().filter !== undefined}
-          onPress={() => {
+          onPress={unlessFrozen(() => {
             setTyping("")
             api.clearFilter()
-          }}
+          })}
         />
         <Btn
           label={pauseLabel(api.state().filter)}
           color={api.state().filter?.isPaused ? FLASH_COLOR : api.state().filter?.isBusy ? VIEWABLE_COLOR : "#868e96"}
           bold={api.state().filter?.isBusy === true || api.state().filter?.isPaused === true}
-          onPress={() => api.pauseFilter()}
+          onPress={unlessFrozen(() => api.pauseFilter())}
         />
       </box>
       <text
@@ -396,9 +414,11 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         ref={(box: ScrollBoxRenderable) => (tree = box)}
         flexGrow={1}
         minHeight={0}
-        scrollY
+        // The wheel moves nothing while the explorer holds still.
+        scrollY={!isFrozen()}
         onMouseDown={(event: MouseEvent) => {
           event.stopPropagation()
+          if (isFrozen()) return
           if (menu()) setMenu(undefined)
           else setSelected("")
         }}

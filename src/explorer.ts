@@ -55,6 +55,13 @@ export interface ExplorerState {
   readonly top: number
   /** The tool just pressed (`copy:<path>`, `collapse:`), green for a second; empty or absent: none. */
   readonly flashed?: string
+  /**
+   * The popups of the explorer that are up: a dialog (rename, delete, paste, new folder) or the viewer a file of
+   * the tree opened. While one is, the explorer holds still (isHeld): its tree takes no press, fills no row
+   * under the pointer and opens no menu, and its header and the wheel move nothing, so the one row marked is
+   * the one the popup is about.
+   */
+  readonly held?: number
   /** Counts the collapses and the paths gone to: each one puts its row in the middle again, even with `top` already -1. */
   readonly turn?: number
   /** The key of the path pasted in the field under the disks and found, marked in the tree; absent: none. */
@@ -96,8 +103,12 @@ export interface ExplorerIO {
   isDir(path: string): Promise<boolean>
   /** Opens a folder in the system's file manager. */
   openFolder(folder: string): void
-  /** Shows a file in the viewer popup; `onShown` hears when it is up (`true`), or that it never was (`false`). */
-  view(path: string, onShown?: (isShown: boolean) => void): void
+  /**
+   * Shows a file in the viewer popup; `onShown` hears when it is up (`true`), or that it never was (`false`).
+   * What it gives back, where it gives something, settles once the popup is closed: the explorer holds still
+   * until then.
+   */
+  view(path: string, onShown?: (isShown: boolean) => void): void | Promise<void>
   /** Puts a file on the clipboard as a file, to paste in a folder; whether it went. */
   copyFile(native: string): Promise<boolean>
   /** Puts a text on the clipboard; whether it went. */
@@ -561,6 +572,9 @@ export function filterAdded(state: ExplorerState, path: string): ExplorerState {
   return { ...state, filter: { ...state.filter, paths: [...state.filter.paths, path] } }
 }
 
+/** Whether a popup of the explorer is up, a dialog's or the viewer's: the explorer holds still. */
+export const isHeld = (state: ExplorerState) => (state.held ?? 0) > 0
+
 /** The longest wait between the two clicks of a double click, in milliseconds. */
 export const DOUBLE_CLICK_MS = 500
 
@@ -845,6 +859,18 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
   const forget = () => {
     if (state.found !== undefined || state.viewed !== undefined) set((now) => ({ ...now, found: undefined, viewed: undefined }))
   }
+  // A popup of the explorer is up, and then gone: the explorer holds still meanwhile.
+  const hold = () => set((now) => ({ ...now, held: (now.held ?? 0) + 1 }))
+  const release = () => set((now) => ({ ...now, held: Math.max(0, (now.held ?? 0) - 1) }))
+  // A dialog, the explorer held still until it is answered.
+  const ask: ExplorerIO["ask"] = async (...asked) => {
+    hold()
+    try {
+      return await io.ask(...asked)
+    } finally {
+      release()
+    }
+  }
   // 📋 and 📥 go one right after the other: anything else pressed lets go of what 📋 took.
   const dropClip = () => {
     if (state.clip !== undefined) set((now) => ({ ...now, clip: undefined, clipKind: undefined }))
@@ -957,7 +983,12 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
         set((now) => ({ ...now, flashed: "", viewed: isShown ? pathKey(path, now.caseless) : now.viewed }))
       }
       void io.wait(OPENING_MOST_MS).then(() => over(false))
-      io.view(path, over)
+      // Where the viewer says when its popup is closed, the explorer holds still from the press until then.
+      const closed = io.view(path, over)
+      if (closed) {
+        hold()
+        void closed.then(release, release)
+      }
     },
     async copyFile(path) {
       forget()
@@ -1007,7 +1038,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       dropClip()
       if (notOnDisk(path)) return
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
-      const name = newNameOf(await io.ask("rename", nativeOf(path, platform), kind))
+      const name = newNameOf(await ask("rename", nativeOf(path, platform), kind))
       if (name) await renameTo(path, name)
     },
     async newFolder(path) {
@@ -1015,7 +1046,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       dropClip()
       flash(`mkdir:${path}`)
       const folder = (await io.isDir(path).catch(() => false)) ? slashed(path) : folderOf(slashed(path))
-      const name = newNameOf(await io.ask("mkdir", nativeOf(folder, platform), "dir")).trim()
+      const name = newNameOf(await ask("mkdir", nativeOf(folder, platform), "dir")).trim()
       if (!name) return
       const why = badFileName(name)
       if (why) return io.toast(`no creé la carpeta: ${why}.`, true)
@@ -1034,7 +1065,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       if (notOnDisk(path)) return
       const native = nativeOf(path, platform)
       const kind = (await io.isDir(path).catch(() => false)) ? "dir" : "file"
-      if ((await io.ask("delete", native, kind)) !== "delete") return
+      if ((await ask("delete", native, kind)) !== "delete") return
       const name = nameOf(path)
       if (!(await io.trash(native))) return io.toast(`no pude mandar ${name} a la papelera.`, true)
       io.toast(`${name} fue a la papelera.`)
@@ -1067,7 +1098,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
         const listed = await readFolder(io, folder)
         const taken = new Set([name.toLowerCase(), ...(listed === "denied" ? [] : listed.entries.map((entry) => entry.name.toLowerCase()))])
         const offered = freeName(name, isFolder, taken)
-        const wanted = newNameOf(await io.ask("rename", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform), offered)).trim()
+        const wanted = newNameOf(await ask("rename", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform), offered)).trim()
         if (!wanted) return
         const why = badFileName(wanted)
         if (why) return io.toast(`no pegué ${own}: ${why}.`, true)
@@ -1077,7 +1108,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
         name = wanted
       }
       const target = joinPath(folder, name)
-      const verb = await io.ask("paste", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform), name === own ? "" : name, isSameFolder)
+      const verb = await ask("paste", nativeOf(clip, platform), isFolder ? "dir" : "file", nativeOf(folder, platform), name === own ? "" : name, isSameFolder)
       if (verb !== "copy" && verb !== "move") return
       const isMove = verb === "move"
       // Across machines it takes a while: it says it started.
