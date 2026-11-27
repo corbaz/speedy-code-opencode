@@ -1,14 +1,16 @@
 import { describe, expect, test } from "bun:test"
 
 import {
-  FILE_TOOLS_WIDTH,
+  ROW_MORE,
   badFileName,
   chainOf,
   collapseLabel,
   gotoHint,
   cutCells,
   fileNameLabel,
-  fileTools,
+  isRowFlashed,
+  menuPlace,
+  toolMenu,
   createExplorer,
   driveLabel,
   driveOf,
@@ -166,47 +168,55 @@ describe("explorer helpers", () => {
     }
   })
 
-  test("a file's row: its name cut and filled with spaces up to its seven tools, emoji or Nerd Fonts glyphs in their colors", () => {
-    const row = { path: "C:/x/un_nombre_muy_largo_de_archivo.txt", name: "un_nombre_muy_largo_de_archivo.txt", depth: 2, kind: "file" as const, isOpen: false, isHere: false }
+  test("a file's row: its name cut and filled with spaces to the tree's width; its tools are its menu, emoji or Nerd Fonts glyphs in their colors", () => {
+    const row = { path: "C:/x/un_nombre_muy_largo_de_archivo_que_no_entra_en_su_fila.txt", name: "un_nombre_muy_largo_de_archivo_que_no_entra_en_su_fila.txt", depth: 2, kind: "file" as const, isOpen: false, isHere: false }
+    // The row is the name alone, on the tree's whole width: under the pointer and while selected its fill runs all of it.
     const label = fileNameLabel(row, 44)
-    expect(cells(label)).toBe(44 - FILE_TOOLS_WIDTH)
+    expect(cells(label)).toBe(44)
     expect(label.startsWith("      un_nomb")).toBe(true)
     expect(label.trimEnd().endsWith("…")).toBe(true)
-    const short = fileNameLabel({ ...row, name: "a.md", depth: 0 }, 44)
-    expect(short).toBe("  a.md".padEnd(44 - FILE_TOOLS_WIDTH))
-    // Each icon on its own two cells, pressed there alone; before each, a plain gap that takes no press, so a
-    // press a little off an icon does nothing instead of its neighbour's work.
-    expect(fileTools("emoji", "", row.path).map((tool) => [tool.kind, tool.label.trimEnd(), cells(tool.label), tool.gap, tool.color])).toEqual([
-      // 📁 makes a folder there: in a folder, inside it; on a file, in its folder.
-      ["mkdir", "📁", 2, 1, "#ffd43b"],
-      ["copy", "📋", 2, 2, "#74c0fc"],
-      // 📥, after 📋, is grey, a plain mark, until 📋 took a folder to paste; then it is lit.
-      ["paste", "↧", 2, 2, "#495057"],
-      ["path", "🔗", 2, 2, "#63e6be"],
-      ["rename", "✏", 2, 2, "#b197fc"],
-      ["trash", "🗑", 2, 2, "#ff8787"],
-      // 📍, the session goes to work there, is a folder's alone: a file has its two cells empty, pressed for nothing.
-      ["work", "", 2, 2, "#495057"],
-    ])
-    expect(fileTools("emoji", "", row.path).at(-1)?.isNone).toBe(true)
-    expect(fileTools("emoji", "", "C:/x/docs", false, false, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color, tool.isNone]).at(-1)).toEqual(["work", "📍", "#51cf66", false])
-    expect(fileTools("emoji", "", row.path, true).map((tool) => [tool.kind, tool.label.trimEnd(), tool.color])[2]).toEqual(["paste", "📥", "#ffa94d"])
-    expect(fileTools("nerd", "", "C:/x/docs", false, false, true).map((tool) => tool.label)).toEqual(["\uea80\u00a0", "\uf0c5\u00a0", "\uf0ea\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf041\u00a0"])
-    expect([fileTools("nerd", "", row.path)[2]?.color, fileTools("nerd", "", row.path, true)[2]?.color]).toEqual(["#495057", "#ffa94d"])
-    // On a disk's root 📋, ✏ and 🗑 are grey: a disk is not copied, renamed or trashed; 🔗 and 📥 are as on any row.
-    expect(fileTools("nerd", "", "C:/", true, true, true).map((tool) => tool.color)).toEqual(["#ffd43b", "#495057", "#ffa94d", "#63e6be", "#495057", "#495057", "#51cf66"])
-    // The seven tools, and two empty cells after them that part the last one from the scroll bar.
-    expect(FILE_TOOLS_WIDTH).toBe(1 + 2 + 6 * 4 + 2)
-    // 📁 makes a folder on another machine too: its rows have it.
-    expect(fileTools("emoji", "", "mac:/Users/ana")[0]).toMatchObject({ kind: "mkdir", label: "📁", isNone: false })
-    // A folder's row is laid out as a file's: its open mark and name, filled up to the same four tools.
+    expect(fileNameLabel({ ...row, name: "a.md", depth: 0 }, 44)).toBe("  a.md".padEnd(44))
+    // A folder's row is laid out as a file's: its open mark and its name.
     const folder = { path: "C:/x/docs", name: "docs", depth: 1, kind: "dir" as const, isOpen: false, isHere: false }
-    expect(fileNameLabel(folder, 40)).toBe("  ▸ docs".padEnd(40 - FILE_TOOLS_WIDTH))
-    // The tool just pressed is green, with no fill; the others keep their colors.
-    const flashed = fileTools("emoji", `path:${row.path}`, row.path)
-    expect(flashed.map((tool) => tool.color)).toEqual(["#ffd43b", "#74c0fc", "#495057", "#51cf66", "#b197fc", "#ff8787", "#495057"])
-    expect(fileTools("emoji", `path:C:/otro.txt`, row.path).map((tool) => tool.color)).toEqual(["#ffd43b", "#74c0fc", "#495057", "#63e6be", "#b197fc", "#ff8787", "#495057"])
-    expect(Object.keys(flashed[0]!)).not.toContain("bg")
+    expect(fileNameLabel(folder, 40)).toBe("  ▸ docs".padEnd(40))
+    // ⋯, at the end of the row selected, opens the row's menu: three cells.
+    expect(cells(ROW_MORE)).toBe(3)
+    // A folder's menu: the seven tools, one under the other, each with what it does and its color; every icon
+    // on two cells, every text filled to the longest, so the menu's lines are one width.
+    const dir = toolMenu({ isFolder: true }, undefined, "emoji")
+    expect(dir.items.map((item) => [item.kind, item.icon.trimEnd(), cells(item.icon), item.text.trimEnd(), item.color])).toEqual([
+      ["mkdir", "📁", 2, "Crear carpeta", "#ffd43b"],
+      ["copy", "📋", 2, "Copiar carpeta", "#74c0fc"],
+      // 📥, after 📋, is grey, a plain mark, and says why, until 📋 took a file or a folder; then it is lit.
+      ["paste", "↧", 2, "Pegar: primero copiá algo", "#ffa94d"],
+      ["path", "🔗", 2, "Copiar path", "#63e6be"],
+      ["rename", "✏", 2, "Renombrar carpeta", "#b197fc"],
+      ["trash", "🗑", 2, "Borrar carpeta", "#ff8787"],
+      ["work", "📍", 2, "Cambiar espacio de trabajo", "#51cf66"],
+    ])
+    expect(dir.items.filter((item) => item.isIdle).map((item) => item.kind)).toEqual(["paste"])
+    expect(dir.width).toBe(cells("Cambiar espacio de trabajo"))
+    expect(new Set(dir.items.map((item) => cells(item.text))).size).toBe(1)
+    // What 📋 took lights 📥, which says what it pastes.
+    expect(toolMenu({ isFolder: true }, { kind: "dir" }, "emoji").items[2]).toEqual({ kind: "paste", icon: "📥", text: "Pegar carpeta".padEnd(dir.width), color: "#ffa94d" })
+    expect(toolMenu({ isFolder: true }, { kind: "file" }, "emoji").items[2]?.text.trimEnd()).toBe("Pegar archivo")
+    // A file's menu has the four that are a file's: no 📁, no 📥, no 📍.
+    expect(toolMenu({ isFolder: false }, { kind: "file" }, "emoji").items.map((item) => [item.kind, item.text.trimEnd()])).toEqual([
+      ["copy", "Copiar archivo"],
+      ["path", "Copiar path"],
+      ["rename", "Renombrar archivo"],
+      ["trash", "Borrar archivo"],
+    ])
+    // A disk's root has a folder's, to paste into it and to copy its path: 📋, ✏ and 🗑 are grey there, and say why.
+    const disk = toolMenu({ isFolder: true, isDisk: true }, { kind: "file" }, "nerd")
+    expect(disk.items.filter((item) => item.isIdle).map((item) => item.text.trimEnd())).toEqual(["Copiar: no se hace con un disco", "Renombrar: no se hace con un disco", "Borrar: no se hace con un disco"])
+    // Nerd Fonts: each glyph with the cell it spills over.
+    expect(disk.items.map((item) => item.icon)).toEqual(["\uea80\u00a0", "\uf0c5\u00a0", "\uf0ea\u00a0", "\uf0c1\u00a0", "\uf044\u00a0", "\uf1f8\u00a0", "\uf041\u00a0"])
+    // 📍 is on a folder of this machine alone; 📁 makes a folder on another machine too.
+    expect(toolMenu({ isFolder: true, isFar: true }, undefined, "emoji").items.map((item) => item.kind)).toEqual(["mkdir", "copy", "paste", "path", "rename", "trash"])
+    // The row whose tool was just pressed, or whose file is being opened, is green; another row is not.
+    expect([isRowFlashed(`path:${row.path}`, row.path), isRowFlashed(`view:${row.path}`, row.path), isRowFlashed("path:C:/otro.txt", row.path), isRowFlashed("", row.path)]).toEqual([true, true, false, false])
+    expect(isRowFlashed("collapse:", "")).toBe(false)
     expect([collapseLabel("emoji"), collapseLabel("nerd")]).toEqual([" ⊟ ", "  "])
   })
 })
@@ -930,22 +940,27 @@ describe("each tool's label, beside it while the pointer is on it", () => {
   })
 })
 
-describe("a file's row and the double click", () => {
-  test("a file's row has no 📁 nor 📥, their cells empty; a folder's has them", () => {
-    const file = fileTools("emoji", "", "C:/x/notas.txt", true, false, false, false)
-    expect(file.map((tool) => [tool.kind, tool.isNone])).toEqual([["mkdir", true], ["copy", false], ["paste", true], ["path", false], ["rename", false], ["trash", false], ["work", true]])
-    expect(file.map((tool) => cells(tool.label) + tool.gap)).toEqual([3, 4, 4, 4, 4, 4, 4])
-    expect(fileTools("emoji", "", "C:/x", true, false, true, true).every((tool) => !tool.isNone)).toBe(true)
+describe("a row's menu and the double click", () => {
+  test("a row's menu stands under its row, or over it where the room under is short, from the cell it was asked at, within the tree", () => {
+    // Row 3 of a room of 20, asked at cell 10: under the row.
+    expect(menuPlace({ at: 3, x: 10, height: 9, width: 34, room: 20, treeWidth: 46 })).toEqual({ top: 4, left: 10 })
+    // No rows left under it: over it.
+    expect(menuPlace({ at: 15, x: 10, height: 9, width: 34, room: 20, treeWidth: 46 })).toEqual({ top: 6, left: 10 })
+    // Neither under nor over: at the room's end, or its top.
+    expect(menuPlace({ at: 5, x: 0, height: 9, width: 34, room: 12, treeWidth: 46 })).toEqual({ top: 3, left: 0 })
+    expect(menuPlace({ at: 1, x: 0, height: 9, width: 34, room: 4, treeWidth: 46 })).toEqual({ top: 0, left: 0 })
+    // Asked at ⋯, at the tree's right edge: it ends there.
+    expect(menuPlace({ at: 3, x: 46, height: 6, width: 25, room: 20, treeWidth: 46 })).toEqual({ top: 4, left: 21 })
   })
 
-  test("a tool acts on a double click: two clicks on it within half a second; one, or two apart, does nothing", () => {
+  test("a row opens on a double click: two clicks on it within half a second; one, or two apart, only select it", () => {
     const click = createDoubleClick()
     expect(click("copy:C:/a", 0)).toBe(false)
     expect(click("copy:C:/a", 300)).toBe(true)
     // A double click starts over: a third click is a first one.
     expect(click("copy:C:/a", 350)).toBe(false)
     expect(click("copy:C:/a", 1000)).toBe(false)
-    // Another tool in between is a first click of its own.
+    // Another row in between is a first click of its own.
     expect(click("path:C:/a", 1100)).toBe(false)
     expect(click("copy:C:/a", 1200)).toBe(false)
     expect(click("copy:C:/a", 1300)).toBe(true)

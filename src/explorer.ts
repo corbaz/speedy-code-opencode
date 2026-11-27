@@ -419,9 +419,9 @@ export function badFileName(name: string): string {
 export type FileToolKind = "mkdir" | "copy" | "path" | "rename" | "trash" | "paste" | "work"
 
 /**
- * Each file's tools: what a press does, its emoji, its Nerd Fonts glyph and its color. 📁, the first, makes a
- * folder there; 📍, the last, is a folder's alone: the session goes to work there. Both are for this machine's
- * folders alone.
+ * Each row's tools, in its menu: what a press does, its emoji, its Nerd Fonts glyph and its color. 📁, the
+ * first, makes a folder there; 📍, the last, is a folder's alone: the session goes to work there. Both are for
+ * this machine's folders alone.
  */
 export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, string]> = [
   ["mkdir", "📁", "\uea80", "#ffd43b"],
@@ -434,8 +434,8 @@ export const FILE_TOOLS: ReadonlyArray<readonly [FileToolKind, string, string, s
 ]
 
 /**
- * What a tool of a row does, as the pointer on it says on the line above the row, dark on the tool's own color
- * (⚙ → Ver labels): for a file or a folder, and 📥 for what 📋 took. A tool grey on a disk's root says why.
+ * What a tool of a row does, as its menu says at the tool's right: for a file or a folder, and 📥 for what 📋
+ * took. A tool grey on a disk's root says why.
  */
 export function toolTip(kind: FileToolKind, isFolder: boolean, isDisk = false, clipKind?: "dir" | "file"): string {
   const what = isFolder ? "carpeta" : "archivo"
@@ -458,12 +458,55 @@ export function toolTip(kind: FileToolKind, isFolder: boolean, isDisk = false, c
   }
 }
 
+/** A tool as a row's menu lists it: what it does when pressed, its icon on two cells, what it says, and its color; `isIdle`: grey, it only says why. */
+export interface ToolItem {
+  readonly kind: FileToolKind
+  readonly icon: string
+  readonly text: string
+  readonly color: string
+  readonly isIdle?: true
+}
+
 /**
- * Where a tool's label starts, against the tool's own two cells: centered over it, but within the row's tools,
- * so the last tool's does not run past the explorer's edge. `index` is the tool's place among the seven.
+ * The menu of a row's tools, one under the other, each with what it does: a file's four; a folder's seven, 📍
+ * on this machine alone (`isFar`: a folder of another one); a disk's root as a folder's, 📋, ✏ and 🗑 grey there.
+ * 📥 is grey until 📋 took a file or a folder (`clip`, and which of the two). A grey one says why at its right.
+ * `width` is the cells of the longest text, which all are filled to, so the menu's lines are one width.
  */
-export function tipLeft(index: number, width: number, toolsWidth = FILE_TOOLS_WIDTH - 2): number {
-  return Math.min(1 - Math.floor(width / 2), toolsWidth - (1 + 4 * index) - width)
+export function toolMenu(
+  row: { isFolder: boolean; isDisk?: boolean; isFar?: boolean },
+  clip: { kind?: "dir" | "file" } | undefined,
+  icons: IconSet,
+): { width: number; items: ToolItem[] } {
+  const items = FILE_TOOLS.flatMap(([kind, emoji, glyph, color]): ToolItem[] => {
+    if (!row.isFolder && (kind === "mkdir" || kind === "paste" || kind === "work")) return []
+    if (kind === "work" && row.isFar) return []
+    const isOff = row.isDisk === true && DISK_IDLE_TOOLS.includes(kind)
+    const isEmpty = kind === "paste" && !clip
+    const text = isOff
+      ? `${toolTip(kind, true).split(" ")[0]}: ${toolTip(kind, true, true)}`
+      : isEmpty
+        ? "Pegar: primero copiá algo"
+        : toolTip(kind, row.isFolder, false, clip?.kind)
+    // An emoji, or a glyph with the cell it spills over: two cells, the tool's own.
+    const icon = icons === "nerd" ? `${glyph}\u00a0` : isEmpty ? PASTE_IDLE_MARK : emoji
+    return [{ kind, icon: icon + " ".repeat(Math.max(0, 2 - cells(icon))), text, color, ...(isOff || isEmpty ? { isIdle: true as const } : {}) }]
+  })
+  const width = Math.max(0, ...items.map((item) => cells(item.text)))
+  return { width, items: items.map((item) => ({ ...item, text: item.text + " ".repeat(width - cells(item.text)) })) }
+}
+
+/** The cells a menu takes beside its texts: the frame's two, a space, the icon's two, two spaces and one at the end. */
+export const MENU_EDGE = 8
+
+/**
+ * Where a row's menu stands, in the tree's cells: under its row (`at`, among the rows shown), or over it where
+ * the room under is short, and from the cell it was asked at, kept within the tree.
+ */
+export function menuPlace(menu: { at: number; x: number; height: number; width: number; room: number; treeWidth: number }): { top: number; left: number } {
+  const { at, height, room } = menu
+  const top = at + 1 + height <= room ? at + 1 : at - height >= 0 ? at - height : Math.max(0, room - height)
+  return { top, left: Math.max(0, Math.min(menu.treeWidth - menu.width, menu.x)) }
 }
 
 /**
@@ -523,7 +566,7 @@ export const DOUBLE_CLICK_MS = 500
 
 /**
  * A double click's watch: `click(key, now)` says whether a click on `key` makes a double click with the one
- * before it; a double click starts over. The explorer's tools act on one.
+ * before it; a double click starts over. A row of the explorer opens on one.
  */
 export function createDoubleClick(): (key: string, now: number) => boolean {
   let last = { key: "", at: 0 }
@@ -534,67 +577,39 @@ export function createDoubleClick(): (key: string, now: number) => boolean {
   }
 }
 
-/** 📥 while 📋 took nothing: grey, and with emoji a plain mark, as an emoji keeps its own colors. */
+/** 📥 in a menu while 📋 took nothing: with emoji a plain mark, as an emoji keeps its own colors. */
 export const PASTE_IDLE_MARK = "↧"
-export const PASTE_IDLE_COLOR = "#495057"
+/** A tool of a menu that does nothing here: grey. */
+export const TOOL_IDLE_COLOR = "#495057"
 
 /** The tools that are grey on a disk's root, and do nothing there: a disk is not copied, renamed or trashed. */
 export const DISK_IDLE_TOOLS: readonly FileToolKind[] = ["copy", "rename", "trash"]
 
-/**
- * The cells the seven tools take at a row's right: each icon on its own two cells, a plain gap of two before
- * each but the first, which has one, and two empty cells after the last, which part it from the scroll bar.
- * A press a little off an icon lands on a gap and does nothing.
- */
-export const FILE_TOOLS_WIDTH = 29
+/** At the end of the row selected: a press on it opens the row's menu. */
+export const ROW_MORE = " ⋯ "
 
-/** The color a pressed tool takes for a second, as a sign the press was taken: green, with no fill. */
+/** The fill a row takes for a second once a tool of its menu was pressed, and a file's while it opens: green, a sign the press was taken. */
 export const FLASH_COLOR = "#51cf66"
 
-/** How long a pressed tool stays green. */
+/** How long a row stays green. */
 export const FLASH_MS = 1000
 
 /**
- * A file's or a folder's name as its row writes it: indented (a folder with its open mark), cut with … to
- * its room, and filled with spaces up to its tools.
+ * A file's or a folder's name as its row writes it: indented (a folder with its open mark), cut with … to the
+ * tree's width and filled with spaces up to it, so its fill runs the whole row.
  */
 export function fileNameLabel(row: TreeRow, width: number): string {
-  const room = Math.max(4, width - FILE_TOOLS_WIDTH)
+  const room = Math.max(4, width)
   const cut = cutCells(row.kind === "dir" ? rowLabel(row) : `${"  ".repeat(row.depth)}  ${row.name}`, room)
   return cut + " ".repeat(Math.max(0, room - cells(cut)))
 }
 
 /**
- * A file's tools as its row draws them: each its glyph or emoji and its color, the one just pressed green.
- * 📥 is lit only while 📋 has taken a file or a folder to paste (`hasClip`). On a disk's root (`isDisk`) 📋, ✏
- * and 🗑 are grey. 📍 is on a folder of this machine alone (`isWorkable`); elsewhere its two cells are empty,
- * `isNone`, and a press there does nothing.
+ * Whether a row is the one just pressed, green for a second: a tool of its menu (`<tool>:<path>`), or its file
+ * on its way to the viewer (`view:<path>`).
  */
-export function fileTools(
-  icons: IconSet,
-  flashed: string,
-  path: string,
-  hasClip = false,
-  isDisk = false,
-  isWorkable = false,
-  isFolder = true,
-): Array<{ kind: FileToolKind; label: string; gap: number; color: string; isNone: boolean }> {
-  return FILE_TOOLS.map(([kind, emoji, glyph, color], index) => {
-    // 📍 on a folder of this machine alone; 📁 and 📥 on a folder alone: a file's row has their cells empty.
-    if ((kind === "work" && !isWorkable) || (!isFolder && (kind === "mkdir" || kind === "paste"))) {
-      return { kind, label: "  ", gap: index === 0 ? 1 : 2, color: PASTE_IDLE_COLOR, isNone: true }
-    }
-    const isIdle = (kind === "paste" && !hasClip) || (isDisk && DISK_IDLE_TOOLS.includes(kind))
-    // An emoji, or a glyph with the cell it spills over: two cells, the tool's own.
-    const icon = icons === "nerd" ? `${glyph}\u00a0` : kind === "paste" && isIdle ? PASTE_IDLE_MARK : emoji
-    return {
-      kind,
-      label: icon + " ".repeat(Math.max(0, 2 - cells(icon))),
-      gap: index === 0 ? 1 : 2,
-      color: flashed === `${kind}:${path}` ? FLASH_COLOR : isIdle ? PASTE_IDLE_COLOR : color,
-      isNone: false,
-    }
-  })
+export function isRowFlashed(flashed: string, path: string): boolean {
+  return flashed === `view:${path}` || FILE_TOOLS.some(([kind]) => flashed === `${kind}:${path}`)
 }
 
 /** What the explorer's field says while empty: a path as the system writes one. */
@@ -727,7 +742,7 @@ export interface Explorer {
   copyFile(path: string): Promise<void>
   /** 🔗: the file's path, as the system writes it, to the clipboard and into the prompt. */
   copyPath(path: string): Promise<void>
-  /** A tool pressed turns green for a second, with no fill: the press was taken. `key` is `<tool>:<path>`. */
+  /** A row whose tool was pressed is green for a second: the press was taken. `key` is `<tool>:<path>`. */
   flash(key: string): void
   /** ✏: the dialog asks the new name, then the file is renamed in its folder and the folder read again. */
   rename(path: string): Promise<void>

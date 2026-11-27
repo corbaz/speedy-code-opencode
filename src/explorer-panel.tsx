@@ -7,20 +7,24 @@
  * under a rule, the disk's tree, the session's folder marked ● and put in the middle when the explorer
  * opens. The tree scrolls under the disks and the field, which stay.
  *
- * Every file is yellow and opens in the viewer; at its right, its six tools: 📥 grey until 📋 took a file or a
- * folder to paste, and 📍, the last, on a folder of this machine alone; two empty cells part them from the scroll bar. While the pointer is anywhere
- * on a file's row, its tools included, the name keeps a yellow fill: the row is marked as the one the
- * tools act on. The tools themselves never take a fill; a pressed one turns green for a second.
+ * Every file is yellow and every folder blue, each on a row of its own, the name alone on the tree's width.
+ * While the pointer is on a row it takes a fill in its color. A click selects it: it keeps the fill, bold, with
+ * ⋯ at its end; a second click in time opens it, a file in the viewer and a folder open or closed, which one
+ * click on its ▸ or ▾ does too. The right button, Ctrl with a click, or ⋯ open the row's menu inside the tree,
+ * under the row or over it: its tools one under the other, each with what it does at its right, 📥 grey until
+ * 📋 took a file or a folder, 📍 on a folder of this machine alone. A press on a tool does it; a press anywhere
+ * else, or the tree moved, closes the menu. The row whose tool was pressed is green for a second.
  */
 
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
-import type { ScrollBoxRenderable } from "@opentui/core"
+import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 
 import {
   FLASH_COLOR,
-  FILE_TOOLS,
-  FILE_TOOLS_WIDTH,
   FILTER_HINT,
+  MENU_EDGE,
+  ROW_MORE,
+  TOOL_IDLE_COLOR,
   UNFILTER_LABEL,
   pauseLabel,
   pathKey,
@@ -29,11 +33,11 @@ import {
   collapseLabel,
   driveLabel,
   fileNameLabel,
-  fileTools,
+  isRowFlashed,
+  menuPlace,
+  toolMenu,
   createDoubleClick,
   gotoHint,
-  tipLeft,
-  toolTip,
   rowAction,
   rowLabel,
   treeRows,
@@ -51,10 +55,12 @@ export const EXPLORER_PANEL = "speedy-code-explorer"
 
 const DIR_COLOR = "#74c0fc"
 const CLOSE_COLOR = "#ff6b6b"
-// A tool's label: dark on the tool's own color.
-const TIP_TEXT = "#1a1a1a"
-// The tool's own color, its label's fill.
-const toolColor = (kind: FileToolKind) => FILE_TOOLS.find(([one]) => one === kind)?.[3] ?? "#ffd43b"
+// A menu's frame, and what it stands on: the rows under it do not show through.
+const MENU_FRAME = "#868e96"
+const MENU_FILL = "#141414"
+// The buttons, as @opentui/core numbers them.
+const LEFT = 0
+const RIGHT = 2
 // The text attributes, as @opentui/core numbers them.
 const BOLD = 1
 const DIM = 2
@@ -68,12 +74,10 @@ export interface ExplorerPanelApi {
   readonly width: () => number
   /** Emoji or Nerd Fonts glyphs, as the settings say. */
   readonly icons: () => IconSet
-  /** ⚙ → Ver labels: what each tool does, beside it while the pointer is on it. */
-  readonly labels: () => boolean
   pickDrive(drive: string): void
   toggleFolder(path: string): void
   pressFile(path: string): void
-  /** A file's tool pressed. */
+  /** A tool of a row's menu pressed. */
   tool(kind: FileToolKind, path: string): void
   /** ⊟: every disk collapses; the session's stays open down to its folder. */
   collapse(): void
@@ -114,13 +118,34 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   }, [])
   // The rule and the rows take the panel's width, less its margins and the scroll bar.
   const room = () => Math.max(8, api.width() - 3)
-  // The file whose row is under the pointer, its tools included.
+  // A row's name takes the room less the empty cell that parts it from the scroll bar.
+  const treeWidth = () => room() - 1
+  // The file or the folder whose row is under the pointer.
   const [hovered, setHovered] = createSignal("")
+  // The one selected, by a click: its row keeps its fill, with ⋯ at its end.
+  const [selected, setSelected] = createSignal("")
   const doubleClick = createDoubleClick()
-  // The tool under the pointer, `<kind>:<path>`: its label shows on the line above its row.
-  const [tipped, setTipped] = createSignal("")
-  // Whether a row is the tree's first line shown: its labels go below it, where the tree still draws them.
-  const isFirstShown = (path: string) => rows().findIndex((one) => one.path === path) <= Math.round(tree?.scrollTop ?? 0)
+  // The row whose menu is open, and where the menu stands against it: rows down from the row, cells from the tree's left.
+  const [menu, setMenu] = createSignal<{ path: string; top: number; left: number } | undefined>()
+  // The tool of the menu under the pointer.
+  const [pointed, setPointed] = createSignal("")
+  // A row's menu: a file's, a folder's or a disk's root's; 📍 on this machine alone.
+  const menuOf = (row: TreeRow) =>
+    toolMenu(
+      { isFolder: row.kind === "dir", isDisk: row.kind === "dir" && row.depth === 0, isFar: remoteOf(row.path) !== undefined },
+      api.state().clip ? { kind: api.state().clipKind } : undefined,
+      api.icons(),
+    )
+  // The menu opens under its row, or over it where the tree's room under is short, from the cell asked.
+  const openMenu = (row: TreeRow, x: number) => {
+    const tools = menuOf(row)
+    const height = tools.items.length + 2
+    const at = rows().findIndex((one) => one.path === row.path) - Math.round(tree?.scrollTop ?? 0)
+    const place = menuPlace({ at, x, height, width: Math.min(treeWidth(), tools.width + MENU_EDGE), room: Math.max(1, tree?.viewport.height ?? at + 1 + height), treeWidth: treeWidth() })
+    setSelected(row.path)
+    setPointed("")
+    setMenu({ path: row.path, top: place.top - at, left: place.left })
+  }
   // The field for a path takes the keys only once pressed, and gives them back on Enter: the prompt keeps them.
   const [typing, setTyping] = createSignal<"" | "goto" | "filter">("")
   type Field = { value?: string; plainText?: string }
@@ -149,97 +174,128 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
     else setTimeout(place, 0)
   })
 
-  const press = (row: TreeRow) => {
+  const openRow = (row: TreeRow) => {
     const action = rowAction(row)
     if (action === "folder") api.toggleFolder(row.path)
     else if (action === "view") api.pressFile(row.path)
   }
 
   /**
-   * A file's or a folder's row: its name, which opens the viewer (a file) or opens and closes it (a folder),
-   * and its five tools, none with a fill under the pointer. A file's name is yellow and fills yellow; a
-   * folder's is blue and fills blue.
+   * A press on a file's or a folder's row. The right button, Ctrl with a click, or ⋯ at the end of the row
+   * selected open its menu. A click selects the row, and the second one in time opens it; a folder's ▸ or ▾
+   * opens or closes it with one. While a menu is open, a press outside it closes it and does nothing else.
+   */
+  const pressRow = (row: TreeRow, event: MouseEvent) => {
+    if (event.button !== LEFT && event.button !== RIGHT) return
+    event.stopPropagation()
+    const x = event.x - (tree?.x ?? 0)
+    const asksMenu = event.button === RIGHT || event.modifiers.ctrl
+    if (menu() && !asksMenu) return void setMenu(undefined)
+    if (asksMenu) return openMenu(row, x)
+    if (selected() === row.path && x >= treeWidth() - cells(ROW_MORE)) return openMenu(row, treeWidth())
+    setSelected(row.path)
+    if (row.kind === "dir" && x >= row.depth * 2 && x < row.depth * 2 + 2) return api.toggleFolder(row.path)
+    if (doubleClick(`row:${row.path}`, Date.now())) openRow(row)
+  }
+
+  /** A row's menu, over the rows: its tools one under the other, each with what it does at its right. */
+  const rowMenu = (row: TreeRow) => (
+    <box
+      position="absolute"
+      top={menu()?.top ?? 1}
+      left={menu()?.left ?? 0}
+      zIndex={60}
+      width={Math.min(treeWidth(), menuOf(row).width + MENU_EDGE)}
+      flexDirection="column"
+      flexShrink={0}
+      border
+      borderStyle="rounded"
+      borderColor={MENU_FRAME}
+      backgroundColor={MENU_FILL}
+      // The frame takes no press, and the row under the menu none either.
+      onMouseDown={(event: MouseEvent) => event.stopPropagation()}
+    >
+      <For each={menuOf(row).items}>
+        {(item) => {
+          const isPointed = () => !item.isIdle && pointed() === item.kind
+          return (
+            <box
+              flexDirection="row"
+              flexShrink={0}
+              // One press does it, and the menu closes; a grey tool says why it does nothing.
+              onMouseDown={(event: MouseEvent) => {
+                event.stopPropagation()
+                if (event.button !== LEFT || event.modifiers.ctrl) return
+                setMenu(undefined)
+                api.tool(item.kind, row.path)
+              }}
+              onMouseOver={() => setPointed(item.kind)}
+              onMouseOut={() => setPointed((now) => (now === item.kind ? "" : now))}
+            >
+              <text wrapMode="none" selectable={false} fg={isPointed() ? HOVER_TEXT : item.isIdle ? TOOL_IDLE_COLOR : item.color} bg={isPointed() ? item.color : undefined} attributes={BOLD}>
+                {` ${item.icon}  `}
+              </text>
+              <text wrapMode="none" selectable={false} fg={isPointed() ? HOVER_TEXT : item.isIdle ? TOOL_IDLE_COLOR : undefined} bg={isPointed() ? item.color : undefined}>
+                {`${item.text} `}
+              </text>
+            </box>
+          )
+        }}
+      </For>
+    </box>
+  )
+
+  /**
+   * A file's or a folder's row: its name on the tree's width. A file's is yellow and fills yellow; a folder's
+   * is blue and fills blue: under the pointer, and while it is the row selected, which has ⋯ at its end.
    */
   const fileRow = (row: TreeRow) => {
     const isFolder = row.kind === "dir"
-    // What a tool of this row does: for a folder or a file, 📥 for what 📋 took; grey on a disk's root, why.
-    const tipOf = (kind: FileToolKind) => toolTip(kind, isFolder, isFolder && row.depth === 0, api.state().clip ? api.state().clipKind : undefined)
     const tint = isFolder ? (row.isHere ? FOLDER_COLOR : DIR_COLOR) : VIEWABLE_COLOR
     const fill = isFolder ? DIR_COLOR : VIEWABLE_COLOR
     // The path the field found keeps the fill until the pointer is on another row: the fill follows the pointer.
     // So does the file the viewer was last opened on.
     const isViewed = () => api.state().viewed !== undefined && api.state().viewed === pathKey(row.path, api.state().caseless)
     const isFound = () => (row.isFound === true || isViewed()) && hovered() === ""
-    const isHovered = () => hovered() === row.path || isFound()
-    // A file pressed is green until its popup is up, in place of the pointer's yellow: the press was taken.
-    const isPressed = () => api.state().flashed === `view:${row.path}`
+    const isSelected = () => selected() === row.path
+    const isFilled = () => hovered() === row.path || isSelected() || isFound()
+    // The row whose tool was pressed, or whose file is on its way to the viewer, is green: the press was taken.
+    const isPressed = () => isRowFlashed(api.state().flashed ?? "", row.path)
+    const back = () => (isPressed() ? FLASH_COLOR : isFilled() ? (isFound() && !isSelected() ? VIEWABLE_COLOR : fill) : undefined)
     return (
-      // The pointer's over and out reach the row from its name and its tools alike: an out from one part
-      // comes before the over of the next, so the row stays marked while the pointer is anywhere on it.
       <box
         flexDirection="row"
         flexShrink={0}
+        // The row whose menu is open is drawn after the others: its menu stands over the rows under it.
+        zIndex={menu()?.path === row.path ? 50 : 0}
         onMouseOver={() => setHovered(row.path)}
         onMouseOut={() => setHovered((now) => (now === row.path ? "" : now))}
+        onMouseDown={(event: MouseEvent) => pressRow(row, event)}
       >
-        <box flexShrink={0} onMouseUp={() => press(row)}>
-          <text
-            wrapMode="none"
-            selectable={false}
-            fg={isPressed() || isHovered() ? HOVER_TEXT : tint}
-            // The path found is marked yellow, a folder too; under the pointer, the row's own fill.
-            bg={isPressed() ? FLASH_COLOR : isHovered() ? (isFound() ? VIEWABLE_COLOR : fill) : undefined}
-            attributes={isFolder && row.isHere ? BOLD : 0}
-          >
-            {fileNameLabel(row, room())}
-          </text>
-        </box>
-        <box flexDirection="row" flexShrink={0} width={FILE_TOOLS_WIDTH}>
-          {/* 📍 is on a folder of this machine alone: the session works on no file, nor on another machine. */}
-          <For each={fileTools(api.icons(), api.state().flashed ?? "", row.path, Boolean(api.state().clip), isFolder && row.depth === 0, isFolder && !remoteOf(row.path), isFolder)}>
-            {(tool, index) => (
-              <>
-                {/* A plain gap before each icon takes no press: one a little off an icon does nothing. */}
-                <text wrapMode="none" selectable={false} flexShrink={0}>
-                  {" ".repeat(tool.gap)}
-                </text>
-                <box
-                  flexShrink={0}
-                  // A tool acts on a double click: a single one, as the pointer passes, does nothing.
-                  onMouseUp={() => { if (!tool.isNone && doubleClick(`${tool.kind}:${row.path}`, Date.now())) api.tool(tool.kind, row.path) }}
-                  onMouseOver={() => setTipped(`${tool.kind}:${row.path}`)}
-                  onMouseOut={() => setTipped((now) => (now === `${tool.kind}:${row.path}` ? "" : now))}
-                >
-                  <text wrapMode="none" selectable={false} fg={tool.color} attributes={BOLD}>
-                    {tool.label}
-                  </text>
-                  {/* ⚙ → Ver labels: what the tool does on the line above its row (below the first line shown),
-                      over the tool, dark on the tool's own color: no icon of the row is covered. */}
-                  <Show when={api.labels() && !tool.isNone && tipped() === `${tool.kind}:${row.path}`}>
-                    <box
-                      position="absolute"
-                      top={isFirstShown(row.path) ? 1 : -1}
-                      left={tipLeft(index(), cells(` ${tipOf(tool.kind)} `), FILE_TOOLS_WIDTH - 2)}
-                      zIndex={60}
-                      width={cells(` ${tipOf(tool.kind)} `)}
-                      flexShrink={0}
-                    >
-                      <text wrapMode="none" selectable={false} fg={TIP_TEXT} bg={toolColor(tool.kind)} attributes={BOLD}>
-                        {` ${tipOf(tool.kind)} `}
-                      </text>
-                    </box>
-                  </Show>
-                </box>
-              </>
-            )}
-          </For>
-        </box>
+        <text
+          wrapMode="none"
+          selectable={false}
+          fg={back() ? HOVER_TEXT : tint}
+          bg={back()}
+          attributes={isSelected() || (isFolder && row.isHere) ? BOLD : 0}
+        >
+          {fileNameLabel(row, treeWidth())}
+        </text>
+        {/* ⋯ at the end of the row selected opens its menu: the one mark that says the tools are there. */}
+        <Show when={isSelected()}>
+          <box position="absolute" top={0} left={treeWidth() - cells(ROW_MORE)} zIndex={1} flexShrink={0}>
+            <text wrapMode="none" selectable={false} fg={HOVER_TEXT} bg={back() ?? fill} attributes={BOLD}>
+              {ROW_MORE}
+            </text>
+          </box>
+        </Show>
+        <Show when={menu()?.path === row.path}>{rowMenu(row)}</Show>
       </box>
     )
   }
 
   return (
-    <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1}>
+    <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1} onMouseDown={() => setMenu(undefined)}>
       <box flexDirection="row" flexWrap="wrap" flexShrink={0}>
         <For each={api.state().drives}>
           {(drive) => {
@@ -334,15 +390,28 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
       >
         {ruleLabel(api.state(), room())}
       </text>
-      <scrollbox ref={(box: ScrollBoxRenderable) => (tree = box)} flexGrow={1} minHeight={0} scrollY>
+      {/* A press on a note, a link or the room left under the rows closes the menu, or lets go of the row
+          selected; the tree moved closes the menu, which would no longer stand by its row. */}
+      <scrollbox
+        ref={(box: ScrollBoxRenderable) => (tree = box)}
+        flexGrow={1}
+        minHeight={0}
+        scrollY
+        onMouseDown={(event: MouseEvent) => {
+          event.stopPropagation()
+          if (menu()) setMenu(undefined)
+          else setSelected("")
+        }}
+        onMouseScroll={() => setMenu(undefined)}
+      >
         <For each={rows()}>
           {(row) => {
-            // A row's kind never changes: a file's or a folder's row is drawn with its tools, a disk's root too
-            // (to paste into it), and any other as its label.
+            // A row's kind never changes: a file's or a folder's row is one that is selected and has a menu, a
+            // disk's root too (to paste into it); any other is its label.
             if (row.kind === "file" || row.kind === "dir") return fileRow(row)
             const look = rowLook(row)
             return (
-              <box flexShrink={0} onMouseUp={rowAction(row) === "none" ? undefined : () => press(row)}>
+              <box flexShrink={0}>
                 <text wrapMode="none" selectable={false} fg={row.isFound ? HOVER_TEXT : look.color} bg={row.isFound ? VIEWABLE_COLOR : undefined} attributes={row.isFound ? BOLD : look.attributes}>
                   {fit(rowLabel(row), room())}
                 </text>
