@@ -1,11 +1,11 @@
 /**
- * The explorer as the host's side panel draws it (`session.panel`, opened by `ui.panel.open`): the disks
- * on top, the one shown underlined, ⊟ to collapse every disk, `↗ abrir en el sistema` and the close mark
- * beside them; under them a field a path is pasted in, Enter, and the tree opens down to it and marks it;
- * under it the filter's field, with × to clear it: a pattern, Enter, and the tree holds only the disk's files
- * that match;
- * under a rule, the disk's tree, the session's folder marked ● and put in the middle when the explorer
- * opens. The tree scrolls under the disks and the field, which stay.
+ * The explorer as the host's side panel draws it (`session.panel`, opened by `ui.panel.open`). Its header,
+ * which stays while the tree scrolls: × to close the panel, on a row of its own; the disks as tabs, the one
+ * shown filled, with ⊟ to collapse every disk and ↗ to open the system's file manager at their row's end; the
+ * path, each folder from the disk down to the row selected, one pressed gone to; the one field, where a path
+ * is gone to and anything else filters the disk shown, with ‖ and × at its right while a filter is on; and a
+ * rule, which says what a filter found. Under it the disk's tree, the session's folder marked ● and put in the
+ * middle when the explorer opens.
  *
  * Every file is yellow and every folder blue, each on a row of its own, the name alone on the tree's width.
  * While the pointer is on a row it takes a fill in its color. A click selects it: it keeps the fill, bold, with
