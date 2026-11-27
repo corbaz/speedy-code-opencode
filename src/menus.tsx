@@ -405,7 +405,10 @@ function VoiceMenu(props: { api: MenuApi }) {
   )
 }
 
-/** The 📎 menu: the selection, the narrations kept newest first, each with its play button, and clear. */
+/**
+ * The 📎 menu: the selection, the narrations kept newest first, each with its play button, and clear. A row's
+ * text takes the press as its button does.
+ */
 function HistoryMenu(props: { api: MenuApi }) {
   const api = props.api
   const descriptionWidth = () => Math.max(10, api.width() - 12 - 18)
@@ -428,7 +431,7 @@ function HistoryMenu(props: { api: MenuApi }) {
           bold
           onPress={() => api.readSelection()}
         />
-        <Label text=" leer selección" color="#ffd43b" bold />
+        <Btn label=" leer selección" color="#ffd43b" bold onPress={() => api.readSelection()} />
       </box>
       <Show
         when={api.state.clips.length > 0}
@@ -445,7 +448,7 @@ function HistoryMenu(props: { api: MenuApi }) {
                 bold
                 onPress={() => api.pressClip(clip)}
               />
-              <Label text={` ${fit(clipParts(clip).description, descriptionWidth())} ${clipParts(clip).stamp}`} />
+              <Btn label={` ${fit(clipParts(clip).description, descriptionWidth())} ${clipParts(clip).stamp}`} onPress={() => api.pressClip(clip)} />
             </box>
           )}
         </For>

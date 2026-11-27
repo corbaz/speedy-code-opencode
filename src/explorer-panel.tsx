@@ -475,9 +475,13 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
       {/* The one field: a pattern, Enter, and the tree holds only the disk's files that match; a path, and the
           tree opens down to it. With a filter on, ‖ holds its search and × brings the whole tree back. */}
       <box flexDirection="row" flexShrink={0}>
-        <text wrapMode="none" selectable={false} attributes={DIM} flexShrink={0}>
-          {api.icons() === "nerd" ? "  " : " 🔎"}
-        </text>
+        {/* The magnifier, in the color of what the field finds, is the field's too: a press on it, or anywhere
+            on the field's line, gives the field the keys. */}
+        <box flexShrink={0} onMouseUp={unlessFrozen(() => setTyping(true))}>
+          <text wrapMode="none" selectable={false} fg={VIEWABLE_COLOR} flexShrink={0}>
+            {api.icons() === "nerd" ? "  " : " 🔎"}
+          </text>
+        </box>
         <box flexGrow={1} flexShrink={1} onMouseUp={unlessFrozen(() => setTyping(true))}>
           <input
             id="speedy-explorer-field"
