@@ -1083,20 +1083,15 @@ describe("the explorer holds still while a popup of its own is up", () => {
     expect(isHeld(failing.state())).toBe(false)
   })
 
-  test("the viewer holds it from the press until its popup is closed, where it says when; elsewhere it holds nothing", async () => {
+  test("the viewer's popup does not hold it: with a file shown, another one opens", async () => {
     const fake = fakeIO()
-    let close: () => void = () => {}
-    const explorer = createExplorer({ ...fake.io, view: () => new Promise<void>((resolve) => (close = resolve)) }, "win32")
+    const explorer = createExplorer(fake.io, "win32")
     await explorer.open("C:/Users/test/proyectos")
     explorer.pressFile(FILE)
-    expect(isHeld(explorer.state())).toBe(true)
-    close()
-    await turn()
     expect(isHeld(explorer.state())).toBe(false)
-    const plain = createExplorer(fake.io, "win32")
-    await plain.open("C:/Users/test/proyectos")
-    plain.pressFile(FILE)
-    expect(isHeld(plain.state())).toBe(false)
+    explorer.pressFile(FILE)
+    expect(fake.viewed).toEqual([FILE, FILE])
+    expect(isHeld(explorer.state())).toBe(false)
   })
 })
 

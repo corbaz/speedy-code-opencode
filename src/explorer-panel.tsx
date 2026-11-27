@@ -15,7 +15,7 @@
  * 📋 took a file or a folder, 📍 on a folder of this machine alone. A press on a tool does it; a press anywhere
  * else, or the tree moved, closes the menu. The row whose tool was pressed is green for a second.
  *
- * While a popup of the explorer is up, a dialog's or the viewer's, the explorer holds still: no row fills under
+ * While a dialog of the explorer is up, the explorer holds still, not while the viewer's popup is: no row fills under
  * the pointer, none is selected or opened, no menu opens, and the header and the wheel move nothing. The one
  * row filled is the one the popup is about.
  */

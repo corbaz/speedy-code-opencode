@@ -56,8 +56,9 @@ export interface ExplorerState {
   /** The tool just pressed (`copy:<path>`, `collapse:`), green for a second; empty or absent: none. */
   readonly flashed?: string
   /**
-   * The popups of the explorer that are up: a dialog (rename, delete, paste, new folder) or the viewer a file of
-   * the tree opened. While one is, the explorer holds still (isHeld): its tree takes no press, fills no row
+   * The dialogs of the explorer that are up: rename, delete, paste, new folder. Not the viewer's popup: with a
+   * file shown the explorer goes on, and another file opened takes its place. While a dialog is up, the
+   * explorer holds still (isHeld): its tree takes no press, fills no row
    * under the pointer and opens no menu, and its header and the wheel move nothing, so the one row marked is
    * the one the popup is about.
    */
@@ -108,12 +109,8 @@ export interface ExplorerIO {
   isDir(path: string): Promise<boolean>
   /** Opens a folder in the system's file manager. */
   openFolder(folder: string): void
-  /**
-   * Shows a file in the viewer popup; `onShown` hears when it is up (`true`), or that it never was (`false`).
-   * What it gives back, where it gives something, settles once the popup is closed: the explorer holds still
-   * until then.
-   */
-  view(path: string, onShown?: (isShown: boolean) => void): void | Promise<void>
+  /** Shows a file in the viewer popup; `onShown` hears when it is up (`true`), or that it never was (`false`). */
+  view(path: string, onShown?: (isShown: boolean) => void): void
   /** Puts a file on the clipboard as a file, to paste in a folder; whether it went. */
   copyFile(native: string): Promise<boolean>
   /** Puts a text on the clipboard; whether it went. */
@@ -583,7 +580,7 @@ export function filterAdded(state: ExplorerState, path: string): ExplorerState {
   return { ...state, filter: { ...state.filter, paths: [...state.filter.paths, path] } }
 }
 
-/** Whether a popup of the explorer is up, a dialog's or the viewer's: the explorer holds still. */
+/** Whether a dialog of the explorer is up: the explorer holds still. */
 export const isHeld = (state: ExplorerState) => (state.held ?? 0) > 0
 
 /** The longest wait between the two clicks of a double click, in milliseconds. */
@@ -988,7 +985,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
   const forget = () => {
     if (state.found !== undefined || state.viewed !== undefined) set((now) => ({ ...now, found: undefined, viewed: undefined }))
   }
-  // A popup of the explorer is up, and then gone: the explorer holds still meanwhile.
+  // A dialog of the explorer is up, and then gone: the explorer holds still meanwhile.
   const hold = () => set((now) => ({ ...now, held: (now.held ?? 0) + 1 }))
   const release = () => set((now) => ({ ...now, held: Math.max(0, (now.held ?? 0) - 1) }))
   // A dialog, the explorer held still until it is answered.
@@ -1116,12 +1113,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
         set((now) => ({ ...now, flashed: "", viewed: isShown ? pathKey(path, now.caseless) : now.viewed }))
       }
       void io.wait(OPENING_MOST_MS).then(() => over(false))
-      // Where the viewer says when its popup is closed, the explorer holds still from the press until then.
-      const closed = io.view(path, over)
-      if (closed) {
-        hold()
-        void closed.then(release, release)
-      }
+      io.view(path, over)
     },
     async copyFile(path) {
       forget()
