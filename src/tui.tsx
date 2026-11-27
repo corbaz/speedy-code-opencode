@@ -30,7 +30,7 @@ import {
 } from "./footer"
 import { dialogAnswer, dialogCommand, fileCopyCommand, findCommand, mkdirCommand, pasteCommand, renameCommand, trashCommand } from "./file-tools"
 import { CLIPBOARD_READ, POWERSHELL } from "./powershell"
-import { createViewerReader, isInDraft, mediaSaid, popupCheckCommand, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
+import { createViewerReader, isInDraft, mediaSaid, popupCheckCommand, popupKind, promptInsertion, viewerCommand, type ViewerScript } from "./viewer"
 import { EMPTY_EXPLORER, createExplorer, type ExplorerIO, type ExplorerState } from "./explorer"
 import { remoteAnswer, remoteCommand, withRemotes } from "./remote"
 import { EXPLORER_PANEL, ExplorerPanel, type ExplorerPanelApi } from "./explorer-panel"
@@ -415,7 +415,7 @@ export default Plugin.define({
       async stop() {
         if (popup.state === "idle") return
         popup.end()
-        closeViewer()
+        closeViewer("sound")
       },
       /** The popup closed, or was told to: its narration is over. */
       end() {
@@ -1270,12 +1270,15 @@ export default Plugin.define({
       else context.keymap.dispatch("prompt.paste")
     }
 
-    // The image popup open, if any: opening another closes it.
-    let viewer: ReturnType<typeof spawn> | undefined
+    // The popups open, one of each kind at most: the one that sounds (a narration, a sound, a video) and the one
+    // that shows (a text, a page, a picture). Another of its kind closes it; one of the other kind leaves it.
+    const viewers: { sound?: ReturnType<typeof spawn>; page?: ReturnType<typeof spawn> } = {}
 
-    const closeViewer = () => {
-      const open = viewer
-      viewer = undefined
+    /** Closes the popup of a kind; with none named, both. */
+    const closeViewer = (kind?: "sound" | "page"): void => {
+      if (!kind) return void (closeViewer("sound"), closeViewer("page"))
+      const open = viewers[kind]
+      viewers[kind] = undefined
       if (!open) return
       try {
         if (process.platform === "win32" && typeof open.pid === "number") {
@@ -1298,9 +1301,11 @@ export default Plugin.define({
         isTold = true
         onShown?.(isShown)
       }
-      // Another file shown ends a narration sounding in the popup, with its popup.
-      if (!control) popup.end()
-      closeViewer()
+      // One popup of a kind at a time. A sound or a video ends a narration sounding in the popup, with its
+      // popup; a file that is only shown leaves it sounding.
+      const kind = popupKind(path, control)
+      if (kind === "sound" && !control) popup.end()
+      closeViewer(kind)
       // The narrator's voice, for a narration's Resumen read aloud there (Escuchar), at the speed narrations take.
       const { argv, env } = viewerCommand(process.platform, script, path, PLUGIN_ROOT, pythonPath(), {
         voice: voiceForCode(settings.picks.active),
@@ -1341,10 +1346,10 @@ export default Plugin.define({
         })
         child.on("exit", () => {
           tell(false)
-          if (viewer === child) viewer = undefined
+          if (viewers[kind] === child) viewers[kind] = undefined
           if (control && popup.control === control) popup.end()
         })
-        viewer = child
+        viewers[kind] = child
       } catch {
         toast(failure, "error")
       }

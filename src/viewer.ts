@@ -13,6 +13,27 @@ import { POWERSHELL } from "./powershell"
 /** `view.ps1` shows a pasted image; `view_file.ps1` a file the explorer lists: text, PDF or picture. */
 export type ViewerScript = "view.ps1" | "view_file.ps1"
 
+/** The files the viewer plays, as view_file.ps1 and view_readers.py list them. */
+const PLAYED_EXTENSIONS = new Set([
+  // Sound.
+  "mp3", "mpa", "mp2", "wav", "m4a", "aac", "wma", "ogg", "oga", "opus", "flac", "aif", "aiff", "mid", "midi",
+  "m4b", "mka", "weba", "ac3", "eac3", "dts", "amr", "ape", "wv", "tta", "mpc", "spx", "caf", "au", "aifc", "ra",
+  // Video.
+  "mp4", "m4v", "mov", "avi", "wmv", "mkv", "webm", "mpg", "mpeg", "3gp",
+  "flv", "f4v", "ogv", "ogm", "m2ts", "mts", "m2v", "mpe", "vob", "divx", "xvid", "asf", "rm", "rmvb", "3g2", "mxf", "dv", "wtv",
+])
+
+/**
+ * The kind of popup a file opens in: `sound` for a narration (`control`), a sound or a video; else `page`, which
+ * shows a text, a page or a picture. One popup of each kind at a time: another of its kind closes it, and one
+ * of the other kind leaves it, so a file looked at does not stop what is sounding.
+ */
+export function popupKind(path: string, control = ""): "sound" | "page" {
+  const name = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1)
+  const dot = name.lastIndexOf(".")
+  return control || (dot > 0 && PLAYED_EXTENSIONS.has(name.slice(dot + 1).toLowerCase())) ? "sound" : "page"
+}
+
 /**
  * The command that shows `path`, and the environment it runs with. The path goes in by the environment
  * on Windows, never in a command: view.ps1 reads SPEEDY_IMAGE, view_file.ps1 SPEEDY_FILE, and reads a

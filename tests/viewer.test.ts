@@ -10,6 +10,7 @@ import {
   popupPaste,
   promptInsertion,
   popupCheckCommand,
+  popupKind,
   viewerCommand,
   type ViewerSaid,
 } from "../src/viewer"
@@ -108,5 +109,12 @@ describe("isInDraft", () => {
     expect(isInDraft("C:/x.mdy", "C:/x.md")).toBe(false)
     expect(isInDraft('a @"C:/a b.md" ', '@"C:/a b.md"')).toBe(true)
     expect(isInDraft("", "C:/x.md")).toBe(false)
+  })
+})
+
+describe("the kind of popup a file opens in", () => {
+  test("a narration, a sound and a video sound; anything else shows: one popup of each kind at a time", () => {
+    expect([popupKind("C:/a/tema.MP3"), popupKind("C:\\a\\clip.mkv"), popupKind("/Users/ana/notas.json"), popupKind("C:/a/foto.png"), popupKind("C:/a/sin_extension")]).toEqual(["sound", "sound", "page", "page", "page"])
+    expect(popupKind("C:/a/resumen.txt", "C:/control.txt")).toBe("sound")
   })
 })
