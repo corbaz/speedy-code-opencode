@@ -17,7 +17,8 @@
  *
  * While a dialog of the explorer is up, the explorer holds still, not while the viewer's popup is: no row fills under
  * the pointer, none is selected or opened, no menu opens, and the header and the wheel move nothing. The one
- * row filled is the one the popup is about.
+ * row filled is the one the popup is about. The explorer picks the row selected by itself too (`pickTurn`): after
+ * 🗑, the folder that held what went; after ✏, the file under its new name.
  */
 
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
@@ -152,6 +153,14 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const hovered = () => (isFrozen() ? "" : pointedRow())
   // The one selected, by a click: its row keeps its fill, with ⋯ at its end.
   const [selected, setSelected] = createSignal("")
+  // The explorer picked the row selected by itself: after 🗑, the folder that held what went; after ✏, the file
+  // under its new name.
+  const pickTurn = createMemo(() => api.state().pickTurn ?? 0)
+  createEffect((before: number) => {
+    const now = pickTurn()
+    if (now !== before) setSelected(api.state().picked ?? "")
+    return now
+  }, pickTurn())
   const doubleClick = createDoubleClick()
   // The row whose menu is open, and where the menu stands against it: rows down from the row, cells from the tree's left.
   const [menu, setMenu] = createSignal<{ path: string; top: number; left: number } | undefined>()
@@ -225,6 +234,21 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
     </box>
   )
   let tree: ScrollBoxRenderable | undefined
+  // Where the tree stood when the explorer began to hold still. The wheel and the bar are undone from there until
+  // it lets go: the scrollbox with its scroll switched off would go to its top, and stay there.
+  let heldTop: number | undefined
+  createEffect(() => {
+    if (!isFrozen()) heldTop = undefined
+    else heldTop ??= tree?.scrollTop
+  })
+  const stay = () => {
+    const box = tree
+    const top = heldTop
+    if (!box || top === undefined) return
+    queueMicrotask(() => {
+      if (!box.isDestroyed && box.scrollTop !== top) box.scrollTo(top)
+    })
+  }
 
   // A disk shown, the explorer opened or the tree collapsed: the tree goes to its top, or puts the
   // session's folder in the middle.
@@ -509,16 +533,20 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
         ref={(box: ScrollBoxRenderable) => (tree = box)}
         flexGrow={1}
         minHeight={0}
-        // The wheel moves nothing while the explorer holds still.
-        scrollY={!isFrozen()}
+        // The wheel and the bar move nothing while the explorer holds still.
+        onMouseDrag={stay}
+        onMouseUp={stay}
         onMouseDown={(event: MouseEvent) => {
           event.stopPropagation()
-          if (isFrozen()) return
+          if (isFrozen()) return void stay()
           if (menu()) return void setMenu(undefined)
           setSelected("")
           api.pick(undefined)
         }}
-        onMouseScroll={() => setMenu(undefined)}
+        onMouseScroll={() => {
+          setMenu(undefined)
+          stay()
+        }}
       >
         <For each={rows()}>
           {(row) => {

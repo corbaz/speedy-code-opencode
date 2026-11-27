@@ -592,11 +592,17 @@ describe("each file's tools", () => {
     // dialog.ps1 answers the name in Base64, UTF-8: "apuntes.txt".
     fake.dialog.answer = "rename YXB1bnRlcy50eHQ="
     tree["C:/Users/test/proyectos"] = [{ name: "facturas", kind: "dir" }, { name: "apuntes.txt", kind: "file" }]
+    // The row selected, as the panel says it when its menu is asked.
+    explorer.pick(NOTAS)
+    const turn = explorer.state().pickTurn ?? 0
     await explorer.rename(NOTAS)
     expect(fake.files.renamed).toEqual([`${NATIVE} -> apuntes.txt (C:\\Users\\test\\proyectos\\apuntes.txt)`])
     expect(fake.toasts.at(-1)).toBe("notas.txt ahora se llama apuntes.txt.")
     expect(treeRows(explorer.state()).map(rowLabel)).toContain("          apuntes.txt")
     expect(treeRows(explorer.state()).map(rowLabel)).not.toContain("          notas.txt")
+    // Renamed, the row selected is the file under its new name: the path's row shows no path that is gone.
+    expect(crumbPath(explorer.state())).toBe("C:/Users/test/proyectos/apuntes.txt")
+    expect([explorer.state().picked, explorer.state().pickTurn]).toEqual(["C:/Users/test/proyectos/apuntes.txt", turn + 1])
     // A folder is asked as one: one name, no extension.
     fake.dialog.answer = `rename ${Buffer.from("facturas 2025").toString("base64")}`
     await explorer.rename("C:/Users/test/proyectos/facturas")
@@ -794,18 +800,75 @@ describe("each file's tools", () => {
     expect(fake.files.trashed).toEqual([])
     fake.dialog.answer = "delete"
     tree["C:/Users/test/proyectos"] = [{ name: "facturas", kind: "dir" }]
+    // The row selected, as the panel says it when its menu is asked; and where the tree stands.
+    explorer.pick(NOTAS)
+    const before = explorer.state()
     await explorer.trash(NOTAS)
     expect(fake.files.trashed).toEqual([NATIVE])
     expect(fake.toasts.at(-1)).toBe("notas.txt fue a la papelera.")
     expect(treeRows(explorer.state()).map(rowLabel)).not.toContain("          notas.txt")
+    // Gone, the folder that held it is the row selected and the one the path's row shows; the tree is not
+    // placed again, so it stays where it was.
+    expect(crumbPath(explorer.state())).toBe("C:/Users/test/proyectos")
+    expect([explorer.state().picked, explorer.state().pickTurn]).toEqual(["C:/Users/test/proyectos", (before.pickTurn ?? 0) + 1])
+    expect([explorer.state().top, explorer.state().turn, explorer.state().drive]).toEqual([before.top, before.turn, before.drive])
+    // Another row selected meanwhile stays the one selected.
+    explorer.pick("C:/Windows")
     // A folder goes with what it holds; the dialog says so.
     await explorer.trash("C:/Users/test/proyectos/facturas")
+    expect([explorer.state().picked, explorer.state().pickTurn]).toEqual(["C:/Windows", (before.pickTurn ?? 0) + 1])
     expect(fake.dialog.asked.at(-1)).toBe("delete C:\\Users\\test\\proyectos\\facturas dir")
     expect(fake.files.trashed.at(-1)).toBe("C:\\Users\\test\\proyectos\\facturas")
     // One the system would not take says so, and the folder stays as it was.
     fake.io.trash = async () => false
     await explorer.trash("C:/Users/test/proyectos/app.exe")
     expect(fake.toasts.at(-1)).toBe("no pude mandar app.exe a la papelera.")
+  })
+
+  test("🗑 and ✏ in the root of a disk of Windows seen from another machine: that root is read again, and is the row selected", async () => {
+    // A machine with Windows shows its disks under its root: `pc:/D:` is a folder of `pc:/`, with no `/` at its end.
+    const tree: typeof TREE = {
+      ...TREE,
+      "pc:/": [{ name: "D:", kind: "dir" }],
+      "pc:/D:": [{ name: ".DS_Store", kind: "file" }, { name: "fotos.zip", kind: "file" }],
+    }
+    const fake = fakeIO(tree)
+    fake.io.remotes = async () => ["pc"]
+    const read: string[] = []
+    const list = fake.io.list
+    fake.io.list = async (path) => (read.push(path), list(path))
+    const explorer = createExplorer(fake.io, "darwin")
+    await explorer.open("/Users/me")
+    await explorer.pickDrive("pc:/")
+    await explorer.toggleFolder("pc:/D:")
+    const labels = () => treeRows(explorer.state()).map(rowLabel)
+    expect(labels()).toEqual(["▾ pc:/", "  ▾ D:", "      .DS_Store", "      fotos.zip"])
+    fake.dialog.answer = "delete"
+    tree["pc:/D:"] = [{ name: "fotos.zip", kind: "file" }]
+    explorer.pick("pc:/D:/.DS_Store")
+    await explorer.trash("pc:/D:/.DS_Store")
+    expect(fake.files.trashed).toEqual(["pc:/D:/.DS_Store"])
+    expect(read.at(-1)).toBe("pc:/D:")
+    expect(labels()).toEqual(["▾ pc:/", "  ▾ D:", "      fotos.zip"])
+    expect([explorer.state().picked, crumbPath(explorer.state())]).toEqual(["pc:/D:", "pc:/D:"])
+    // Renamed there, the same root is read again.
+    fake.dialog.answer = `rename ${Buffer.from("viaje.zip").toString("base64")}`
+    tree["pc:/D:"] = [{ name: "viaje.zip", kind: "file" }]
+    explorer.pick("pc:/D:/fotos.zip")
+    await explorer.rename("pc:/D:/fotos.zip")
+    expect(fake.files.renamed).toEqual(["pc:/D:/fotos.zip -> viaje.zip (pc:/D:/viaje.zip)"])
+    expect(labels()).toEqual(["▾ pc:/", "  ▾ D:", "      viaje.zip"])
+    expect(explorer.state().picked).toBe("pc:/D:/viaje.zip")
+    // A file in the root of another machine's own disk: that root keeps its `/`.
+    tree["pc:/"] = [{ name: "D:", kind: "dir" }, { name: "nota.md", kind: "file" }]
+    await explorer.toggleFolder("pc:/")
+    await explorer.toggleFolder("pc:/")
+    explorer.pick("pc:/nota.md")
+    fake.dialog.answer = "delete"
+    tree["pc:/"] = [{ name: "D:", kind: "dir" }]
+    await explorer.trash("pc:/nota.md")
+    expect(explorer.state().picked).toBe("pc:/")
+    expect(labels()).not.toContain("    nota.md")
   })
 
   test("📁 asks the new folder's name: cancel makes nothing; a name makes it where the row is, and that folder is read again, open", async () => {

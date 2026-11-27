@@ -76,6 +76,11 @@ export interface ExplorerState {
    * shows it; absent, it shows the session's folder.
    */
   readonly picked?: string
+  /**
+   * Counts the times the explorer picked that row by itself, not by a press: after 🗑, the folder that held what
+   * went; after ✏, the file under its new name. The panel takes `picked` as its row selected each time it goes up.
+   */
+  readonly pickTurn?: number
   /** The file or the folder 📋 took last, which 📥 copies or moves into another folder; absent: none, and 📥 is grey. */
   readonly clip?: string
   /** Whether `clip` is a folder or a file, for 📥's label. */
@@ -785,11 +790,28 @@ export function pastedPath(text: string): string {
 /** A path as the system writes it: with `\` on Windows. A path of another machine stays as the explorer writes it. */
 const nativeOf = (path: string, platform: string) => (platform === "win32" && !remoteOf(path) ? path.replace(/\//g, "\\") : path)
 
-/** The folder a file of the tree is in: a disk's root keeps its `/`. */
-const folderOf = (path: string) => {
+/**
+ * The folder a file or a folder of the tree is in, as the tree writes it. A disk's root keeps its `/`: `C:/`
+ * here, `mac:/` on another machine. A disk of Windows seen from another machine, `pc:/D:`, is a folder of
+ * that machine's root, and has none.
+ */
+export const folderOf = (path: string) => {
   const parent = path.slice(0, path.lastIndexOf("/"))
   if (parent === "") return "/"
-  return parent.endsWith(":") ? `${parent}/` : parent
+  return /^[A-Za-z][\w.-]*:$/.test(parent) ? `${parent}/` : parent
+}
+
+/** The explorer with the row selected picked by itself, not by a press: the path's row shows it, and the panel takes it. */
+export const pickRow = (state: ExplorerState, path: string): ExplorerState => ({ ...state, picked: path, pickTurn: (state.pickTurn ?? 0) + 1 })
+
+/**
+ * The explorer after the row at `from` went away, renamed to `to` or sent to the trash: when the row selected
+ * was that one, or one under it, the selection follows it to its new name, or goes to the folder that held it.
+ * Another row selected meanwhile stays the one selected.
+ */
+export function pickAfter(state: ExplorerState, from: string, to?: string): ExplorerState {
+  if (state.picked === undefined || !isUnder(pathKey(state.picked, state.caseless), pathKey(from, state.caseless))) return state
+  return pickRow(state, to === undefined ? folderOf(from) : `${to}${slashed(state.picked).slice(from.length)}`)
 }
 
 /** A file's name, the last part of its path. */
@@ -880,14 +902,20 @@ export interface Explorer {
   copyPath(path: string): Promise<void>
   /** A row whose tool was pressed is green for a second: the press was taken. `key` is `<tool>:<path>`. */
   flash(key: string): void
-  /** ✏: the dialog asks the new name, then the file is renamed in its folder and the folder read again. */
+  /**
+   * ✏: the dialog asks the new name, then the file is renamed in its folder and the folder read again; the row
+   * selected is the file under its new name.
+   */
   rename(path: string): Promise<void>
   /**
    * 📁: the dialog asks the new folder's name, then the folder is made where the row is: in a folder, inside
    * it; on a file, in the folder it is in. That folder is read again and opened, to show it.
    */
   newFolder(path: string): Promise<void>
-  /** 🗑: the dialog asks, then the file goes to the trash and its folder is read again. */
+  /**
+   * 🗑: the dialog asks, then the file goes to the trash and its folder is read again; the folder that held it is
+   * the row selected, shown in the path's row, and the tree stays where it was.
+   */
   trash(path: string): Promise<void>
   /**
    * 📥: what 📋 took last is copied or moved into a row's folder (a file's row: the folder it is in), once the
@@ -1025,6 +1053,8 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
     io.toast(`${old} ahora se llama ${name}.`)
     set((now) => filterMoved(now, slashed(path), target))
     await reread(folder)
+    // The row selected follows the file to its new name.
+    set((now) => pickAfter(now, slashed(path), target))
   }
   // Where each other machine's disk opens, once it said; empty when it did not, and it is asked again the next time.
   const homes = new Map<string, string>()
@@ -1055,7 +1085,7 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       const chain = drive ? chainOf(here, drive) : []
       const chainRead = await Promise.all(chain.map(async (path) => [pathKey(path, caseless), await readFolder(io, path)] as const))
       // What 📋 took stays taken while the explorer is closed.
-      set((now) => ({ drives, drive, open: chainRead.map(([key]) => key), listed: Object.fromEntries(chainRead), here, caseless, top: -1, clip: now.clip, clipKind: now.clipKind }))
+      set((now) => ({ drives, drive, open: chainRead.map(([key]) => key), listed: Object.fromEntries(chainRead), here, caseless, top: -1, clip: now.clip, clipKind: now.clipKind, pickTurn: now.pickTurn }))
     },
     async toggleFolder(path) {
       forget()
@@ -1196,6 +1226,8 @@ export function createExplorer(io: ExplorerIO, platform: string, onChange?: (sta
       io.toast(`${name} fue a la papelera.`)
       set((now) => filterMoved(now, slashed(path)))
       await reread(folderOf(slashed(path)))
+      // The folder that held it is the row selected from now on; the tree stays where it is.
+      set((now) => pickAfter(now, slashed(path)))
     },
     async paste(path) {
       forget()
