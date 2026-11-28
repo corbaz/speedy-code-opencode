@@ -73,6 +73,9 @@ const BETWEEN_COLOR = "#495057"
 const TIP_FILL = "#ffd43b"
 // What a filter's pattern matched of a name.
 const MATCH_COLOR = "#ffffff"
+// The field's ⏎, which searches for what the field holds; and the cells the magnifier before the field takes.
+const SEARCH_LABEL = " ⏎ "
+const FIELD_MARK_CELLS = 3
 // A menu's frame, and what it stands on: the rows under it do not show through.
 const MENU_FRAME = "#868e96"
 const MENU_FILL = "#141414"
@@ -105,7 +108,7 @@ export interface ExplorerPanelApi {
   goTo(text: string): void
   /** The one field's Enter: a path is gone to, anything else filters the disk shown. */
   submit(text: string): void
-  /** ⏎ at the field's end: what the field holds is searched for, as Enter does, and ⏎ is green for a second. */
+  /** ⏎ after the field's text: what the field holds is searched for, as Enter does, and ⏎ is green for a second. */
   search(text: string): void
   /** A row's menu opened, or closed: Escape closes one that is open. */
   menuShown(isShown: boolean): void
@@ -209,11 +212,22 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   const typed = (one: Field | undefined) => one?.value ?? one?.plainText ?? ""
   // The filter cleared by its ×, or a path gone to: the field empties. A pattern typed stays while its filter is on.
   const cleared = createMemo(() => api.state().cleared ?? 0)
+  // What the field holds, as it is typed: ⏎ stands right after it.
+  const [fieldText, setFieldText] = createSignal("")
   createEffect((before: number) => {
     const now = cleared()
-    if (now !== before && field) field.value = ""
+    if (now !== before && field) {
+      field.value = ""
+      setFieldText("")
+    }
     return now
   }, cleared())
+  // Where ⏎ stands, in cells from the line's start: right after the field's text, or its hint, a cell left
+  // for the cursor. Never past the field's end, before ‖ and × while a filter is on.
+  const searchAt = () => {
+    const fieldWidth = room() - FIELD_MARK_CELLS - (api.state().filter ? cells(pauseLabel(api.state().filter)) + cells(UNFILTER_LABEL) : 0)
+    return FIELD_MARK_CELLS + Math.max(0, Math.min(cells(fieldText() || FIELD_HINT) + 1, fieldWidth - cells(SEARCH_LABEL)))
+  }
   // The path's row: each folder from the disk down to the row selected, or to the session's folder. The same
   // pieces are the ones drawn before, so the pointer on one stays on it while the explorer's state moves.
   const crumbs = createMemo(() => (api.state().drive ? crumbsOf(crumbPath(api.state()), api.state().drive, room()) : []), undefined, {
@@ -508,6 +522,7 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
             textColor={VIEWABLE_COLOR}
             focusedTextColor={VIEWABLE_COLOR}
             cursorColor={VIEWABLE_COLOR}
+            onInput={(value: string) => setFieldText(value)}
             onSubmit={() => {
               setTyping(false)
               api.submit(typed(field))
@@ -535,16 +550,19 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
             }),
           )}
         </Show>
-        {/* ⏎ searches for what the field holds, as Enter does. Last in the line, with a filter on or off: it
-            never moves from under the pointer that pressed it. */}
-        {icon(
-          "search",
-          { label: () => " ⏎ ", color: () => (api.state().flashed === "search:" ? FLASH_COLOR : VIEWABLE_COLOR), tip: () => "buscar", tipTop: -1 },
-          unlessFrozen(() => {
-            setTyping(false)
-            api.search(typed(field))
-          }),
-        )}
+        {/* ⏎ searches for what the field holds, as Enter does: drawn over the field, right after its text, the
+            one ⏎ of the line, green for a second as a press taken. The field keeps the whole line: a press
+            anywhere else on it gives it the keys. */}
+        <box position="absolute" top={0} left={searchAt()} zIndex={20} flexShrink={0}>
+          {icon(
+            "search",
+            { label: () => SEARCH_LABEL, color: () => (api.state().flashed === "search:" ? FLASH_COLOR : VIEWABLE_COLOR), tip: () => "buscar", tipTop: -1 },
+            unlessFrozen(() => {
+              setTyping(false)
+              api.search(typed(field))
+            }),
+          )}
+        </box>
       </box>
       <text
         wrapMode="none"
