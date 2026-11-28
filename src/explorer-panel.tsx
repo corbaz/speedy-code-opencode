@@ -21,7 +21,7 @@
  * 🗑, the folder that held what went; after ✏, the file under its new name.
  */
 
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 
 import {
@@ -105,6 +105,12 @@ export interface ExplorerPanelApi {
   goTo(text: string): void
   /** The one field's Enter: a path is gone to, anything else filters the disk shown. */
   submit(text: string): void
+  /** ⏎ at the field's end: what the field holds is searched for, as Enter does, and ⏎ is green for a second. */
+  search(text: string): void
+  /** A row's menu opened, or closed: Escape closes one that is open. */
+  menuShown(isShown: boolean): void
+  /** The times Escape closed a row's menu: the panel closes its menu each time it goes up. */
+  readonly menuCloses: () => number
   /** A row selected, or let go of: the path's row shows it, or the session's folder. */
   pick(path: string | undefined): void
   /** The filter's ×: the whole tree is back. */
@@ -170,6 +176,14 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
   createEffect(() => {
     if (isFrozen()) setMenu(undefined)
   })
+  // Escape closes the menu: the host hears whether one is open, and says when Escape was pressed on it.
+  createEffect(() => api.menuShown(menu() !== undefined))
+  onCleanup(() => api.menuShown(false))
+  createEffect((before: number) => {
+    const now = api.menuCloses()
+    if (now !== before) setMenu(undefined)
+    return now
+  }, api.menuCloses())
   // A row's menu: a file's, a folder's or a disk's root's; 📍 on this machine alone.
   const menuOf = (row: TreeRow) =>
     toolMenu(
@@ -521,6 +535,16 @@ export function ExplorerPanel(props: { api: ExplorerPanelApi }) {
             }),
           )}
         </Show>
+        {/* ⏎ searches for what the field holds, as Enter does. Last in the line, with a filter on or off: it
+            never moves from under the pointer that pressed it. */}
+        {icon(
+          "search",
+          { label: () => " ⏎ ", color: () => (api.state().flashed === "search:" ? FLASH_COLOR : VIEWABLE_COLOR), tip: () => "buscar", tipTop: -1 },
+          unlessFrozen(() => {
+            setTyping(false)
+            api.search(typed(field))
+          }),
+        )}
       </box>
       <text
         wrapMode="none"

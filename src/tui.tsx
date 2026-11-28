@@ -192,6 +192,9 @@ export default Plugin.define({
     const [wand, setWand] = context.storage.memory<{ busy: boolean }>("speedy-code.wand", {
       initial: { busy: false },
     })
+    // A row's menu of the explorer: whether one is open, as the panel says, and the times Escape closed it.
+    const [isRowMenuOpen, setRowMenuOpen] = createSignal(false)
+    const [rowMenuCloses, setRowMenuCloses] = createSignal(0)
     const [menus, setMenus] = context.storage.memory<MenuState>("speedy-code.menus.2", {
       initial: { ...INITIAL_MENU },
     })
@@ -1723,6 +1726,14 @@ export default Plugin.define({
           run: () => closeMenu(),
         },
         {
+          id: "speedy.explorer.menu.close",
+          title: "speedy-code: cerrar el menú de una fila del explorador",
+          group: "speedy-code",
+          bind: "escape",
+          enabled: () => isRowMenuOpen(),
+          run: () => void setRowMenuCloses((count) => count + 1),
+        },
+        {
           id: "speedy.settings",
           title: "speedy-code: configuración",
           group: "speedy-code",
@@ -2177,6 +2188,13 @@ export default Plugin.define({
         // The keys go back to the prompt, once the field has let them go.
         setTimeout(() => promptField()?.focus?.(), 50)
       },
+      search: (text) => {
+        explorer.flash("search:")
+        void explorer.submit(text)
+        setTimeout(() => promptField()?.focus?.(), 50)
+      },
+      menuShown: (isShown) => void setRowMenuOpen(isShown),
+      menuCloses: rowMenuCloses,
       pick: (path) => explorer.pick(path),
       clearFilter: () => {
         explorer.clearFilter()
